@@ -187,89 +187,39 @@ DynamicUser=yes</code></pre>
 </section>
 
 <section id="agw"><h2>4. Application Gateway の構築</h2>
-<p><code>deploy/deploy.sh</code> を実行すると以下を順に作成します。手順を理解できるよう、ステップごとに主要コマンドを示します。</p>
-<pre><code>az login
-cd agw-advanced-routing-demo/deploy
-./deploy.sh</code></pre>
+<p>手順は <code>deploy/deploy.sh</code> に集約しています。CLI で 1 つずつ作る必要はありません。<code>deploy.sh</code> が <code>deploy/main.bicep</code> のテンプレートをデプロイし、次のリソースをまとめて作成します。</p>
+<pre><code>cd agw-advanced-routing-demo/deploy
+./deploy.sh      # 完了まで 15〜20 分程度</code></pre>
 
-<h3>4.1 ネットワークとバックエンド VM</h3>
-<pre><code>az network vnet create -g $RG -n $VNET --address-prefixes 10.20.0.0/16 \
-  --subnet-name appgw --subnet-prefixes 10.20.0.0/24
-az network vnet subnet create -g $RG --vnet-name $VNET -n backend --address-prefixes 10.20.1.0/24
-az vm create -g $RG -n $VM --image Ubuntu2404 --size Standard_B2s \
-  --vnet-name $VNET --subnet backend --nsg-rule NONE \
-  --admin-username azureuser --generate-ssh-keys --custom-data cloud-init.yaml</code></pre>
-<p>App Gateway 用サブネットは専用にします (他のリソースを置かない)。</p>
-
-<h3>4.2 WAF ポリシー</h3>
-<pre><code>az network application-gateway waf-policy create -g $RG -n $WAF
-az network application-gateway waf-policy policy-setting update -g $RG --policy-name $WAF \
-  --state Enabled --mode Prevention
-az network application-gateway waf-policy custom-rule create -g $RG --policy-name $WAF \
-  -n BlockDemoIp --priority 10 --rule-type MatchRule --action Block
-az network application-gateway waf-policy custom-rule match-condition add -g $RG --policy-name $WAF \
-  -n BlockDemoIp --match-variables RemoteAddr --operator IPMatch --values &quot;$WAF_BLOCK_CIDR&quot;</code></pre>
-<p>WAF はルーティング判定より前に評価され、ブロックされた要求はルーティング エンジンに届きません。この順序をデモで見せるためのカスタム ルールです。</p>
-
-<h3>4.3 Application Gateway 本体</h3>
-<pre><code>az network public-ip create -g $RG -n $GW-pip --sku Standard --allocation-method Static
-az network application-gateway create -g $RG -n $GW --sku WAF_v2 --capacity 1 \
-  --vnet-name $VNET --subnet appgw --public-ip-address $GW-pip --waf-policy $WAF \
-  --frontend-port 80 --priority 100 \
-  --servers $VM_IP --http-settings-port 8080 --http-settings-protocol Http</code></pre>
-<p>この時点では Basic のルール <code>rule1</code> とリスナーが作られます。Advanced routing rule は Basic リスナーにのみ関連付けできます (マルチサイト リスナーは非対応)。</p>
-
-<h3>4.4 プローブ・バックエンド プール・バックエンド設定</h3>
-<pre><code>az network application-gateway probe create -g $RG --gateway-name $GW -n healthz \
-  --protocol Http --host 127.0.0.1 --path /healthz
-# pools.conf の各行について
-az network application-gateway address-pool create  -g $RG --gateway-name $GW -n pool-tenant --servers $VM_IP
-az network application-gateway http-settings create -g $RG --gateway-name $GW -n hs-pool-tenant \
-  --port 8082 --protocol Http --probe healthz --timeout 20</code></pre>
-
-<h3>4.5 リダイレクト構成 (キャンペーン ルール用)</h3>
-<pre><code>az network application-gateway redirect-config create -g $RG --gateway-name $GW -n redirect-campaign \
-  --type Found --target-url &quot;https://www.contoso.com/campaign&quot; --include-path false --include-query-string true</code></pre>
-
-<h3>4.6 条件セット (Advanced routing condition set)</h3>
-<p>条件セット内の条件はすべて一致 (AND)、1 つの条件の複数値はいずれか一致 (OR) です。正規表現は RE2 互換のみです。</p>
-<pre><code>az network application-gateway advanced-routing-set create -g $RG --gateway-name $GW -n cs-tenant \
-  --routing-conditions &quot;[{condition-type:Header,property-name:X-Tenant-Id,property-value-matcher:{pattern:&#x27;^customer-[0-9]+\$&#x27;}},{condition-type:Path,property-value-matcher:{pattern:&#x27;^/app(/.*)?\$&#x27;}}]&quot;</code></pre>
-<table><thead><tr><th scope="col">条件セット</th><th scope="col">条件</th></tr></thead><tbody>
-<tr><td>cs-partner</td><td>Header X-Partner-Id = contoso | fabrikam</td></tr>
-<tr><td>cs-tenant</td><td>Header X-Tenant-Id ~ ^customer-[0-9]+$ AND Path ~ ^/app(/.*)?$</td></tr>
-<tr><td>cs-apiv2</td><td>Header X-Api-Version = 2 | 2.0 AND Path ~ ^/api/orders(/.*)?$</td></tr>
-<tr><td>(ポート 8080)</td><td>リスナー listener-canary の Basic ルール。loadDistributionPolicy で pool-web 90 / pool-canary 10 (ポート全体)</td></tr>
-<tr><td>cs-campaign</td><td>QueryString campaign = spring | summer</td></tr>
-<tr><td>cs-mobile</td><td>Header User-Agent ~ (iPhone|Android)</td></tr>
+<h3>4.1 作成されるリソース</h3>
+<table><thead><tr><th scope="col">リソース</th><th scope="col">内容</th></tr></thead><tbody>
+<tr><td>VNet / サブネット</td><td><code>appgw</code> 10.20.0.0/24 (Application Gateway 専用)、<code>backend</code> 10.20.1.0/24 (NSG 付き)</td></tr>
+<tr><td>バックエンド VM 1</td><td>固定 IP 10.20.1.10。Node.js プロセス × 5 (ポート 8080–8083、8085)。cloud-init で <code>server.js</code> を配置</td></tr>
+<tr><td>カナリア VM 2</td><td>固定 IP 10.20.1.11。Node.js プロセス × 1 (<code>pool-canary</code>、ポート 8080)</td></tr>
+<tr><td>WAF ポリシー</td><td>Prevention、DRS 2.1。カスタムルール <code>BlockDemoIp</code> (送信元 IP)、<code>BlockDemoUA</code> (User-Agent に <code>agw-block-demo</code> を含む要求を遮断)</td></tr>
+<tr><td>Application Gateway (WAF_v2)</td><td>リスナー <code>listener-http</code> (:80) と <code>listener-canary</code> (:8080)。ルール <code>rule1</code> (Advanced、:80)、<code>rule-canary</code> (Basic、:8080)</td></tr>
+<tr><td>プローブ・プール・バックエンド設定</td><td>プローブ <code>healthz</code>。プール 6 つ (<code>pool-web</code>、<code>pool-partner</code>、<code>pool-tenant</code>、<code>pool-api-v2</code>、<code>pool-canary</code>、<code>pool-mobile</code>) と、それぞれのバックエンド設定 <code>hs-&lt;pool&gt;</code></td></tr>
+<tr><td>リダイレクト</td><td><code>redirect-campaign</code>: 302、<code>https://www.contoso.com/campaign</code> へ。クエリ文字列を引き継ぐ</td></tr>
+<tr><td>条件セット</td><td><code>cs-partner</code>、<code>cs-tenant</code>、<code>cs-apiv2</code>、<code>cs-campaign</code>、<code>cs-mobile</code> の 5 つ</td></tr>
+<tr><td>Advanced routing map</td><td><code>advancedRoutingMap1</code>。既定プール <code>pool-web</code>。ルールは優先度順に partner (10)、tenant (20)、api-v2 (30)、campaign (40)、mobile (60)</td></tr>
+<tr><td>重み付け (任意)</td><td><code>WEIGHTED_CANARY=true ./deploy.sh</code> のときだけ、<code>ld-canary-split</code> (pool-web 90 : pool-canary 10) を使う。既定の <code>false</code> では、ポート 8080 の全件を pool-canary に送る</td></tr>
 </tbody></table>
+<p class="note">Advanced routing rule は Basic リスナーにのみ関連付けできます (マルチサイト リスナーは非対応)。<code>rule1</code> は最初から Advanced で作られるため、後から切り替える手順はありません。重み付けには、サブスクリプションで <code>Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy</code> の登録が必要です (README を参照)。</p>
 
-<h3>4.7 Advanced routing map とルール</h3>
-<p>マップは最初のルールと同時に作成し、残りのルールを追加します。優先度は小さい順に評価され、最初に一致したルールで送信先が決まります。どれにも一致しなければ既定プール (pool-web) です。</p>
-<pre><code>az network application-gateway advanced-routing-map create -g $RG --gateway-name $GW -n advancedRoutingMap1 \
-  --default-address-pool pool-web --default-http-settings hs-pool-web \
-  --rule-name partner --priority 10 --condition-set cs-partner \
-  --address-pool pool-partner --http-settings hs-pool-partner
-az network application-gateway advanced-routing-map rule create -g $RG --gateway-name $GW \
-  --map-name advancedRoutingMap1 -n tenant --priority 20 --condition-set cs-tenant \
-  --address-pool pool-tenant --http-settings hs-pool-tenant
-# api-v2 (30), mobile (60) も同様。campaign (40) は --redirect-config redirect-campaign。カナリアは 8080 の Basic ルール</code></pre>
-
-<h3>4.8 リスナーのルールを Advanced に切り替える</h3>
-<pre><code>az network application-gateway rule update -g $RG --gateway-name $GW -n rule1 \
-  --rule-type AdvancedRouting --advanced-routing-map advancedRoutingMap1</code></pre>
-<p>CLI で切り替えられない場合はポータルで実施します: [ルール] → rule1 → [ルーティング] タブ → ルールの種類を <strong>Advanced</strong> にしてマップを選択 → [保存]。新規作成ウィザードでは Advanced ルールを設定できないため、作成後に Basic から切り替える手順になります。</p>
-
-<h3>4.9 動作確認</h3>
-<pre><code>FRONTEND=&lt;フロントエンド IP&gt; ./test.sh</code></pre>
+<h3>4.2 動作確認</h3>
+<p>確認は <code>deploy/test.sh</code> と <code>deploy/canary-check.sh</code> で行います。</p>
+<pre><code>FRONTEND=&lt;フロントエンド IP&gt; ./test.sh
+FRONTEND=&lt;フロントエンド IP&gt;:8080 ./canary-check.sh /app/home 100</code></pre>
 <pre><code>通常アクセス       HTTP 200  pool-web
 テナント           HTTP 200  pool-tenant
-パートナー         HTTP 200  pool-partner
+パートナー         HTTP 403  (既知の問題: POST が WAF で遮断される)
 API v2             HTTP 200  pool-api-v2
 エンコード済み     HTTP 200  pool-api-v2   ← /api%2Forders はデコード後に評価
+カナリア (:8080)   HTTP 200  pool-canary
 キャンペーン       HTTP 302  redirect -&gt; https://www.contoso.com/campaign?...
-モバイル           HTTP 200  pool-mobile</code></pre>
-<p class="note">上は期待される出力の例です (まだ実環境では実行していません)。</p>
+モバイル           HTTP 200  pool-mobile
+WAF ブロック (UA)  HTTP 403</code></pre>
+<p class="note">上は <code>test.sh</code> の出力の例です。カナリアを <code>WEIGHTED_CANARY=false</code> で作った場合、8080 番の全件が pool-canary に送られます。</p>
 </section>
 
 <section id="front"><h2>5. シミュレーターをフロントエンドにする</h2>
