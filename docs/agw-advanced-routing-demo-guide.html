@@ -317,13 +317,18 @@ if (req.method === &quot;OPTIONS&quot;) { res.writeHead(204); return res.end(); 
 </section>
 
 <section id="trouble"><h2>7. トラブルシューティング</h2>
+<p>確認は <code>deploy/test.sh</code> と <code>deploy/canary-check.sh</code> で行います。原因の切り分けには、デプロイの出力 (<code>deploy.sh</code>) を使います。</p>
 <table><thead><tr><th scope="col">症状</th><th scope="col">確認すること</th></tr></thead><tbody>
-<tr><td>502 Bad Gateway</td><td>バックエンドの正常性 (<code>az network application-gateway show-backend-health</code>)。cloud-init 完了前は異常になる。VM で <code>systemctl status agw-pool@pool-web</code></td></tr>
-<tr><td>条件セット作成でエラー</td><td>プレビュー中は Header 条件のみサポートとの記載あり。Path / QueryString / ClientIP / Method の条件を外して Header だけにする</td></tr>
-<tr><td>rule1 の切り替えでエラー</td><td>4.8 のポータル手順で切り替える。リスナーが Basic であることを確認</td></tr>
-<tr><td>8080 の割合が 90:10 にならない</td><td>件数が少ないと期待値から外れる (100 件以上で確認)。サブスクリプションで Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy が登録済みか</td></tr>
+<tr><td><code>test.sh</code> が 502 を返す</td><td>バックエンドの正常性が未確認。再デプロイ直後は、cloud-init (パッケージ取得と起動) が終わるまで数分かかる。少し待ってから <code>./test.sh</code> を再実行する。改善しなければ VM で <code>systemctl status agw-pool@pool-web</code> を確認する</td></tr>
+<tr><td><code>deploy.sh</code> がプリフライトでエラーになる</td><td>出力の <code>InnerErrors</code> の <code>message</code> を読む。例: <code>ApplicationGatewayAdvancedRoutingRuleMustReference</code> は、高度なルールに <code>backendAddressPool</code> が必要という意味</td></tr>
+<tr><td><code>deploy.sh</code> が <code>SubscriptionNotRegisteredForFeature</code> で失敗する</td><td><code>WEIGHTED_CANARY=true</code> を指定している場合、サブスクリプションで <code>Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy</code> の登録が必要。登録が終わるまでは <code>WEIGHTED_CANARY=false</code> (既定) で実行する</td></tr>
+<tr><td><code>deploy.sh</code> が <code>PropertyChangeNotAllowed</code> (<code>osProfile.customData</code>) で失敗する</td><td>既存の VM の初期化データ (cloud-init) が変わったため。VM を作り直す (VM 1 または VM 2 を削除してから <code>deploy.sh</code> を再実行する)</td></tr>
+<tr><td><code>test.sh</code> のポート 80 の結果が想定と違う</td><td><code>rule1</code> が Advanced で作られているか (デプロイ直後の状態)。条件・優先度の定義は <code>deploy/main.bicep</code> の <code>advancedRoutingConditionSets</code> と <code>advancedRoutingMaps</code> を見る</td></tr>
+<tr><td>8080 の割合が 90:10 にならない</td><td><code>WEIGHTED_CANARY=true</code> で再デプロイしたか。件数が少ないと期待値から外れるため、<code>./canary-check.sh /app/home 100</code> で 100 件以上確認する。機能が登録済みか確認する</td></tr>
+<tr><td>8080 が全件 pool-canary になる</td><td>既定の <code>WEIGHTED_CANARY=false</code> の動作。90:10 にするには <code>WEIGHTED_CANARY=true ./deploy.sh</code> (機能の登録が必要)</td></tr>
+<tr><td>POST が 403 になる (<code>/api/orders</code>)</td><td>既知の問題: DRS のマネージドルールが POST を遮断する (GET / PUT は通る)。原因のルール ID は未特定</td></tr>
 <tr><td>正規表現が一致しない</td><td>RE2 非対応の構文 (先読み・後方参照など) を使っていないか。シミュレーターと実機で結果が違う場合は実機の結果が正</td></tr>
-<tr><td>シミュレーターと実機で結果が違う</td><td>両者のルール定義 (JSON 表示と advanced-routing-map show) を比較</td></tr>
+<tr><td>シミュレーターと実機で結果が違う</td><td>(1) ブラウザーは User-Agent を送れない (「モバイル」「WAF ブロック」は <code>curl -A</code> で確認)。(2) 送信元 IP は、ゲートウェイが見ている値 (<code>X-Forwarded-For</code>) を使う。(3) ルールの定義 (シミュレーターの JSON と <code>deploy/main.bicep</code>) を比較する</td></tr>
 </tbody></table>
 </section>
 
