@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="ja" dir="ltr">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Application Gateway Advanced Routing デモ環境 構築ガイド</title>
+<style>
+:root{--bg:#ffffff;--fg:#111827;--muted:#4b5563;--line:#d1d5db;--soft:#f3f4f6;--accent:#9f1239;--code:#f8fafc;--note:#fffbeb;--note-line:#d97706}
+@media (prefers-color-scheme: dark){:root{--bg:#111318;--fg:#e5e7eb;--muted:#c4c8d0;--line:#3a3f4b;--soft:#1b1f27;--accent:#fb7185;--code:#171a21;--note:#2a2210;--note-line:#f59e0b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:"Segoe UI","Yu Gothic UI","Hiragino Sans",system-ui,sans-serif;line-height:1.7;font-size:15px}
+main{max-inline-size:980px;margin-inline:auto;padding-block:40px 80px;padding-inline:28px}
+.eyebrow{color:var(--accent);font-weight:700;letter-spacing:.06em;margin:0}
+h1{font-size:30px;line-height:1.3;margin-block:6px 12px}
+h2{font-size:22px;margin-block:44px 12px;padding-block-end:6px;border-block-end:2px solid var(--line)}
+h3{font-size:17px;margin-block:26px 8px}
+.lead{font-size:16px;margin-block:0 8px}
+.meta{color:var(--muted);font-size:13px}
+nav{background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:8px 20px;margin-block-start:24px}
+nav h2{border:0;margin-block:8px 0;font-size:15px}
+nav ol{columns:2;margin-block:6px}
+a{color:var(--accent)}
+code{font-family:ui-monospace,Consolas,"Cascadia Mono",monospace;font-size:.92em;background:var(--soft);padding-inline:4px;border-radius:4px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow-x:auto;font-size:12.5px;line-height:1.55;white-space:pre-wrap;word-break:break-all}
+pre code{background:none;padding:0;font-size:inherit}
+table{border-collapse:collapse;inline-size:100%;margin-block:12px;font-size:14px}
+th,td{border:1px solid var(--line);padding:6px 10px;text-align:start;vertical-align:top}
+thead th{background:var(--soft)}
+.note{background:var(--note);border-inline-start:4px solid var(--note-line);padding:8px 12px;border-radius:4px;font-size:14px}
+.diagram{margin:16px 0}
+.diagram svg{inline-size:100%;block-size:auto;background:var(--soft);border:1px solid var(--line);border-radius:8px}
+.diagram figcaption{font-size:13px;color:var(--muted);margin-block-start:6px}
+.box{fill:var(--bg);stroke:var(--fg);stroke-width:1.3}
+.ln{stroke:var(--accent);stroke-width:2;fill:none}
+.dash{stroke-dasharray:6 5;stroke:var(--muted)}
+.ink{fill:var(--accent)}
+svg text{fill:var(--fg);text-anchor:middle;font-size:12px}
+svg .h{font-weight:700;font-size:14px}
+svg .m{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+svg .l{text-anchor:start}
+@media print{body{font-size:11pt}main{padding:0}nav{break-after:page}pre,table,figure{break-inside:avoid}a{color:inherit}}
+</style></head>
+<body><main>
+<header>
+<p class="eyebrow">構築ガイド</p>
+<h1>Application Gateway Advanced Routing デモ環境</h1>
+<p class="lead">シミュレーター アプリをフロントエンド (説明と操作の画面) とし、実際の Application Gateway とバックエンドを組み合わせて、Advanced routing rules (プレビュー) を実機でデモするための手順です。</p>
+<p class="meta">対象ファイル: <code>agw-advanced-routing-demo/</code> ・ シミュレーター: App Gateway Routing Simulator ・ 作成日: 2026-11-18</p>
+</header>
+
+<nav aria-label="目次"><h2>目次</h2><ol>
+<li><a href="#arch">全体構成</a></li><li><a href="#prereq">前提条件</a></li><li><a href="#backend">バックエンドの作り方</a></li>
+<li><a href="#agw">Application Gateway の構築</a></li><li><a href="#front">シミュレーターをフロントエンドにする</a></li>
+<li><a href="#demo">デモの進め方</a></li><li><a href="#trouble">トラブルシューティング</a></li><li><a href="#notes">制約・注意事項と後片付け</a></li></ol></nav>
+
+<section id="arch"><h2>1. 全体構成</h2>
+
+<figure class="diagram">
+<svg viewBox="0 0 900 330" role="img" aria-labelledby="dg-t dg-d">
+<title id="dg-t">デモ環境の全体構成</title>
+<desc id="dg-d">シミュレーター アプリ (説明・判定・curl 生成) と、Application Gateway WAF_v2、Advanced routing map、バックエンド VM 上の 6 プールの関係</desc>
+<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="ink"/></marker></defs>
+<rect x="10" y="20" width="200" height="120" rx="8" class="box"/>
+<text x="110" y="48" class="h">シミュレーター</text><text x="110" y="68" class="s">(フロントエンド / App Builder)</text>
+<text x="110" y="92" class="s">ルール判定・経路図</text><text x="110" y="110" class="s">応答の模擬表示</text><text x="110" y="128" class="s">curl コマンド生成</text>
+<rect x="10" y="190" width="200" height="90" rx="8" class="box"/>
+<text x="110" y="220" class="h">デモ端末</text><text x="110" y="242" class="s">curl / ブラウザー</text><text x="110" y="260" class="s">(DEMO_CLIENT_CIDR)</text>
+<path d="M110 140 V185" class="ln dash" marker-end="url(#ar)"/><text x="118" y="168" class="s l">curl をコピー</text>
+<rect x="270" y="150" width="140" height="110" rx="8" class="box"/>
+<text x="340" y="180" class="h">Public IP</text><text x="340" y="200" class="s">Basic リスナー :80</text><text x="340" y="220" class="s">rule1 (AdvancedRouting)</text>
+<path d="M210 235 H265" class="ln" marker-end="url(#ar)"/>
+<rect x="440" y="150" width="120" height="110" rx="8" class="box"/>
+<text x="500" y="185" class="h">WAF</text><text x="500" y="205" class="s">BlockDemoIp</text><text x="500" y="225" class="s">(ルーティング前)</text>
+<path d="M410 205 H435" class="ln" marker-end="url(#ar)"/>
+<rect x="590" y="150" width="130" height="110" rx="8" class="box"/>
+<text x="655" y="180" class="h">Routing map</text><text x="655" y="200" class="s">ルール 6 件</text><text x="655" y="220" class="s">優先度の昇順</text><text x="655" y="240" class="s">既定: pool-web</text>
+<path d="M560 205 H585" class="ln" marker-end="url(#ar)"/>
+<rect x="750" y="20" width="140" height="300" rx="8" class="box"/>
+<text x="820" y="45" class="h">バックエンド VM</text>
+<text x="820" y="80" class="m">pool-web :8080</text><text x="820" y="110" class="m">pool-partner :8081</text><text x="820" y="140" class="m">pool-tenant :8082</text>
+<text x="820" y="170" class="m">pool-api-v2 :8083</text><text x="820" y="200" class="m">pool-canary :8084</text><text x="820" y="230" class="m">pool-mobile :8085</text>
+<text x="820" y="270" class="s">server.js × 6</text><text x="820" y="290" class="s">systemd</text>
+<path d="M720 205 H745" class="ln" marker-end="url(#ar)"/>
+<path d="M655 260 V305 H560" class="ln dash" marker-end="url(#ar)"/><text x="600" y="298" class="s">302 (campaign)</text>
+<rect x="270" y="20" width="290" height="100" rx="8" class="box"/>
+<text x="415" y="45" class="h">同じルール定義</text><text x="415" y="68" class="s">シミュレーターの JSON 表示</text><text x="415" y="88" class="s">= deploy.sh の condition set / rule</text>
+<path d="M210 70 H265" class="ln dash"/><path d="M560 70 H655 V145" class="ln dash" marker-end="url(#ar)"/>
+</svg>
+<figcaption>図 1. 構成。実線は実際の通信、点線は設定・操作の対応関係。</figcaption>
+</figure>
+<table><thead><tr><th scope="col">要素</th><th scope="col">役割</th><th scope="col">実体</th></tr></thead><tbody>
+<tr><td>シミュレーター</td><td>ルールの評価順・AND/OR・WAF の位置を図で説明し、同じ要求を実機に送る curl を生成する</td><td>App Builder アプリ (ブラウザー内で判定)</td></tr>
+<tr><td>Application Gateway</td><td>Basic リスナー → WAF → Advanced routing map → バックエンド プール / リダイレクト</td><td>WAF_v2、容量 1</td></tr>
+<tr><td>バックエンド</td><td>どのプールが応答したか・受信ヘッダーを表示する</td><td>Ubuntu VM 1 台に Node.js プロセス × 6 (ポート 8080–8085)</td></tr>
+</tbody></table>
+<p class="note">1 台の VM で 6 プールを表現しています。各プールは同じ VM の別ポートを指し、バックエンド設定 (HTTP 設定) でポートを分けます。本番相当の構成ではプールごとに別 VM / App Service にしても手順は同じです。</p>
+</section>
+
+<section id="prereq"><h2>2. 前提条件</h2><ul>
+<li>Azure サブスクリプションと、リソース グループを作成できる権限</li>
+<li>Azure CLI (<code>az upgrade</code> で最新化)。<code>az network application-gateway advanced-routing-map</code> と <code>advanced-routing-set</code> コマンドが使えること</li>
+<li>bash 環境 (Azure Cloud Shell で可)、SSH 鍵 (<code>--generate-ssh-keys</code> で自動作成)</li>
+<li>デモ端末のパブリック IP (カナリア ルールの ClientIP 条件に使用)</li>
+<li>WAF_v2 の Application Gateway は稼働時間で課金されます。デモ後は<a href="#notes">後片付け</a>を実施してください</li></ul>
+</section>
+
+<section id="backend"><h2>3. バックエンドの作り方</h2>
+<h3>3.1 設計方針</h3><ul>
+<li><strong>どのプールが応答したかが一目で分かる</strong>: プール名を大きく表示し、プールごとに色を変える。応答ヘッダー <code>x-backend-pool</code> にも入れて curl で判定できるようにする</li>
+<li><strong>ゲートウェイを通った証拠を見せる</strong>: 受信ヘッダーを全件表示し、App Gateway が付与する <code>x-forwarded-for</code> / <code>x-forwarded-proto</code> / <code>x-forwarded-port</code> / <code>x-original-host</code> などを強調</li>
+<li><strong>1 ファイル・依存なし</strong>: Node.js 標準モジュールのみ。プールの違いは環境変数だけで表現</li>
+<li><strong>ヘルス プローブ用エンドポイント</strong>: <code>/healthz</code> が 200 を返す</li>
+<li><strong>安全な表示</strong>: 受信値はすべて HTML エスケープして表示 (ヘッダー経由の注入を防ぐ)</li></ul>
+
+<h3>3.2 エンドポイント</h3>
+<table><thead><tr><th scope="col">パス</th><th scope="col">応答</th></tr></thead><tbody>
+<tr><td><code>/healthz</code></td><td>200 <code>ok</code> (App Gateway のプローブ用)</td></tr>
+<tr><td>任意のパス</td><td>HTML: プール名・インスタンス・Method・Path・Query・受信ヘッダー一覧</td></tr>
+<tr><td>任意のパス <code>?format=json</code> または <code>Accept: application/json</code></td><td>同じ内容の JSON</td></tr>
+</tbody></table>
+
+<h3>3.3 プール定義 (<code>backend/pools.conf</code>)</h3>
+<pre><code># name|port|label|color  (one Node.js process per line on the backend VM)
+pool-web|8080|Web (既定)|#334155
+pool-partner|8081|パートナー専用|#7c2d12
+pool-tenant|8082|テナント専用|#0f766e
+pool-api-v2|8083|Orders API v2|#1d4ed8
+pool-canary|8084|カナリア|#a16207
+pool-mobile|8085|モバイル|#7e22ce</code></pre>
+<p>シミュレーターのプール一覧と同じ名前・色にそろえているため、シミュレーターの「応答」パネルと実機のページが同じ見た目になります。</p>
+
+<h3>3.4 サーバー本体 (<code>backend/server.js</code>) の要点</h3>
+<pre><code>const POOL_NAME = process.env.POOL_NAME || &quot;pool-web&quot;;
+const POOL_LABEL = process.env.POOL_LABEL || POOL_NAME;
+const POOL_COLOR = /^#[0-9a-fA-F]{6}$/.test(process.env.POOL_COLOR || &quot;&quot;) ? process.env.POOL_COLOR : &quot;#334155&quot;;
+const PORT = Number(process.env.PORT || 8080);
+const HOST = os.hostname();
+// CORS so the standalone simulator (agw-routing-simulator.html) can call the gateway directly.
+// Default &quot;*&quot; (demo backend, no credentials). Set ALLOW_ORIGIN=&quot;&quot; to disable, or to one origin.
+const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN === undefined ? &quot;*&quot; : process.env.ALLOW_ORIGIN;
+
+function cors(res) {
+  if (!ALLOW_ORIGIN) return;
+  res.setHeader(&quot;access-control-allow-origin&quot;, ALLOW_ORIGIN);
+  res.setHeader(&quot;access-control-allow-methods&quot;, &quot;GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS&quot;);
+  res.setHeader(&quot;access-control-allow-headers&quot;, &quot;*&quot;);</code></pre>
+<pre><code>http.createServer((req, res) =&gt; {
+  if (req.url === &quot;/healthz&quot;) { res.writeHead(200); return res.end(&quot;ok&quot;); }
+  const s = snapshot(req);                       // pool, method, path, query, headers ...
+  res.setHeader(&quot;x-backend-pool&quot;, POOL_NAME);    // curl / test.sh で判定に使う
+  res.setHeader(&quot;cache-control&quot;, &quot;no-store&quot;);
+  // ?format=json なら JSON、それ以外は HTML ページ
+}).listen(PORT);</code></pre>
+<p>ローカル確認:</p>
+<pre><code>POOL_NAME=pool-tenant POOL_LABEL=&quot;テナント専用&quot; POOL_COLOR=&quot;#0f766e&quot; PORT=8082 node backend/server.js
+curl -i -H &quot;X-Tenant-Id: customer-1024&quot; http://localhost:8082/app/dashboard</code></pre>
+
+<h3>3.5 VM への配置 (cloud-init + systemd)</h3>
+<p><code>deploy/make-cloud-init.sh</code> が <code>cloud-init.yaml</code> を生成します。中身は次の 3 点です。</p><ol>
+<li>Node.js をインストールし、<code>server.js</code> を <code>/opt/agw-demo/</code> に配置 (base64 埋め込み)</li>
+<li>テンプレート ユニット <code>agw-pool@.service</code> を作成 (<code>DynamicUser=yes</code> で専用ユーザーなしに実行)</li>
+<li>プールごとに <code>/etc/agw-demo/&lt;pool&gt;.env</code> を作り、<code>systemctl enable --now agw-pool@&lt;pool&gt;</code></li></ol>
+<pre><code>[Service]
+EnvironmentFile=/etc/agw-demo/%i.env
+ExecStart=/usr/bin/node /opt/agw-demo/server.js
+Restart=always
+DynamicUser=yes</code></pre>
+<p class="note">VM にはパッケージ取得のためのパブリック IP を付けますが、NSG の受信規則は作成しません (<code>--nsg-rule NONE</code>)。インターネットからバックエンドへ直接は到達できず、App Gateway 経由のみになります。</p>
+</section>
+
+<section id="agw"><h2>4. Application Gateway の構築</h2>
+<p><code>deploy/deploy.sh</code> を実行すると以下を順に作成します。手順を理解できるよう、ステップごとに主要コマンドを示します。</p>
+<pre><code>az login
+cd agw-advanced-routing-demo/deploy
+DEMO_CLIENT_CIDR=&quot;$(curl -s https://api.ipify.org)/32&quot; ./deploy.sh</code></pre>
+
+<h3>4.1 ネットワークとバックエンド VM</h3>
+<pre><code>az network vnet create -g $RG -n $VNET --address-prefixes 10.20.0.0/16 \
+  --subnet-name appgw --subnet-prefixes 10.20.0.0/24
+az network vnet subnet create -g $RG --vnet-name $VNET -n backend --address-prefixes 10.20.1.0/24
+az vm create -g $RG -n $VM --image Ubuntu2404 --size Standard_B2s \
+  --vnet-name $VNET --subnet backend --nsg-rule NONE \
+  --admin-username azureuser --generate-ssh-keys --custom-data cloud-init.yaml</code></pre>
+<p>App Gateway 用サブネットは専用にします (他のリソースを置かない)。</p>
+
+<h3>4.2 WAF ポリシー</h3>
+<pre><code>az network application-gateway waf-policy create -g $RG -n $WAF
+az network application-gateway waf-policy policy-setting update -g $RG --policy-name $WAF \
+  --state Enabled --mode Prevention
+az network application-gateway waf-policy custom-rule create -g $RG --policy-name $WAF \
+  -n BlockDemoIp --priority 10 --rule-type MatchRule --action Block
+az network application-gateway waf-policy custom-rule match-condition add -g $RG --policy-name $WAF \
+  -n BlockDemoIp --match-variables RemoteAddr --operator IPMatch --values &quot;$WAF_BLOCK_CIDR&quot;</code></pre>
+<p>WAF はルーティング判定より前に評価され、ブロックされた要求はルーティング エンジンに届きません。この順序をデモで見せるためのカスタム ルールです。</p>
+
+<h3>4.3 Application Gateway 本体</h3>
+<pre><code>az network public-ip create -g $RG -n $GW-pip --sku Standard --allocation-method Static
+az network application-gateway create -g $RG -n $GW --sku WAF_v2 --capacity 1 \
+  --vnet-name $VNET --subnet appgw --public-ip-address $GW-pip --waf-policy $WAF \
+  --frontend-port 80 --priority 100 \
+  --servers $VM_IP --http-settings-port 8080 --http-settings-protocol Http</code></pre>
+<p>この時点では Basic のルール <code>rule1</code> とリスナーが作られます。Advanced routing rule は Basic リスナーにのみ関連付けできます (マルチサイト リスナーは非対応)。</p>
+
+<h3>4.4 プローブ・バックエンド プール・バックエンド設定</h3>
+<pre><code>az network application-gateway probe create -g $RG --gateway-name $GW -n healthz \
+  --protocol Http --host 127.0.0.1 --path /healthz
+# pools.conf の各行について
+az network application-gateway address-pool create  -g $RG --gateway-name $GW -n pool-tenant --servers $VM_IP
+az network application-gateway http-settings create -g $RG --gateway-name $GW -n hs-pool-tenant \
+  --port 8082 --protocol Http --probe healthz --timeout 20</code></pre>
+
+<h3>4.5 リダイレクト構成 (キャンペーン ルール用)</h3>
+<pre><code>az network application-gateway redirect-config create -g $RG --gateway-name $GW -n redirect-campaign \
+  --type Found --target-url &quot;https://www.contoso.com/campaign&quot; --include-path false --include-query-string true</code></pre>
+
+<h3>4.6 条件セット (Advanced routing condition set)</h3>
+<p>条件セット内の条件はすべて一致 (AND)、1 つの条件の複数値はいずれか一致 (OR) です。正規表現は RE2 互換のみです。</p>
+<pre><code>az network application-gateway advanced-routing-set create -g $RG --gateway-name $GW -n cs-tenant \
+  --routing-conditions &quot;[{condition-type:Header,property-name:X-Tenant-Id,property-value-matcher:{pattern:&#x27;^customer-[0-9]+\$&#x27;}},{condition-type:Path,property-value-matcher:{pattern:&#x27;^/app(/.*)?\$&#x27;}}]&quot;</code></pre>
+<table><thead><tr><th scope="col">条件セット</th><th scope="col">条件</th></tr></thead><tbody>
+<tr><td>cs-partner</td><td>Header X-Partner-Id = contoso | fabrikam</td></tr>
+<tr><td>cs-tenant</td><td>Header X-Tenant-Id ~ ^customer-[0-9]+$ AND Path ~ ^/app(/.*)?$</td></tr>
+<tr><td>cs-apiv2</td><td>Header X-Api-Version = 2 | 2.0 AND Path ~ ^/api/orders(/.*)?$</td></tr>
+<tr><td>cs-canary</td><td>ClientIP = DEMO_CLIENT_CIDR AND Method = GET | HEAD</td></tr>
+<tr><td>cs-campaign</td><td>QueryString campaign = spring | summer</td></tr>
+<tr><td>cs-mobile</td><td>Header User-Agent ~ (iPhone|Android)</td></tr>
+</tbody></table>
+
+<h3>4.7 Advanced routing map とルール</h3>
+<p>マップは最初のルールと同時に作成し、残りのルールを追加します。優先度は小さい順に評価され、最初に一致したルールで送信先が決まります。どれにも一致しなければ既定プール (pool-web) です。</p>
+<pre><code>az network application-gateway advanced-routing-map create -g $RG --gateway-name $GW -n advancedRoutingMap1 \
+  --default-address-pool pool-web --default-http-settings hs-pool-web \
+  --rule-name partner --priority 10 --condition-set cs-partner \
+  --address-pool pool-partner --http-settings hs-pool-partner
+az network application-gateway advanced-routing-map rule create -g $RG --gateway-name $GW \
+  --map-name advancedRoutingMap1 -n tenant --priority 20 --condition-set cs-tenant \
+  --address-pool pool-tenant --http-settings hs-pool-tenant
+# api-v2 (30), canary (40), mobile (60) も同様。campaign (50) は --redirect-config redirect-campaign</code></pre>
+
+<h3>4.8 リスナーのルールを Advanced に切り替える</h3>
+<pre><code>az network application-gateway rule update -g $RG --gateway-name $GW -n rule1 \
+  --rule-type AdvancedRouting --advanced-routing-map advancedRoutingMap1</code></pre>
+<p>CLI で切り替えられない場合はポータルで実施します: [ルール] → rule1 → [ルーティング] タブ → ルールの種類を <strong>Advanced</strong> にしてマップを選択 → [保存]。新規作成ウィザードでは Advanced ルールを設定できないため、作成後に Basic から切り替える手順になります。</p>
+
+<h3>4.9 動作確認</h3>
+<pre><code>FRONTEND=&lt;フロントエンド IP&gt; ./test.sh</code></pre>
+<pre><code>通常アクセス       HTTP 200  pool-canary   ← DEMO_CLIENT_CIDR から送った場合
+テナント           HTTP 200  pool-tenant
+パートナー         HTTP 200  pool-partner
+API v2             HTTP 200  pool-api-v2
+エンコード済み     HTTP 200  pool-api-v2   ← /api%2Forders はデコード後に評価
+キャンペーン       HTTP 302  redirect -&gt; https://www.contoso.com/campaign?...
+モバイル           HTTP 200  pool-mobile</code></pre>
+<p class="note">上は期待される出力の例です (まだ実環境では実行していません)。</p>
+</section>
+
+<section id="front"><h2>5. シミュレーターをフロントエンドにする</h2>
+<h3>5.1 現在の構成 (すぐ使える)</h3><ol>
+<li>シミュレーターでシナリオを選び [要求を送信] → 経路図・ルールごとの一致/不一致・応答 (模擬) を説明</li>
+<li>「実機で同じ要求を送る (curl)」をコピーし、<code>&lt;FRONTEND-IP&gt;</code> を実際の IP に置き換えて実行</li>
+<li>実機の応答ヘッダー <code>x-backend-pool</code>、またはブラウザーで開いたページの色・プール名が、シミュレーターの「応答」と一致することを見せる</li></ol>
+<p>シミュレーターのルールと <code>deploy.sh</code> のルールは同じ定義です。ルールを変える場合は、シミュレーターの [JSON] 表示と <code>az network application-gateway advanced-routing-map show</code> の結果を見比べて両方をそろえます。</p>
+
+<h3>5.2 発展: シミュレーターから実機へ直接送信する場合の要件</h3>
+<p>単体 HTML 版 <code>agw-routing-simulator.html</code> は、画面上部の「ゲートウェイ URL」が空ならオフラインでシミュレーションし、URL を入れると実機に要求を送って「予測」と「実機の応答」を並べて表示します (予測と一致 / 不一致も表示)。ファイルをローカルで開けば (file://) http のゲートウェイにも送れます。ブラウザーの制約は次のとおりです。</p>
+<table><thead><tr><th scope="col">課題</th><th scope="col">原因</th><th scope="col">対応</th></tr></thead><tbody>
+<tr><td>HTTPS (https のページから使う場合)</td><td>https で配信されたページから http のゲートウェイへの fetch は混在コンテンツとしてブロックされる</td><td>単体 HTML をローカル (file://) で開く。https のページから使う場合は HTTPS リスナーを追加</td></tr>
+<tr><td>CORS</td><td>別オリジンへの fetch でカスタム ヘッダー (X-Tenant-Id など) を送るとプリフライト (OPTIONS) が発生</td><td>全プールの server.js で OPTIONS に応答し、<code>Access-Control-Allow-Origin</code> / <code>-Allow-Headers</code> / <code>-Expose-Headers: x-backend-pool</code> を返す。OPTIONS 自体も App Gateway のルーティングを通るため、全プールで同じ処理が必要</td></tr>
+<tr><td>User-Agent を変えられない</td><td>ブラウザーの fetch では User-Agent を任意に設定できない</td><td>モバイル ルールは実機のスマートフォンで開くか、デモ用にカスタム ヘッダー (例 X-Device) の条件に置き換える</td></tr>
+<tr><td>Client IP は実際の IP</td><td>ブラウザーから送る要求の送信元は端末の実 IP</td><td>シミュレーターの Client IP 入力は実機モードでは無効化し、カナリア / WAF は DEMO_CLIENT_CIDR で見せる</td></tr>
+<tr><td>リダイレクトを読めない</td><td>fetch はリダイレクトを自動追従、<code>redirect: "manual"</code> では Location を読めない</td><td>「リダイレクトされた」ことだけを表示する</td></tr>
+<tr><td>WAF 403 の中身を読めない</td><td>WAF の応答には CORS ヘッダーが付かず、fetch がネットワーク エラーになる</td><td>エラー時は「ブロックされた可能性」として表示し、curl で 403 を確認</td></tr>
+<tr><td>アプリからの外部通信</td><td>公開アプリの実行環境が外部 URL への通信を許可するか未確認</td><td>実装前に疎通テストが必要</td></tr>
+</tbody></table>
+<p>server.js には次の CORS 対応を組み込み済みです (環境変数 <code>ALLOW_ORIGIN</code>、既定は <code>*</code>。空文字で無効化)。</p>
+<pre><code>const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN || &quot;&quot;;   // シミュレーターのオリジン
+function cors(res) {
+  if (!ALLOW_ORIGIN) return;
+  res.setHeader(&quot;access-control-allow-origin&quot;, ALLOW_ORIGIN);
+  res.setHeader(&quot;access-control-allow-headers&quot;, &quot;x-tenant-id, x-partner-id, x-api-version, x-device&quot;);
+  res.setHeader(&quot;access-control-allow-methods&quot;, &quot;GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS&quot;);
+  res.setHeader(&quot;access-control-expose-headers&quot;, &quot;x-backend-pool&quot;);
+}
+// createServer の先頭で:
+cors(res);
+if (req.method === &quot;OPTIONS&quot;) { res.writeHead(204); return res.end(); }</code></pre>
+</section>
+
+<section id="demo"><h2>6. デモの進め方 (例: 15 分)</h2>
+<table><thead><tr><th scope="col">#</th><th scope="col">見せること</th><th scope="col">シミュレーター</th><th scope="col">実機</th></tr></thead><tbody>
+<tr><td>1</td><td>構成と評価の流れ (リスナー → WAF → マップ → プール)</td><td>経路図</td><td>ポータルの [ルール] 画面</td></tr>
+<tr><td>2</td><td>マルチテナント: Header の正規表現 AND Path</td><td>「テナント」→ X-Tenant-Id を消して再送</td><td>test.sh / curl で pool-tenant ⇔ 既定 (または canary)</td></tr>
+<tr><td>3</td><td>優先度: 先に一致したルールが勝つ</td><td>パートナーとテナントの両ヘッダーを付ける</td><td>同じヘッダーで curl → pool-partner</td></tr>
+<tr><td>4</td><td>API バージョニングと URL デコード</td><td>「エンコード済みパス」</td><td><code>/api%2Forders</code> でも pool-api-v2</td></tr>
+<tr><td>5</td><td>リダイレクト</td><td>「キャンペーン」→ 302</td><td>curl -i で Location を確認</td></tr>
+<tr><td>6</td><td>WAF はルーティングより前</td><td>「WAF ブロック」→ 全ルール未評価</td><td>カスタム ルールに自分の IP を追加 → 403</td></tr>
+</tbody></table>
+<p class="note">デモ端末の IP が DEMO_CLIENT_CIDR の場合、GET の通常アクセスはカナリア ルール (優先度 40) に一致して pool-canary になります。既定プールを見せたいときは POST で送るか、別ネットワークから送ります。</p>
+</section>
+
+<section id="trouble"><h2>7. トラブルシューティング</h2>
+<table><thead><tr><th scope="col">症状</th><th scope="col">確認すること</th></tr></thead><tbody>
+<tr><td>502 Bad Gateway</td><td>バックエンドの正常性 (<code>az network application-gateway show-backend-health</code>)。cloud-init 完了前は異常になる。VM で <code>systemctl status agw-pool@pool-web</code></td></tr>
+<tr><td>条件セット作成でエラー</td><td>プレビュー中は Header 条件のみサポートとの記載あり。Path / QueryString / ClientIP / Method の条件を外して Header だけにする</td></tr>
+<tr><td>rule1 の切り替えでエラー</td><td>4.8 のポータル手順で切り替える。リスナーが Basic であることを確認</td></tr>
+<tr><td>カナリアに振り分けられない</td><td>実際の送信元 IP (プロキシ / NAT 後) と DEMO_CLIENT_CIDR が一致しているか。Method が GET / HEAD か</td></tr>
+<tr><td>正規表現が一致しない</td><td>RE2 非対応の構文 (先読み・後方参照など) を使っていないか。シミュレーターと実機で結果が違う場合は実機の結果が正</td></tr>
+<tr><td>シミュレーターと実機で結果が違う</td><td>両者のルール定義 (JSON 表示と advanced-routing-map show) を比較</td></tr>
+</tbody></table>
+</section>
+
+<section id="notes"><h2>8. 制約・注意事項と後片付け</h2><ul>
+<li>Advanced rules はプレビュー機能です。マルチサイト リスナーと L4 (TCP/TLS) プロキシでは使えません</li>
+<li>上限: マップ 100 / ゲートウェイ、ルール 100 / マップ、条件 5 / 条件セット、値 5 / 条件、値・正規表現 128 文字</li>
+<li>WAF ポリシーはゲートウェイまたはリスナー単位で関連付け。ルール単位の WAF ポリシーは非対応</li>
+<li>シミュレーターの判定はブラウザーの正規表現エンジンで近似しており、RE2 と完全には一致しません</li>
+<li><code>deploy.sh</code> はまだ実環境で実行していません。初回は手順ごとに結果を確認しながら実行してください</li></ul>
+<pre><code>az group delete -n rg-agw-advrouting-demo --yes --no-wait</code></pre>
+</section>
+</main></body></html>

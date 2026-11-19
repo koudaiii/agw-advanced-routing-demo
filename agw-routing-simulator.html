@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="ja" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Application Gateway Advanced Routing シミュレーター</title>
+<style>
+:root{
+  --bg:#f6f7f9;--card:#ffffff;--fg:#111827;--muted:#4b5563;--line:#d1d5db;--soft:#eef0f3;
+  --primary:#9f1239;--primary-fg:#ffffff;--ok-bg:#d1fae5;--ok-fg:#064e3b;--no-bg:#e5e7eb;--no-fg:#1f2937;
+  --warn-bg:#fef3c7;--warn-fg:#78350f;--err-bg:#fee2e2;--err-fg:#7f1d1d;--info-bg:#dbeafe;--info-fg:#1e3a8a;
+  --mono:ui-monospace,Consolas,"Cascadia Mono",monospace;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0f1115;--card:#171a21;--fg:#e5e7eb;--muted:#c4c8d0;--line:#343a46;--soft:#1f232c;
+  --primary:#fb7185;--primary-fg:#1a0a0f;--ok-bg:#064e3b;--ok-fg:#d1fae5;--no-bg:#2a2f3a;--no-fg:#e5e7eb;
+  --warn-bg:#451a03;--warn-fg:#fde68a;--err-bg:#450a0a;--err-fg:#fecaca;--info-bg:#172554;--info-fg:#bfdbfe;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:"Segoe UI","Yu Gothic UI","Hiragino Sans",system-ui,sans-serif;font-size:14px;line-height:1.5}
+header.top{background:#18181b;color:#fafafa;padding-block:10px;padding-inline:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+header.top h1{font-size:15px;margin:0;font-weight:700}
+.mode{border:1px solid #71717a;border-radius:999px;padding-block:2px;padding-inline:10px;font-size:12px}
+.mode.live{background:#047857;border-color:#047857}
+.top .spacer{flex:1}
+.top label{font-size:12px}
+.top input{inline-size:min(360px,60vw)}
+.layout{display:grid;grid-template-columns:330px minmax(0,1fr);gap:20px;padding:16px;max-inline-size:1440px;margin-inline:auto}
+@media (max-width:900px){.layout{grid-template-columns:1fr}}
+h2{font-size:15px;margin-block:0 8px}
+h3{font-size:14px;margin:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px}
+.stack{display:flex;flex-direction:column;gap:12px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.grow{flex:1}
+label{font-weight:600;font-size:13px;display:block;margin-block-end:2px}
+input,select,textarea{font:inherit;color:var(--fg);background:var(--card);border:1px solid #6b7280;border-radius:6px;padding-block:6px;padding-inline:8px;inline-size:100%}
+input.mono,textarea{font-family:var(--mono);font-size:12.5px}
+button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--fg);padding-block:6px;padding-inline:10px}
+button:hover{background:var(--soft)}
+button.primary{background:var(--primary);color:var(--primary-fg);border-color:var(--primary);font-weight:600}
+button.small{padding-block:2px;padding-inline:8px;font-size:12px}
+button.icon{padding-block:2px;padding-inline:8px}
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.presets{display:flex;flex-wrap:wrap;gap:6px}
+.hdr{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr) auto;gap:6px}
+.badge{display:inline-block;border-radius:6px;padding-block:1px;padding-inline:8px;font-size:12px;font-weight:600;white-space:nowrap}
+.b-ok{background:var(--ok-bg);color:var(--ok-fg)}.b-no{background:var(--no-bg);color:var(--no-fg)}
+.b-skip{border:1px dashed var(--muted);color:var(--fg)}.b-warn{background:var(--warn-bg);color:var(--warn-fg)}
+.b-err{background:var(--err-bg);color:var(--err-fg)}.b-info{background:var(--info-bg);color:var(--info-fg)}
+.prio{font-family:var(--mono);font-weight:700;background:var(--soft);border-radius:4px;padding-inline:6px;min-inline-size:34px;text-align:center}
+.rule{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--card)}
+.rule.hit{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
+.cond{font-family:var(--mono);font-size:12px;background:var(--soft);border-radius:4px;padding-inline:6px}
+.conds{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:12px}
+ol.rules{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.target{margin-inline-start:auto;font-family:var(--mono);font-size:12px}
+figure{margin:0}
+figcaption{font-weight:600;margin-block-end:6px}
+svg.diagram{inline-size:100%;block-size:auto;min-inline-size:640px;background:var(--card);border:1px solid var(--line);border-radius:8px}
+.scroll-x{overflow-x:auto}
+pre{font-family:var(--mono);font-size:12px;background:var(--soft);border-radius:6px;padding:8px;margin:0;white-space:pre-wrap;word-break:break-all}
+.page{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)}
+.page .ph{color:#fff;padding-block:14px;padding-inline:18px}
+.page .ph p{margin:0;font-size:12px}.page .ph .pn{font-family:var(--mono);font-size:22px;font-weight:700}
+.page dl{display:grid;grid-template-columns:max-content 1fr;gap:2px 14px;padding-block:10px;padding-inline:18px;margin:0;font-size:12px}
+.page dt{font-weight:600}.page dd{margin:0;font-family:var(--mono);word-break:break-all}
+table{border-collapse:collapse;inline-size:100%;font-size:12px}
+th,td{border-block-start:1px solid var(--line);padding-block:3px;padding-inline:10px;text-align:start;vertical-align:top;font-family:var(--mono);word-break:break-all}
+th{inline-size:170px}
+tr.gw{background:var(--warn-bg);color:var(--warn-fg)}
+caption{text-align:start;font-weight:600;padding-block:6px 2px;padding-inline:10px}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+@media (max-width:1150px){.two{grid-template-columns:1fr}}
+.note{font-size:12px;color:var(--muted)}
+.alert{border-radius:6px;padding-block:6px;padding-inline:10px;font-size:13px}
+.history{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:6px}
+.history li+li{border-block-start:1px solid var(--line)}
+.history button{inline-size:100%;border:0;border-radius:0;display:flex;gap:8px;align-items:center;text-align:start}
+.history .line{flex:1;font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--fg);inline-size:min(760px,94vw);padding:16px}
+dialog::backdrop{background:rgb(0 0 0 / .45)}
+.sr-only{position:absolute;inline-size:1px;block-size:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.skip{position:absolute;inset-inline-start:-9999px}
+.skip:focus{inset-inline-start:8px;inset-block-start:8px;background:var(--card);color:var(--fg);padding:6px;z-index:10}
+.err{color:var(--err-fg);background:var(--err-bg);border-radius:4px;padding-inline:6px;font-size:12px}
+@media (forced-colors: active){.badge,.rule.hit{border:1px solid CanvasText}}
+@media print{header.top{background:none;color:inherit}.layout{display:block}aside{display:none}}
+</style>
+</head>
+<body>
+<a class="skip" href="#work">メインへ移動</a>
+<header class="top">
+  <h1>Application Gateway · Advanced Routing シミュレーター</h1>
+  <span id="modeBadge" class="mode">オフライン</span>
+  <span class="spacer"></span>
+  <div>
+    <label for="backendUrl">ゲートウェイ URL (空ならオフライン)</label>
+    <input id="backendUrl" class="mono" placeholder="http://20.x.x.x" autocomplete="off">
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="stack" aria-label="テスト要求">
+    <form id="reqForm" class="card stack">
+      <h2>テスト要求</h2>
+      <div class="presets" id="presets" role="group" aria-label="シナリオ"></div>
+      <div class="row">
+        <div style="inline-size:110px"><label for="method">Method</label><select id="method"></select></div>
+        <div class="grow"><label for="path">Path</label><input id="path" class="mono"></div>
+      </div>
+      <div><label for="query">Query string</label><input id="query" class="mono" placeholder="campaign=spring"></div>
+      <div><label for="clientIp">Client IP</label><input id="clientIp" class="mono"><p class="note" id="ipNote"></p></div>
+      <fieldset style="border:0;padding:0;margin:0">
+        <legend style="font-weight:600;font-size:13px">Headers</legend>
+        <div id="headers" class="stack" style="gap:6px"></div>
+        <button type="button" id="addHeader" class="small" style="margin-block-start:6px">＋ ヘッダーを追加</button>
+      </fieldset>
+      <button type="submit" class="primary" id="sendBtn">要求を送信</button>
+    </form>
+    <section class="card" aria-labelledby="histH">
+      <h2 id="histH">送信履歴</h2>
+      <p id="histEmpty" class="note">まだ送信していません。</p>
+      <ul id="history" class="history" hidden></ul>
+    </section>
+  </aside>
+
+  <main id="work" tabindex="-1" class="stack">
+    <div id="storageWarn" class="alert b-warn" role="alert" hidden></div>
+    <figure>
+      <figcaption>ルーティング経路: <span id="summary" style="font-weight:400">テスト要求を送信すると経路が表示されます</span></figcaption>
+      <div class="scroll-x"><svg id="diagram" class="diagram" role="img" aria-labelledby="dgT dgD"></svg></div>
+    </figure>
+
+    <section id="responseSec" class="stack" aria-labelledby="respH" hidden>
+      <div class="row"><h2 id="respH" class="grow" style="margin:0">応答</h2><span id="matchBadge"></span></div>
+      <div class="two">
+        <div class="stack"><h3 id="simH">予測 (シミュレーション)</h3><div id="simOut"></div></div>
+        <div class="stack"><h3 id="liveH">実機の応答</h3><div id="liveOut"></div></div>
+      </div>
+      <div class="card">
+        <div class="row"><p class="grow" style="margin:0;font-weight:600">同じ要求を curl で送る</p><button type="button" id="copyCurl" class="small">コピー</button></div>
+        <pre id="curl" style="margin-block-start:6px"></pre>
+      </div>
+    </section>
+
+    <section class="stack" aria-labelledby="rulesH">
+      <div class="row">
+        <h2 id="rulesH" tabindex="-1" class="grow" style="margin:0">Advanced routing rules <span id="ruleCount" style="font-weight:400"></span></h2>
+        <button type="button" id="editJson" class="small">ルールを編集 (JSON)</button>
+        <button type="button" id="resetBtn" class="small">サンプルに戻す</button>
+      </div>
+      <ol id="rules" class="rules"></ol>
+      <div id="defaultRow" class="rule row">
+        <span style="font-weight:600">既定 (どのルールにも一致しない場合)</span><span id="defaultBadge"></span>
+        <span class="grow"></span>
+        <label for="defaultPool" style="margin:0;font-weight:400;font-size:12px">既定プール</label>
+        <select id="defaultPool" style="inline-size:180px"></select>
+      </div>
+    </section>
+
+    <section class="card stack" aria-labelledby="wafH">
+      <div class="row"><h2 id="wafH" class="grow" style="margin:0">WAF (ルーティング判定の前に評価)</h2><span id="wafBadge"></span>
+        <label style="margin:0;font-weight:400"><input type="checkbox" id="wafOn" style="inline-size:auto"> 有効</label></div>
+      <div><label for="wafIps">ブロックするクライアント IP (CIDR、カンマ区切り)</label><input id="wafIps" class="mono" aria-describedby="wafErr"><p id="wafErr" class="err" hidden></p></div>
+    </section>
+    <p class="note" id="storageNote"></p>
+  </main>
+</div>
+
+<dialog id="jsonDlg" aria-labelledby="jsonH">
+  <form method="dialog" id="jsonForm" class="stack">
+    <h2 id="jsonH">ルール構成 (JSON)</h2>
+    <p class="note">rules[]: name, priority, conditions[{type, name?, values? | pattern?}], target: {pool} または {redirect}。条件はすべて一致 (AND)、values はいずれか一致 (OR)。</p>
+    <label for="jsonText" class="sr-only">ルール構成 JSON</label>
+    <textarea id="jsonText" rows="22" aria-describedby="jsonErr"></textarea>
+    <ul id="jsonErr" class="err" hidden></ul>
+    <div class="row" style="justify-content:flex-end"><button type="button" id="jsonCancel">キャンセル</button><button type="button" id="jsonSave" class="primary">保存</button></div>
+  </form>
+</dialog>
+
+<p id="live" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
+
+<script>
+"use strict";
+(function () {
+// ---------- data ----------
+const POOLS = [
+  { id: "pool-web", label: "Web (既定)", port: 8080, color: "#334155" },
+  { id: "pool-partner", label: "パートナー専用", port: 8081, color: "#7c2d12" },
+  { id: "pool-tenant", label: "テナント専用", port: 8082, color: "#0f766e" },
+  { id: "pool-api-v2", label: "Orders API v2", port: 8083, color: "#1d4ed8" },
+  { id: "pool-canary", label: "カナリア", port: 8084, color: "#a16207" },
+  { id: "pool-mobile", label: "モバイル", port: 8085, color: "#7e22ce" },
+];
+const TYPES = ["Header", "QueryString", "ClientIP", "Method", "Path"];
+const METHODS = ["GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "PATCH"];
+const LIMITS = { rules: 100, conds: 5, values: 5, len: 128 };
+// Browsers do not let a page set these on fetch(); they are skipped in live mode.
+const FORBIDDEN = new Set(["user-agent", "host", "connection", "content-length", "origin", "referer", "cookie", "accept-encoding", "x-forwarded-for"]);
+const DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Edge/131.0";
+
+function sampleConfig() {
+  return {
+    defaultPool: "pool-web",
+    waf: { enabled: true, blocked: ["198.51.100.0/24"] },
+    rules: [
+      { name: "パートナー連携", priority: 10, conditions: [{ type: "Header", name: "X-Partner-Id", values: ["contoso", "fabrikam"] }], target: { pool: "pool-partner" } },
+      { name: "マルチテナント", priority: 20, conditions: [{ type: "Header", name: "X-Tenant-Id", pattern: "^customer-[0-9]+$" }, { type: "Path", pattern: "^/app(/.*)?$" }], target: { pool: "pool-tenant" } },
+      { name: "API バージョニング", priority: 30, conditions: [{ type: "Header", name: "X-Api-Version", values: ["2", "2.0"] }, { type: "Path", pattern: "^/api/orders(/.*)?$" }], target: { pool: "pool-api-v2" } },
+      { name: "カナリア (社内ネットワーク)", priority: 40, conditions: [{ type: "ClientIP", values: ["203.0.113.0/24"] }, { type: "Method", values: ["GET", "HEAD"] }], target: { pool: "pool-canary" } },
+      { name: "キャンペーン LP", priority: 50, conditions: [{ type: "QueryString", name: "campaign", values: ["spring", "summer"] }], target: { redirect: "https://www.contoso.com/campaign" } },
+      { name: "モバイル振り分け", priority: 60, conditions: [{ type: "Header", name: "User-Agent", pattern: "(iPhone|Android)" }], target: { pool: "pool-mobile" } },
+    ],
+  };
+}
+const req = (method, path, query, clientIp, headers) => ({ method, path, query, clientIp, headers: headers.map(([name, value]) => ({ name, value })) });
+const PRESETS = [
+  ["通常アクセス", () => req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]])],
+  ["テナント", () => req("GET", "/app/dashboard", "", "192.0.2.41", [["User-Agent", DESKTOP_UA], ["X-Tenant-Id", "customer-1024"]])],
+  ["パートナー", () => req("POST", "/api/orders", "", "192.0.2.88", [["X-Partner-Id", "fabrikam"]])],
+  ["API v2", () => req("GET", "/api/orders/1001", "", "192.0.2.41", [["X-Api-Version", "2.0"]])],
+  ["エンコード済みパス", () => req("GET", "/api%2Forders", "", "192.0.2.41", [["X-Api-Version", "2"]])],
+  ["社内 IP", () => req("GET", "/app/home", "", "203.0.113.25", [["User-Agent", DESKTOP_UA]])],
+  ["キャンペーン", () => req("GET", "/landing", "campaign=summer&utm=mail", "192.0.2.41", [["User-Agent", DESKTOP_UA]])],
+  ["モバイル", () => req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X)"]])],
+  ["WAF ブロック", () => req("GET", "/app/home", "", "198.51.100.77", [["User-Agent", DESKTOP_UA]])],
+];
+
+// ---------- storage (optional: falls back to memory when the browser refuses) ----------
+const KEY = "agw-routing-simulator:v1";
+let storageOk = true;
+function load() {
+  try {
+    const raw = window.localStorage.getItem(KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw);
+    return p && p.config && validateConfig(p.config).length === 0 ? p : null;
+  } catch (e) { storageOk = false; return null; }
+}
+function save() {
+  if (!storageOk) return;
+  try { window.localStorage.setItem(KEY, JSON.stringify({ config: state.config, backendUrl: state.backendUrl })); }
+  catch (e) { storageOk = false; showStorage(); }
+}
+
+// ---------- validation ----------
+function ipv4(ip) {
+  const p = String(ip).trim().split(".");
+  if (p.length !== 4 || !p.every((x) => /^\d{1,3}$/.test(x) && +x <= 255)) return null;
+  return p.reduce((n, x) => n * 256 + +x, 0);
+}
+function validCidr(v) {
+  const m = /^([^/]+)\/(\d{1,3})$/.exec(v);
+  if (!m) return false;
+  if (m[1].includes(":")) return +m[2] <= 128;
+  return ipv4(m[1]) !== null && +m[2] <= 32;
+}
+function validateConfig(c) {
+  const e = [];
+  if (!c || typeof c !== "object") return ["JSON のオブジェクトではありません"];
+  if (!POOLS.some((p) => p.id === c.defaultPool)) e.push("defaultPool が不明です");
+  if (!c.waf || typeof c.waf.enabled !== "boolean" || !Array.isArray(c.waf.blocked)) e.push("waf は {enabled, blocked[]} です");
+  if (!Array.isArray(c.rules)) return e.concat("rules は配列です");
+  if (c.rules.length > LIMITS.rules) e.push(`ルールは ${LIMITS.rules} 件までです`);
+  const prios = new Set();
+  c.rules.forEach((r, i) => {
+    const at = `rules[${i}]${r && r.name ? ` (${r.name})` : ""}`;
+    if (!r || typeof r.name !== "string" || !r.name.trim()) e.push(`${at}: name が必要です`);
+    if (!Number.isInteger(r && r.priority) || r.priority < 1) e.push(`${at}: priority は 1 以上の整数です`);
+    else if (prios.has(r.priority)) e.push(`${at}: priority ${r.priority} が重複しています`); else prios.add(r.priority);
+    if (!r || !Array.isArray(r.conditions) || r.conditions.length === 0) { e.push(`${at}: conditions が必要です`); return; }
+    if (r.conditions.length > LIMITS.conds) e.push(`${at}: 条件は ${LIMITS.conds} 個までです`);
+    const t = r.target || {};
+    if (!(t.pool && POOLS.some((p) => p.id === t.pool)) && !(typeof t.redirect === "string" && /^https?:\/\/\S+$/.test(t.redirect))) e.push(`${at}: target は {pool: 既知のプール} か {redirect: URL} です`);
+    r.conditions.forEach((c2, j) => {
+      const ct = `${at}.conditions[${j}]`;
+      if (!TYPES.includes(c2.type)) { e.push(`${ct}: type は ${TYPES.join(" / ")} です`); return; }
+      if ((c2.type === "Header" || c2.type === "QueryString") && !(typeof c2.name === "string" && c2.name.trim())) e.push(`${ct}: name が必要です`);
+      const hasV = Array.isArray(c2.values), hasP = typeof c2.pattern === "string";
+      if (hasV === hasP) { e.push(`${ct}: values か pattern のどちらか一方を指定します`); return; }
+      if (hasP) {
+        if (c2.type === "ClientIP" || c2.type === "Method") e.push(`${ct}: ${c2.type} は完全一致 (values) のみです`);
+        if (c2.pattern.length > LIMITS.len) e.push(`${ct}: pattern は ${LIMITS.len} 文字以内です`);
+        if (/\(\?<?[=!]|\\[1-9]/.test(c2.pattern)) e.push(`${ct}: 先読み・後読み・後方参照は RE2 非対応です`);
+        try { new RegExp(c2.pattern); } catch (x) { e.push(`${ct}: 正規表現が無効です`); }
+      } else {
+        if (c2.values.length === 0 || c2.values.length > LIMITS.values) e.push(`${ct}: values は 1〜${LIMITS.values} 個です`);
+        if (c2.values.some((v) => typeof v !== "string" || v.length > LIMITS.len)) e.push(`${ct}: values は ${LIMITS.len} 文字以内の文字列です`);
+        if (c2.type !== "QueryString" && c2.values.some((v) => v === "")) e.push(`${ct}: 空の値は QueryString のみです`);
+        if (c2.type === "Method" && c2.values.some((v) => !METHODS.includes(v))) e.push(`${ct}: Method は大文字の ${METHODS.join(", ")} です`);
+        if (c2.type === "ClientIP" && c2.values.some((v) => !validCidr(v))) e.push(`${ct}: ClientIP は CIDR 形式です`);
+      }
+    });
+  });
+  return e;
+}
+
+// ---------- evaluation (same semantics as the App Builder simulator) ----------
+function inCidr(ip, cidr) {
+  const [base, bits] = cidr.split("/");
+  if (base.includes(":")) return bits === "128" && base.toLowerCase() === String(ip).trim().toLowerCase();
+  const a = ipv4(ip), b = ipv4(base), n = +bits;
+  if (a === null || b === null) return false;
+  if (n === 0) return true;
+  const size = 2 ** (32 - n);
+  return Math.floor(a / size) === Math.floor(b / size);
+}
+function decodePath(p) { try { return decodeURIComponent(p); } catch (e) { return p; } }
+function actual(c, r, path) {
+  switch (c.type) {
+    case "Header": { const h = r.headers.find((x) => x.name.trim() && x.name.trim().toLowerCase() === c.name.trim().toLowerCase()); return h ? h.value : null; }
+    case "QueryString": { const q = new URLSearchParams(r.query.replace(/^\?/, "")); return q.has(c.name) ? q.get(c.name) : null; }
+    case "ClientIP": return r.clientIp.trim();
+    case "Method": return r.method;
+    case "Path": return path;
+  }
+  return null;
+}
+function matches(c, v) {
+  if (v === null) return false;
+  if (typeof c.pattern === "string") { try { return new RegExp(c.pattern).test(v); } catch (e) { return false; } }
+  if (c.type === "ClientIP") return c.values.some((x) => inCidr(v, x));
+  return c.values.includes(v);
+}
+const sorted = (rules) => rules.map((r, i) => ({ r, i })).sort((a, b) => a.r.priority - b.r.priority);
+function evaluate(cfg, r) {
+  const path = decodePath(r.path);
+  const order = sorted(cfg.rules);
+  if (cfg.waf.enabled) {
+    const hit = cfg.waf.blocked.find((x) => inCidr(r.clientIp, x));
+    if (hit) return { path, results: order.map(({ i }) => ({ i, status: "skip", conds: [] })), d: { kind: "waf", cidr: hit } };
+  }
+  let d = null;
+  const results = order.map(({ r: rule, i }) => {
+    if (d) return { i, status: "skip", conds: [] };
+    const conds = rule.conditions.map((c) => { const v = actual(c, r, path); return { v, ok: matches(c, v) }; });
+    const ok = conds.every((x) => x.ok);
+    if (ok) d = rule.target.pool ? { kind: "pool", i, pool: rule.target.pool } : { kind: "redirect", i, url: rule.target.redirect };
+    return { i, status: ok ? "ok" : "no", conds };
+  });
+  return { path, results, d: d || { kind: "default", pool: cfg.defaultPool } };
+}
+const pool = (id) => POOLS.find((p) => p.id === id) || { id, label: id, port: 0, color: "#334155" };
+function describe(d, cfg) {
+  if (d.kind === "waf") return `WAF がブロック (${d.cidr}) — ルーティング評価なし`;
+  if (d.kind === "pool") return `「${cfg.rules[d.i].name}」に一致 → ${pool(d.pool).label} (${d.pool})`;
+  if (d.kind === "redirect") return `「${cfg.rules[d.i].name}」に一致 → ${d.url} へリダイレクト`;
+  return `一致ルールなし → 既定プール ${pool(d.pool).label} (${d.pool})`;
+}
+
+// ---------- DOM helpers ----------
+const $ = (id) => document.getElementById(id);
+function el(tag, attrs, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === undefined || v === null || v === false) continue;
+    if (k === "class") n.className = v; else if (k === "text") n.textContent = v; else if (k === "style") n.setAttribute("style", v); else n.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) n.append(k.nodeType ? k : document.createTextNode(String(k)));
+  return n;
+}
+const SVGNS = "http://www.w3.org/2000/svg";
+function s(tag, attrs, text) { const n = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); if (text !== undefined) n.textContent = text; return n; }
+let announceN = 0;
+function announce(t) { announceN += 1; $("live").textContent = `${t} (${announceN})`; }
+const badge = (cls, text) => el("span", { class: `badge ${cls}`, text });
+
+// ---------- state ----------
+const saved = load();
+const state = {
+  config: saved ? saved.config : sampleConfig(),
+  backendUrl: saved && typeof saved.backendUrl === "string" ? saved.backendUrl : "",
+  request: PRESETS[1][1](),
+  sent: null, ev: null, live: null, history: [],
+};
+
+// ---------- request form ----------
+METHODS.forEach((m) => $("method").append(el("option", { value: m, text: m })));
+PRESETS.forEach(([label, build]) => {
+  const b = el("button", { type: "button", class: "small", text: label });
+  b.addEventListener("click", () => { state.request = build(); renderRequest(); });
+  $("presets").append(b);
+});
+function renderRequest() {
+  const r = state.request;
+  $("method").value = r.method; $("path").value = r.path; $("query").value = r.query; $("clientIp").value = r.clientIp;
+  const box = $("headers"); box.replaceChildren();
+  r.headers.forEach((h, i) => {
+    const n = el("input", { class: "mono", "aria-label": `ヘッダー ${i + 1} 名前`, value: h.name });
+    const v = el("input", { class: "mono", "aria-label": `ヘッダー ${i + 1} 値`, value: h.value });
+    const del = el("button", { type: "button", class: "icon", "aria-label": `ヘッダー ${i + 1} (${h.name || "名前なし"}) を削除`, text: "×" });
+    n.addEventListener("input", () => { h.name = n.value; });
+    v.addEventListener("input", () => { h.value = v.value; });
+    del.addEventListener("click", () => { r.headers.splice(i, 1); renderRequest(); $("addHeader").focus(); });
+    const row = el("div", { class: "hdr" }, n, v, del);
+    if (isLive() && FORBIDDEN.has(h.name.trim().toLowerCase())) row.append(el("p", { class: "note", style: "grid-column:1/-1;margin:0", text: "実機モードではブラウザーの制限で送信できません (curl では送れます)" }));
+    box.append(row);
+  });
+  $("clientIp").disabled = isLive();
+  $("ipNote").textContent = isLive() ? "実機モードでは端末の実際の IP で送信されます (予測にはこの値を使用)" : "";
+}
+["method", "path", "query", "clientIp"].forEach((id) => $(id).addEventListener("input", () => { state.request[id] = $(id).value; }));
+$("method").addEventListener("change", () => { state.request.method = $("method").value; });
+$("addHeader").addEventListener("click", () => { state.request.headers.push({ name: "", value: "" }); renderRequest(); const ins = $("headers").querySelectorAll("input"); if (ins.length) ins[ins.length - 2].focus(); });
+$("reqForm").addEventListener("submit", (e) => { e.preventDefault(); send(); });
+
+// ---------- live mode ----------
+function isLive() { return state.backendUrl.trim() !== ""; }
+function normBase(u) { return u.trim().replace(/\/+$/, ""); }
+function renderMode() {
+  const live = isLive();
+  $("modeBadge").textContent = live ? "実機モード" : "オフライン";
+  $("modeBadge").classList.toggle("live", live);
+  $("backendUrl").value = state.backendUrl;
+}
+$("backendUrl").addEventListener("change", () => {
+  const v = $("backendUrl").value.trim();
+  if (v && !/^https?:\/\/[^\s/]+/.test(v)) { announce("URL は http:// または https:// で始めてください"); $("backendUrl").setAttribute("aria-invalid", "true"); return; }
+  $("backendUrl").removeAttribute("aria-invalid");
+  state.backendUrl = v; state.live = null; save(); renderMode(); renderRequest(); renderResponse();
+  announce(v ? `実機モード: ${v}` : "オフライン モード");
+});
+async function callGateway(r) {
+  const base = normBase(state.backendUrl);
+  const q = r.query.replace(/^\?/, "");
+  const url = base + r.path + (q ? `?${q}` : "");
+  if (r.method === "CONNECT") return { kind: "error", message: "CONNECT はブラウザーから送信できません" };
+  const headers = new Headers({ Accept: "application/json" });
+  const skipped = [];
+  for (const h of r.headers) {
+    const n = h.name.trim();
+    if (!n) continue;
+    if (FORBIDDEN.has(n.toLowerCase())) { skipped.push(n); continue; }
+    try { headers.set(n, h.value); } catch (e) { skipped.push(n); }
+  }
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 10000);
+  const started = performance.now();
+  try {
+    const res = await fetch(url, { method: r.method, headers, redirect: "manual", cache: "no-store", mode: "cors", signal: ctl.signal });
+    const ms = Math.round(performance.now() - started);
+    if (res.type === "opaqueredirect") return { kind: "redirect", ms, skipped, url };
+    let body = null;
+    if (r.method !== "HEAD" && (res.headers.get("content-type") || "").includes("json")) { try { body = await res.json(); } catch (e) { body = null; } }
+    return { kind: "response", status: res.status, statusText: res.statusText, pool: res.headers.get("x-backend-pool"), body, ms, skipped, url };
+  } catch (e) {
+    return { kind: "error", message: ctl.signal.aborted ? "10 秒以内に応答がありませんでした" : "応答を読めませんでした (WAF のブロック、CORS 未設定、URL 誤り、混在コンテンツのいずれか)", skipped, url };
+  } finally { clearTimeout(timer); }
+}
+
+// ---------- send ----------
+async function send() {
+  const r = JSON.parse(JSON.stringify(state.request));
+  state.sent = r; state.ev = evaluate(state.config, r); state.live = isLive() ? { kind: "pending" } : null;
+  const line = `${r.method} ${r.path}${r.query ? `?${r.query}` : ""}`;
+  renderAll();
+  announce(`予測: ${describe(state.ev.d, state.config)}`);
+  let tone = tones(state.ev.d);
+  if (isLive()) {
+    $("sendBtn").disabled = true;
+    const live = await callGateway(r);
+    $("sendBtn").disabled = false;
+    if (state.sent !== r) return;
+    state.live = live; renderResponse();
+    const v = verdict();
+    announce(`実機: ${liveSummary(live)}${v ? `、${v.text}` : ""}`);
+  }
+  state.history.unshift({ r, line, tone });
+  state.history = state.history.slice(0, 8);
+  renderHistory();
+}
+function tones(d) { return d.kind === "waf" ? ["b-err", "WAF"] : d.kind === "redirect" ? ["b-info", "302"] : d.kind === "default" ? ["b-warn", "既定"] : ["b-ok", "一致"]; }
+function liveSummary(l) {
+  if (!l) return "";
+  if (l.kind === "pending") return "送信中";
+  if (l.kind === "redirect") return "リダイレクト応答";
+  if (l.kind === "error") return l.message;
+  return `HTTP ${l.status}${l.pool ? ` / ${l.pool}` : ""}`;
+}
+function verdict() {
+  const l = state.live, d = state.ev && state.ev.d;
+  if (!l || !d || l.kind === "pending") return null;
+  let same;
+  if (d.kind === "waf") same = l.kind === "error" || (l.kind === "response" && l.status === 403);
+  else if (d.kind === "redirect") same = l.kind === "redirect" || (l.kind === "response" && l.status >= 300 && l.status < 400);
+  else same = l.kind === "response" && l.pool === d.pool;
+  return same ? { cls: "b-ok", text: "予測と一致" } : { cls: "b-err", text: "予測と不一致" };
+}
+
+// ---------- rendering ----------
+function renderDiagram() {
+  const svg = $("diagram"); svg.replaceChildren();
+  const ev = state.ev, d = ev && ev.d, cfg = state.config;
+  const targets = POOLS.map((p) => ({ id: p.id, t: p.id + (p.id === cfg.defaultPool ? " (既定)" : ""), sub: `:${p.port} ${p.label}` })).concat([{ id: "__redirect", t: "リダイレクト", sub: "302 応答" }]);
+  const rowH = 42, top = 12, H = top * 2 + targets.length * rowH, mid = H / 2;
+  svg.setAttribute("viewBox", `0 0 860 ${H}`);
+  const summary = ev ? describe(d, cfg) : "テスト要求を送信すると経路が表示されます";
+  svg.append(s("title", { id: "dgT" }, "要求のルーティング経路図"), s("desc", { id: "dgD" }, summary));
+  const on = !!ev, blocked = d && d.kind === "waf";
+  const active = d && (d.kind === "pool" || d.kind === "default") ? d.pool : null;
+  const st = (x) => (x ? "var(--primary)" : "var(--line)");
+  const stages = [
+    { x: 8, l: "クライアント", sub: isLive() ? "このブラウザー" : "", on },
+    { x: 148, l: "Basic リスナー", sub: ":80 / :443", on },
+    { x: 288, l: "WAF", sub: blocked ? "403 で遮断" : cfg.waf.enabled ? "ポリシー有効" : "無効", on: on && !blocked, bad: blocked },
+    { x: 428, l: "Advanced Routing Map", sub: `ルール ${cfg.rules.length} 件`, on: on && !blocked },
+  ];
+  stages.slice(0, -1).forEach((g, i) => svg.append(s("line", { x1: g.x + 120, y1: mid, x2: stages[i + 1].x, y2: mid, stroke: st(i < 2 ? on : stages[i + 1].on), "stroke-width": on ? 3 : 1.5 })));
+  stages.forEach((g) => {
+    svg.append(s("rect", { x: g.x, y: mid - 26, width: 120, height: 52, rx: 8, fill: "var(--card)", stroke: g.bad ? "#b91c1c" : st(g.on), "stroke-width": g.on || g.bad ? 2.5 : 1.5 }));
+    svg.append(s("text", { x: g.x + 60, y: mid - 3, "text-anchor": "middle", "font-size": g.l.length > 12 ? 9.5 : 12.5, "font-weight": 700, fill: "var(--fg)" }, g.l));
+    svg.append(s("text", { x: g.x + 60, y: mid + 14, "text-anchor": "middle", "font-size": 10.5, fill: "var(--fg)" }, g.sub));
+  });
+  targets.forEach((t, i) => {
+    const y = top + i * rowH + rowH / 2;
+    const hit = (t.id === "__redirect" && d && d.kind === "redirect") || t.id === active;
+    svg.append(s("path", { d: `M548 ${mid} C 600 ${mid}, 600 ${y}, 650 ${y}`, fill: "none", stroke: st(hit), "stroke-width": hit ? 3 : 1, "stroke-dasharray": t.id === "__redirect" ? "5 4" : "none" }));
+    const p = POOLS.find((x) => x.id === t.id);
+    svg.append(s("rect", { x: 650, y: y - 17, width: 202, height: 34, rx: 6, fill: hit ? (p ? p.color : "var(--primary)") : "var(--card)", stroke: hit ? (p ? p.color : "var(--primary)") : "var(--line)", "stroke-width": hit ? 2 : 1 }));
+    svg.append(s("text", { x: 660, y: y - 2, "font-size": 11.5, "font-weight": 700, fill: hit ? "#ffffff" : "var(--fg)" }, t.t));
+    svg.append(s("text", { x: 660, y: y + 11, "font-size": 10, fill: hit ? "#ffffff" : "var(--fg)" }, t.sub));
+  });
+  $("summary").textContent = summary;
+}
+
+function backendPage(p, method, path, query, headers, instance) {
+  const dl = el("dl", {},
+    el("dt", { text: "インスタンス" }), el("dd", { text: instance }),
+    el("dt", { text: "Method" }), el("dd", { text: method }),
+    el("dt", { text: "Path" }), el("dd", { text: path }),
+    el("dt", { text: "Query string" }), el("dd", { text: query || "(なし)" }));
+  const GW = new Set(["x-forwarded-for", "x-forwarded-proto", "x-forwarded-port", "x-original-host", "x-original-url", "x-appgw-trace-id"]);
+  const rows = headers.slice().sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) =>
+    el("tr", { class: GW.has(k) ? "gw" : null }, el("th", { scope: "row", text: k }), el("td", {}, String(v), GW.has(k) ? el("span", { class: "sr-only", text: " (Application Gateway が付与)" }) : null)));
+  return el("div", { class: "page", role: "group", "aria-label": `${p.id} が返すページ` },
+    el("div", { class: "ph", style: `background:${p.color}` }, el("p", { text: "この応答を返したバックエンド プール" }), el("p", { class: "pn", text: p.id }), el("p", { text: p.label })),
+    dl, el("table", {}, el("caption", { text: "受信したリクエスト ヘッダー" }), el("tbody", {}, rows)),
+    el("p", { class: "note", style: "padding-inline:18px", text: "黄色の行は Application Gateway が付与・書き換えたヘッダーです。" }));
+}
+function statusBlock(code, text, note) {
+  return el("div", { class: "card stack" }, el("p", { style: "margin:0;font-family:var(--mono);font-size:20px;font-weight:700", text: `${code} ${text}` }), el("p", { style: "margin:0", text: note }));
+}
+function renderSim() {
+  const out = $("simOut"); out.replaceChildren();
+  const d = state.ev.d, r = state.sent;
+  if (d.kind === "waf") { out.append(statusBlock(403, "Forbidden", "WAF がブロックしたため、バックエンドには届きません。")); return; }
+  if (d.kind === "redirect") { const q = r.query.replace(/^\?/, ""); out.append(statusBlock(302, "Found", `Location: ${q ? `${d.url}?${q}` : d.url}`)); return; }
+  const p = pool(d.pool);
+  const hs = r.headers.filter((h) => h.name.trim()).map((h) => [h.name.trim().toLowerCase(), h.value]);
+  const gw = [["x-forwarded-for", `${r.clientIp}:50432`], ["x-forwarded-proto", "http"], ["x-forwarded-port", "80"], ["x-original-host", "<FRONTEND>"]];
+  const merged = hs.filter(([k]) => !gw.some(([g]) => g === k)).concat(gw, [["host", `10.20.1.4:${p.port}`]]);
+  out.append(backendPage(p, r.method, state.ev.path, r.query.replace(/^\?/, ""), merged, `backend-vm:${p.port}`));
+}
+function renderLive() {
+  const out = $("liveOut"); out.replaceChildren();
+  const l = state.live;
+  $("liveH").parentElement.hidden = !isLive();
+  if (!isLive() || !l) return;
+  if (l.kind === "pending") { out.append(el("p", { class: "note", text: "ゲートウェイへ送信中…" })); return; }
+  const meta = el("p", { class: "note", text: `${l.url}${l.ms !== undefined ? ` ・ ${l.ms} ms` : ""}` });
+  const skipped = l.skipped && l.skipped.length ? el("p", { class: "alert b-warn", text: `ブラウザーの制限で送れなかったヘッダー: ${l.skipped.join(", ")}。実機の振り分けが予測と変わる場合があります。` }) : null;
+  if (l.kind === "error") { out.append(statusBlock("—", "", l.message), meta, skipped); return; }
+  if (l.kind === "redirect") { out.append(statusBlock("3xx", "Redirect", "ゲートウェイがリダイレクトを返しました (ブラウザーの制限で Location は読めません。curl -i で確認できます)。"), meta, skipped); return; }
+  const b = l.body;
+  if (b && b.pool) {
+    const hs = Object.entries(b.headers || {}).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : v]);
+    out.append(backendPage(pool(b.pool), b.method || "", b.path || "", new URLSearchParams(b.query || {}).toString(), hs, b.instance || ""));
+  } else {
+    out.append(statusBlock(l.status, l.statusText || "", l.pool ? `x-backend-pool: ${l.pool}` : "x-backend-pool ヘッダーなし (デモ用バックエンドではないか、CORS の Expose-Headers 未設定)"));
+  }
+  out.append(meta, skipped);
+}
+function shq(v) { return `'${String(v).replace(/'/g, `'\\''`)}'`; }
+function curl(r) {
+  const parts = ["curl -i"];
+  if (r.method !== "GET") parts.push(r.method === "HEAD" ? "-I" : `-X ${r.method}`);
+  r.headers.forEach((h) => { if (h.name.trim()) parts.push(`-H ${shq(`${h.name.trim()}: ${h.value}`)}`); });
+  const q = r.query.replace(/^\?/, "");
+  const base = isLive() ? normBase(state.backendUrl) : "http://<FRONTEND-IP>";
+  parts.push(shq(`${base}${r.path}${q ? `?${q}` : ""}`));
+  return parts.join(" ");
+}
+function renderResponse() {
+  const sec = $("responseSec");
+  sec.hidden = !state.ev;
+  if (!state.ev) return;
+  renderSim(); renderLive();
+  $("curl").textContent = curl(state.sent);
+  const v = verdict();
+  $("matchBadge").replaceChildren(v ? badge(v.cls, v.text) : "");
+}
+function condText(c) {
+  const subj = c.type === "Header" || c.type === "QueryString" ? `${c.type}[${c.name}]` : c.type;
+  return typeof c.pattern === "string" ? `${subj} ~ /${c.pattern}/` : `${subj} = ${c.values.map((v) => (v === "" ? '""' : v)).join(" | ")}`;
+}
+function renderRules() {
+  const cfg = state.config, list = $("rules"); list.replaceChildren();
+  $("ruleCount").textContent = `(${cfg.rules.length}/${LIMITS.rules}・優先度の昇順で評価)`;
+  const res = state.ev ? new Map(state.ev.results.map((x) => [x.i, x])) : new Map();
+  sorted(cfg.rules).forEach(({ r, i }) => {
+    const x = res.get(i);
+    const st = x ? { ok: badge("b-ok", "一致"), no: badge("b-no", "不一致"), skip: badge("b-skip", "未評価") }[x.status] : null;
+    const tgt = r.target.pool ? `→ ${r.target.pool}` : `→ リダイレクト ${r.target.redirect}`;
+    const conds = el("ul", { class: "conds" }, r.conditions.map((c, j) => {
+      const cr = x && x.conds[j];
+      return el("li", { class: "row", style: "gap:6px" }, j > 0 ? el("strong", { text: "AND" }) : null, el("span", { class: "cond", text: condText(c) }),
+        cr ? badge(cr.ok ? "b-ok" : "b-no", `${cr.ok ? "✓ 一致" : "✗ 不一致"}・実際の値: ${cr.v === null ? "(なし)" : cr.v === "" ? '""' : cr.v}`) : null);
+    }));
+    list.append(el("li", { class: `rule${x && x.status === "ok" ? " hit" : ""}` },
+      el("div", { class: "row" }, el("span", { class: "prio", "aria-label": `優先度 ${r.priority}`, text: String(r.priority) }), el("h3", { text: r.name }), st, el("span", { class: "target", text: tgt })), conds));
+  });
+  if (!cfg.rules.length) list.append(el("li", { class: "rule note", text: "ルールがありません。すべての要求は既定プールへ送られます。" }));
+  const dp = $("defaultPool");
+  if (!dp.options.length) POOLS.forEach((p) => dp.append(el("option", { value: p.id, text: p.id })));
+  dp.value = cfg.defaultPool;
+  const isDef = state.ev && state.ev.d.kind === "default";
+  $("defaultRow").classList.toggle("hit", !!isDef);
+  $("defaultBadge").replaceChildren(isDef ? badge("b-warn", "既定プール") : "");
+  $("wafOn").checked = cfg.waf.enabled;
+  if (document.activeElement !== $("wafIps")) $("wafIps").value = cfg.waf.blocked.join(", ");
+  $("wafBadge").replaceChildren(state.ev && state.ev.d.kind === "waf" ? badge("b-err", "WAF ブロック") : "");
+}
+function renderHistory() {
+  const ul = $("history"); ul.replaceChildren();
+  ul.hidden = state.history.length === 0; $("histEmpty").hidden = state.history.length > 0;
+  state.history.forEach((h) => {
+    const b = el("button", { type: "button", "aria-label": `${h.line} を再度読み込む (${h.tone[1]})` }, el("span", { class: "line", text: h.line }), badge(h.tone[0], h.tone[1]));
+    b.addEventListener("click", () => { state.request = JSON.parse(JSON.stringify(h.r)); renderRequest(); $("path").focus(); });
+    ul.append(el("li", {}, b));
+  });
+}
+function showStorage() {
+  $("storageWarn").hidden = storageOk;
+  $("storageWarn").textContent = "このブラウザーでは設定を保存できません。変更はこのページを開いている間だけ保持されます。";
+  $("storageNote").textContent = storageOk ? "ルール構成とゲートウェイ URL はこのブラウザーにのみ保存されます (他の人や他の端末とは共有されません。ブラウザーのデータを消去すると削除されます)。" : "";
+}
+function renderAll() { renderDiagram(); renderRules(); renderResponse(); }
+function reevaluate() { if (state.sent) state.ev = evaluate(state.config, state.sent); renderAll(); }
+
+// ---------- config editing ----------
+$("defaultPool").addEventListener("change", () => { state.config.defaultPool = $("defaultPool").value; save(); reevaluate(); announce(`既定プールを ${state.config.defaultPool} に変更しました`); });
+$("wafOn").addEventListener("change", () => { state.config.waf.enabled = $("wafOn").checked; save(); reevaluate(); announce(state.config.waf.enabled ? "WAF を有効にしました" : "WAF を無効にしました"); });
+$("wafIps").addEventListener("change", () => {
+  const list = $("wafIps").value.split(",").map((v) => v.trim()).filter(Boolean);
+  const bad = list.filter((v) => !validCidr(v));
+  $("wafErr").hidden = bad.length === 0;
+  $("wafErr").textContent = bad.length ? `CIDR 形式で入力してください: ${bad.join(", ")}` : "";
+  $("wafIps").setAttribute("aria-invalid", bad.length ? "true" : "false");
+  if (bad.length) return;
+  state.config.waf.blocked = list; save(); reevaluate(); announce("WAF のブロック対象 IP を更新しました");
+});
+$("resetBtn").addEventListener("click", () => {
+  state.config = sampleConfig(); save(); reevaluate(); $("rulesH").focus(); announce("サンプル構成に戻しました");
+});
+const dlg = $("jsonDlg");
+$("editJson").addEventListener("click", () => {
+  $("jsonText").value = JSON.stringify(state.config, null, 2);
+  $("jsonErr").hidden = true; $("jsonErr").replaceChildren();
+  if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
+  $("jsonText").focus();
+});
+$("jsonCancel").addEventListener("click", () => dlg.close());
+$("jsonSave").addEventListener("click", () => {
+  let cfg, errs;
+  try { cfg = JSON.parse($("jsonText").value); errs = validateConfig(cfg); } catch (e) { errs = ["JSON の構文エラーです"]; }
+  if (errs.length) {
+    $("jsonErr").replaceChildren(...errs.slice(0, 12).map((t) => el("li", { text: t })));
+    $("jsonErr").hidden = false; $("jsonText").focus(); return;
+  }
+  state.config = cfg; save(); dlg.close(); reevaluate(); $("rulesH").focus();
+  announce(`ルール構成を保存しました。ルール ${cfg.rules.length} 件`);
+});
+$("copyCurl").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("curl").textContent); announce("curl コマンドをコピーしました"); }
+  catch (e) {
+    const range = document.createRange(); range.selectNodeContents($("curl"));
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    announce("自動コピーできないため、コマンドを選択しました。Ctrl+C でコピーしてください");
+  }
+});
+
+// ---------- start ----------
+renderMode(); renderRequest(); showStorage();
+if (!isLive()) { send(); } else { renderAll(); renderHistory(); }
+})();
+</script>
+</body>
+</html>
