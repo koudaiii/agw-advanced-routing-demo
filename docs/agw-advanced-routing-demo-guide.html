@@ -175,7 +175,7 @@ function cors(res) {
 curl -i -H &quot;X-Tenant-Id: customer-1024&quot; http://localhost:8082/app/dashboard</code></pre>
 
 <h3>3.5 VM への配置 (cloud-init + systemd)</h3>
-<p><code>deploy/make-cloud-init.sh</code> が <code>cloud-init.yaml</code> を生成します。中身は次の 3 点です。</p><ol>
+<p><code>deploy/make-cloud-init.sh</code> が、VM ごとに 2 つの初期化ファイルを生成します (<code>deploy.sh</code> が実行します)。引数で入力 (プール定義) と出力ファイルを指定します。</p><ul><li><code>cloud-init.yaml</code>: VM 1 用。<code>backend/pools.conf</code> の 5 プール (ポート 8080–8083、8085)</li><li><code>cloud-init-canary.yaml</code>: VM 2 用 (カナリア)。<code>backend/pools-canary.conf</code> の <code>pool-canary</code> (ポート 8080)</li></ul><p>どちらも中身は次の 3 点です。</p><ol>
 <li>Node.js をインストールし、<code>server.js</code> を <code>/opt/agw-demo/</code> に配置 (base64 埋め込み)</li>
 <li>テンプレート ユニット <code>agw-pool@.service</code> を作成 (<code>DynamicUser=yes</code> で専用ユーザーなしに実行)</li>
 <li>プールごとに <code>/etc/agw-demo/&lt;pool&gt;.env</code> を作り、<code>systemctl enable --now agw-pool@&lt;pool&gt;</code></li></ol>
