@@ -319,7 +319,7 @@ if (req.method === &quot;OPTIONS&quot;) { res.writeHead(204); return res.end(); 
 <section id="trouble"><h2>7. トラブルシューティング</h2>
 <p>確認は <code>deploy/test.sh</code> と <code>deploy/canary-check.sh</code> で行います。原因の切り分けには、デプロイの出力 (<code>deploy.sh</code>) を使います。</p>
 <table><thead><tr><th scope="col">症状</th><th scope="col">確認すること</th></tr></thead><tbody>
-<tr><td><code>test.sh</code> が 502 を返す</td><td>バックエンドの正常性が未確認。再デプロイ直後は、cloud-init (パッケージ取得と起動) が終わるまで数分かかる。少し待ってから <code>./test.sh</code> を再実行する。改善しなければ VM で <code>systemctl status agw-pool@pool-web</code> を確認する</td></tr>
+<tr><td><code>test.sh</code> が 502 を返す</td><td>バックエンドの正常性が未確認。再デプロイ直後は、cloud-init (パッケージ取得と起動) が終わるまで数分かかる。少し待ってから <code>./test.sh</code> を再実行する。改善しない場合は <code>deploy.sh</code> を再実行する (バックエンド VM の初期化データが変わっていなければ、再作成は不要)</td></tr>
 <tr><td><code>deploy.sh</code> がプリフライトでエラーになる</td><td>出力の <code>InnerErrors</code> の <code>message</code> を読む。例: <code>ApplicationGatewayAdvancedRoutingRuleMustReference</code> は、高度なルールに <code>backendAddressPool</code> が必要という意味</td></tr>
 <tr><td><code>deploy.sh</code> が <code>SubscriptionNotRegisteredForFeature</code> で失敗する</td><td><code>WEIGHTED_CANARY=true</code> を指定している場合、サブスクリプションで <code>Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy</code> の登録が必要。登録が終わるまでは <code>WEIGHTED_CANARY=false</code> (既定) で実行する</td></tr>
 <tr><td><code>deploy.sh</code> が <code>PropertyChangeNotAllowed</code> (<code>osProfile.customData</code>) で失敗する</td><td>既存の VM の初期化データ (cloud-init) が変わったため。VM を作り直す (VM 1 または VM 2 を削除してから <code>deploy.sh</code> を再実行する)</td></tr>
