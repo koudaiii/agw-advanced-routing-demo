@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
-# Generates cloud-init.yaml that installs Node.js and runs one systemd service per pool.
+# Generates a cloud-init file that installs Node.js and runs one systemd service per pool line.
+# Usage: make-cloud-init.sh [pools.conf] [output.yaml]
+#   default: backend/pools.conf -> deploy/cloud-init.yaml (backend VM)
+#   canary VM: backend/pools-canary.conf -> deploy/cloud-init-canary.yaml
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SERVER_B64="$(base64 -w0 "$HERE/../backend/server.js")"
+CONF="${1:-$HERE/../backend/pools.conf}"
+OUT="${2:-$HERE/cloud-init.yaml}"
+SERVER_B64="$(base64 < "$HERE/../backend/server.js" | tr -d '\n')"
 {
   echo "#cloud-config"
   echo "package_update: true"
@@ -23,7 +28,7 @@ SERVER_B64="$(base64 -w0 "$HERE/../backend/server.js")"
   echo "      DynamicUser=yes"
   echo "      [Install]"
   echo "      WantedBy=multi-user.target"
-  grep -v '^#' "$HERE/../backend/pools.conf" | while IFS='|' read -r name port label color; do
+  grep -v '^#' "$CONF" | while IFS='|' read -r name port label color; do
     echo "  - path: /etc/agw-demo/$name.env"
     echo "    content: |"
     echo "      POOL_NAME=$name"
@@ -33,8 +38,8 @@ SERVER_B64="$(base64 -w0 "$HERE/../backend/server.js")"
   done
   echo "runcmd:"
   echo "  - systemctl daemon-reload"
-  grep -v '^#' "$HERE/../backend/pools.conf" | while IFS='|' read -r name _; do
+  grep -v '^#' "$CONF" | while IFS='|' read -r name _; do
     echo "  - systemctl enable --now agw-pool@$name"
   done
-} > "$HERE/cloud-init.yaml"
-echo "wrote $HERE/cloud-init.yaml"
+} > "$OUT"
+echo "wrote $OUT"

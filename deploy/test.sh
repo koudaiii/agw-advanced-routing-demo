@@ -24,9 +24,10 @@ run "テナント"         -A "$DESKTOP_UA" -H "X-Tenant-Id: customer-1024" "$B/
 run "パートナー"       -X POST -H "X-Partner-Id: fabrikam" "$B/api/orders"
 run "API v2"           -H "X-Api-Version: 2.0" "$B/api/orders/1001"
 run "エンコード済み"   -H "X-Api-Version: 2" "$B/api%2Forders"
-run "社内 IP(GET)"     -A "$DESKTOP_UA" "$B/app/home"
+run "カナリア (:8080 90:10)" -A "$DESKTOP_UA" "http://$FRONTEND:8080/app/home"
 run "キャンペーン"     -A "$DESKTOP_UA" "$B/landing?campaign=summer&utm=mail"
 run "モバイル"         -A "$IPHONE_UA" "$B/app/home"
+run "WAF ブロック (UA)" -A "agw-block-demo" "$B/app/home"
 echo
-echo "注: '社内 IP' は DEMO_CLIENT_CIDR から送った場合のみ pool-canary になります (そのため '通常アクセス' も canary になります)。"
+echo "注: カナリアは ポート 8080 全体を pool-web 90% / pool-canary 10% で振り分けます。割合は FRONTEND=$FRONTEND:8080 ./canary-check.sh /app/home 100 で確認。"
 echo "    WAF ブロックを見せるには: WAF のカスタム ルールに自分の IP を追加し、もう一度実行します。"

@@ -63,7 +63,7 @@ svg .l{text-anchor:start}
 <text x="110" y="48" class="h">シミュレーター</text><text x="110" y="68" class="s">(フロントエンド / App Builder)</text>
 <text x="110" y="92" class="s">ルール判定・経路図</text><text x="110" y="110" class="s">応答の模擬表示</text><text x="110" y="128" class="s">curl コマンド生成</text>
 <rect x="10" y="190" width="200" height="90" rx="8" class="box"/>
-<text x="110" y="220" class="h">デモ端末</text><text x="110" y="242" class="s">curl / ブラウザー</text><text x="110" y="260" class="s">(DEMO_CLIENT_CIDR)</text>
+<text x="110" y="220" class="h">デモ端末</text><text x="110" y="242" class="s">curl / ブラウザー</text><text x="110" y="260" class="s">(送信元 IP)</text>
 <path d="M110 140 V185" class="ln dash" marker-end="url(#ar)"/><text x="118" y="168" class="s l">curl をコピー</text>
 <rect x="270" y="150" width="140" height="110" rx="8" class="box"/>
 <text x="340" y="180" class="h">Public IP</text><text x="340" y="200" class="s">Basic リスナー :80</text><text x="340" y="220" class="s">rule1 (AdvancedRouting)</text>
@@ -77,7 +77,7 @@ svg .l{text-anchor:start}
 <rect x="750" y="20" width="140" height="300" rx="8" class="box"/>
 <text x="820" y="45" class="h">バックエンド VM</text>
 <text x="820" y="80" class="m">pool-web :8080</text><text x="820" y="110" class="m">pool-partner :8081</text><text x="820" y="140" class="m">pool-tenant :8082</text>
-<text x="820" y="170" class="m">pool-api-v2 :8083</text><text x="820" y="200" class="m">pool-canary :8084</text><text x="820" y="230" class="m">pool-mobile :8085</text>
+<text x="820" y="170" class="m">pool-api-v2 :8083</text><text x="820" y="200" class="m">pool-canary :8080 (別 VM)</text><text x="820" y="230" class="m">pool-mobile :8085</text>
 <text x="820" y="270" class="s">server.js × 6</text><text x="820" y="290" class="s">systemd</text>
 <path d="M720 205 H745" class="ln" marker-end="url(#ar)"/>
 <path d="M655 260 V305 H560" class="ln dash" marker-end="url(#ar)"/><text x="600" y="298" class="s">302 (campaign)</text>
@@ -99,7 +99,7 @@ svg .l{text-anchor:start}
 <li>Azure サブスクリプションと、リソース グループを作成できる権限</li>
 <li>Azure CLI (<code>az upgrade</code> で最新化)。<code>az network application-gateway advanced-routing-map</code> と <code>advanced-routing-set</code> コマンドが使えること</li>
 <li>bash 環境 (Azure Cloud Shell で可)、SSH 鍵 (<code>--generate-ssh-keys</code> で自動作成)</li>
-<li>デモ端末のパブリック IP (カナリア ルールの ClientIP 条件に使用)</li>
+
 <li>WAF_v2 の Application Gateway は稼働時間で課金されます。デモ後は<a href="#notes">後片付け</a>を実施してください</li></ul>
 </section>
 
@@ -171,7 +171,7 @@ DynamicUser=yes</code></pre>
 <p><code>deploy/deploy.sh</code> を実行すると以下を順に作成します。手順を理解できるよう、ステップごとに主要コマンドを示します。</p>
 <pre><code>az login
 cd agw-advanced-routing-demo/deploy
-DEMO_CLIENT_CIDR=&quot;$(curl -s https://api.ipify.org)/32&quot; ./deploy.sh</code></pre>
+./deploy.sh</code></pre>
 
 <h3>4.1 ネットワークとバックエンド VM</h3>
 <pre><code>az network vnet create -g $RG -n $VNET --address-prefixes 10.20.0.0/16 \
@@ -220,7 +220,7 @@ az network application-gateway http-settings create -g $RG --gateway-name $GW -n
 <tr><td>cs-partner</td><td>Header X-Partner-Id = contoso | fabrikam</td></tr>
 <tr><td>cs-tenant</td><td>Header X-Tenant-Id ~ ^customer-[0-9]+$ AND Path ~ ^/app(/.*)?$</td></tr>
 <tr><td>cs-apiv2</td><td>Header X-Api-Version = 2 | 2.0 AND Path ~ ^/api/orders(/.*)?$</td></tr>
-<tr><td>cs-canary</td><td>ClientIP = DEMO_CLIENT_CIDR AND Method = GET | HEAD</td></tr>
+<tr><td>(ポート 8080)</td><td>リスナー listener-canary の Basic ルール。loadDistributionPolicy で pool-web 90 / pool-canary 10 (ポート全体)</td></tr>
 <tr><td>cs-campaign</td><td>QueryString campaign = spring | summer</td></tr>
 <tr><td>cs-mobile</td><td>Header User-Agent ~ (iPhone|Android)</td></tr>
 </tbody></table>
@@ -234,7 +234,7 @@ az network application-gateway http-settings create -g $RG --gateway-name $GW -n
 az network application-gateway advanced-routing-map rule create -g $RG --gateway-name $GW \
   --map-name advancedRoutingMap1 -n tenant --priority 20 --condition-set cs-tenant \
   --address-pool pool-tenant --http-settings hs-pool-tenant
-# api-v2 (30), canary (40), mobile (60) も同様。campaign (50) は --redirect-config redirect-campaign</code></pre>
+# api-v2 (30), mobile (60) も同様。campaign (40) は --redirect-config redirect-campaign。カナリアは 8080 の Basic ルール</code></pre>
 
 <h3>4.8 リスナーのルールを Advanced に切り替える</h3>
 <pre><code>az network application-gateway rule update -g $RG --gateway-name $GW -n rule1 \
@@ -243,7 +243,7 @@ az network application-gateway advanced-routing-map rule create -g $RG --gateway
 
 <h3>4.9 動作確認</h3>
 <pre><code>FRONTEND=&lt;フロントエンド IP&gt; ./test.sh</code></pre>
-<pre><code>通常アクセス       HTTP 200  pool-canary   ← DEMO_CLIENT_CIDR から送った場合
+<pre><code>通常アクセス       HTTP 200  pool-web
 テナント           HTTP 200  pool-tenant
 パートナー         HTTP 200  pool-partner
 API v2             HTTP 200  pool-api-v2
@@ -266,7 +266,7 @@ API v2             HTTP 200  pool-api-v2
 <tr><td>HTTPS (https のページから使う場合)</td><td>https で配信されたページから http のゲートウェイへの fetch は混在コンテンツとしてブロックされる</td><td>単体 HTML をローカル (file://) で開く。https のページから使う場合は HTTPS リスナーを追加</td></tr>
 <tr><td>CORS</td><td>別オリジンへの fetch でカスタム ヘッダー (X-Tenant-Id など) を送るとプリフライト (OPTIONS) が発生</td><td>全プールの server.js で OPTIONS に応答し、<code>Access-Control-Allow-Origin</code> / <code>-Allow-Headers</code> / <code>-Expose-Headers: x-backend-pool</code> を返す。OPTIONS 自体も App Gateway のルーティングを通るため、全プールで同じ処理が必要</td></tr>
 <tr><td>User-Agent を変えられない</td><td>ブラウザーの fetch では User-Agent を任意に設定できない</td><td>モバイル ルールは実機のスマートフォンで開くか、デモ用にカスタム ヘッダー (例 X-Device) の条件に置き換える</td></tr>
-<tr><td>Client IP は実際の IP</td><td>ブラウザーから送る要求の送信元は端末の実 IP</td><td>シミュレーターの Client IP 入力は実機モードでは無効化し、カナリア / WAF は DEMO_CLIENT_CIDR で見せる</td></tr>
+<tr><td>Client IP は実際の IP</td><td>ブラウザーから送る要求の送信元は端末の実 IP</td><td>実機モードでは送信元 IP はゲートウェイが見ている実際の値を使う。WAF は User-Agent (agw-block-demo) を遮断するカスタム ルールで見せる</td></tr>
 <tr><td>リダイレクトを読めない</td><td>fetch はリダイレクトを自動追従、<code>redirect: "manual"</code> では Location を読めない</td><td>「リダイレクトされた」ことだけを表示する</td></tr>
 <tr><td>WAF 403 の中身を読めない</td><td>WAF の応答には CORS ヘッダーが付かず、fetch がネットワーク エラーになる</td><td>エラー時は「ブロックされた可能性」として表示し、curl で 403 を確認</td></tr>
 <tr><td>アプリからの外部通信</td><td>公開アプリの実行環境が外部 URL への通信を許可するか未確認</td><td>実装前に疎通テストが必要</td></tr>
@@ -288,13 +288,13 @@ if (req.method === &quot;OPTIONS&quot;) { res.writeHead(204); return res.end(); 
 <section id="demo"><h2>6. デモの進め方 (例: 15 分)</h2>
 <table><thead><tr><th scope="col">#</th><th scope="col">見せること</th><th scope="col">シミュレーター</th><th scope="col">実機</th></tr></thead><tbody>
 <tr><td>1</td><td>構成と評価の流れ (リスナー → WAF → マップ → プール)</td><td>経路図</td><td>ポータルの [ルール] 画面</td></tr>
-<tr><td>2</td><td>マルチテナント: Header の正規表現 AND Path</td><td>「テナント」→ X-Tenant-Id を消して再送</td><td>test.sh / curl で pool-tenant ⇔ 既定 (または canary)</td></tr>
+<tr><td>2</td><td>マルチテナント: Header の正規表現 AND Path</td><td>「テナント」→ X-Tenant-Id を消して再送</td><td>test.sh / curl で pool-tenant ⇔ 既定</td></tr>
 <tr><td>3</td><td>優先度: 先に一致したルールが勝つ</td><td>パートナーとテナントの両ヘッダーを付ける</td><td>同じヘッダーで curl → pool-partner</td></tr>
 <tr><td>4</td><td>API バージョニングと URL デコード</td><td>「エンコード済みパス」</td><td><code>/api%2Forders</code> でも pool-api-v2</td></tr>
 <tr><td>5</td><td>リダイレクト</td><td>「キャンペーン」→ 302</td><td>curl -i で Location を確認</td></tr>
-<tr><td>6</td><td>WAF はルーティングより前</td><td>「WAF ブロック」→ 全ルール未評価</td><td>カスタム ルールに自分の IP を追加 → 403</td></tr>
+<tr><td>6</td><td>WAF はルーティングより前</td><td>「WAF ブロック」→ 全ルール未評価</td><td><code>curl -A agw-block-demo</code> → 403 (User-Agent の WAF ルール)</td></tr>
 </tbody></table>
-<p class="note">デモ端末の IP が DEMO_CLIENT_CIDR の場合、GET の通常アクセスはカナリア ルール (優先度 40) に一致して pool-canary になります。既定プールを見せたいときは POST で送るか、別ネットワークから送ります。</p>
+<p class="note">カナリアはポート 8080 の 90:10 重み付けです (ポート 80 の高度なルールには影響しません)。割合は <code>FRONTEND=&lt;IP&gt;:8080 ./canary-check.sh /app/home 100</code> で 100 回連続して確認します。</p>
 </section>
 
 <section id="trouble"><h2>7. トラブルシューティング</h2>
@@ -302,7 +302,7 @@ if (req.method === &quot;OPTIONS&quot;) { res.writeHead(204); return res.end(); 
 <tr><td>502 Bad Gateway</td><td>バックエンドの正常性 (<code>az network application-gateway show-backend-health</code>)。cloud-init 完了前は異常になる。VM で <code>systemctl status agw-pool@pool-web</code></td></tr>
 <tr><td>条件セット作成でエラー</td><td>プレビュー中は Header 条件のみサポートとの記載あり。Path / QueryString / ClientIP / Method の条件を外して Header だけにする</td></tr>
 <tr><td>rule1 の切り替えでエラー</td><td>4.8 のポータル手順で切り替える。リスナーが Basic であることを確認</td></tr>
-<tr><td>カナリアに振り分けられない</td><td>実際の送信元 IP (プロキシ / NAT 後) と DEMO_CLIENT_CIDR が一致しているか。Method が GET / HEAD か</td></tr>
+<tr><td>8080 の割合が 90:10 にならない</td><td>件数が少ないと期待値から外れる (100 件以上で確認)。サブスクリプションで Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy が登録済みか</td></tr>
 <tr><td>正規表現が一致しない</td><td>RE2 非対応の構文 (先読み・後方参照など) を使っていないか。シミュレーターと実機で結果が違う場合は実機の結果が正</td></tr>
 <tr><td>シミュレーターと実機で結果が違う</td><td>両者のルール定義 (JSON 表示と advanced-routing-map show) を比較</td></tr>
 </tbody></table>

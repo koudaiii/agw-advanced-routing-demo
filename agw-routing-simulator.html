@@ -85,6 +85,11 @@ dialog::backdrop{background:rgb(0 0 0 / .45)}
 .skip{position:absolute;inset-inline-start:-9999px}
 .skip:focus{inset-inline-start:8px;inset-block-start:8px;background:var(--card);color:var(--fg);padding:6px;z-index:10}
 .err{color:var(--err-fg);background:var(--err-bg);border-radius:4px;padding-inline:6px;font-size:12px}
+.bar{background:var(--soft);border-radius:4px;block-size:10px;inline-size:100%;min-inline-size:60px;overflow:hidden}
+.bar span{display:block;block-size:100%;background:var(--primary)}
+.dist-row{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,2fr) minmax(0,2.4fr);gap:8px;align-items:center;font-size:12px}
+.dist-srv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center}
+@media (max-width:900px){.dist-row{grid-template-columns:1fr}}
 @media (forced-colors: active){.badge,.rule.hit{border:1px solid CanvasText}}
 @media print{header.top{background:none;color:inherit}.layout{display:block}aside{display:none}}
 </style>
@@ -148,12 +153,13 @@ dialog::backdrop{background:rgb(0 0 0 / .45)}
     <section class="stack" aria-labelledby="rulesH">
       <div class="row">
         <h2 id="rulesH" tabindex="-1" class="grow" style="margin:0">Advanced routing rules <span id="ruleCount" style="font-weight:400"></span></h2>
+        <span class="note">シミュレーションのみ (ここを編集しても実機のルールは変わりません。実機は deploy/main.bicep)</span>
         <button type="button" id="editJson" class="small">ルールを編集 (JSON)</button>
         <button type="button" id="resetBtn" class="small">サンプルに戻す</button>
       </div>
       <ol id="rules" class="rules"></ol>
       <div id="defaultRow" class="rule row">
-        <span style="font-weight:600">既定 (どのルールにも一致しない場合)</span><span id="defaultBadge"></span>
+        <span style="font-weight:600">既定 (どのルールにも一致しない場合)</span><span id="defaultBadge"></span><span class="note">シミュレーションのみ (実機の既定プールは変わりません)</span>
         <span class="grow"></span>
         <label for="defaultPool" style="margin:0;font-weight:400;font-size:12px">既定プール</label>
         <select id="defaultPool" style="inline-size:180px"></select>
@@ -161,9 +167,26 @@ dialog::backdrop{background:rgb(0 0 0 / .45)}
     </section>
 
     <section class="card stack" aria-labelledby="wafH">
-      <div class="row"><h2 id="wafH" class="grow" style="margin:0">WAF (ルーティング判定の前に評価)</h2><span id="wafBadge"></span>
+      <div class="row"><h2 id="wafH" class="grow" style="margin:0">WAF (ルーティング判定の前に評価)</h2><span id="wafBadge"></span><span class="note">シミュレーションのみ (実機の WAF ポリシーは変わりません)</span>
         <label style="margin:0;font-weight:400"><input type="checkbox" id="wafOn" style="inline-size:auto"> 有効</label></div>
       <div><label for="wafIps">ブロックするクライアント IP (CIDR、カンマ区切り)</label><input id="wafIps" class="mono" aria-describedby="wafErr"><p id="wafErr" class="err" hidden></p></div>
+      <div><label for="wafUa">ブロックする User-Agent (部分一致、カンマ区切り、大文字小文字を区別しない)</label><input id="wafUa" class="mono" placeholder="agw-block-demo"></div>
+      <p class="note">ここでの設定は予測にだけ使います。実機のカスタムルール (BlockDemoIp など) や、DRS などのマネージドルールは再現していないため、実機で起きる 403 (例: POST のマネージドルールによる遮断) は予測されません。</p>
+    </section>
+    <section class="card stack" aria-labelledby="distH">
+      <div class="row"><h2 id="distH" class="grow" style="margin:0">負荷分散: プール選択 → サーバー選択</h2><span class="note">シミュレーションのみ (実機には反映されません)</span></div>
+      <p class="note">要求は 2 段階で振り分けられます。① プール選択 (重み付け配分 または 優先度 + 最小正常割合) でプールを選び、② そのプール内でサーバー選択 (Round Robin / Weighted Round Robin / Least Connections) がサーバーを選びます。</p>
+      <div class="presets" id="distPresets" role="group" aria-label="負荷分散のシナリオ"></div>
+      <div class="row">
+        <div style="inline-size:200px"><label for="distMode">① プール選択</label><select id="distMode"><option value="weighted">重み付け配分</option><option value="priority">優先度ベース</option></select></div>
+        <div style="inline-size:150px" id="distMinWrap"><label for="distMin">最小正常割合 (%)</label><input id="distMin" type="number" min="0" max="100" class="mono"></div>
+        <div style="inline-size:170px"><label for="distConc">同時処理数 (LC 用)</label><input id="distConc" type="number" min="1" max="50" class="mono"></div>
+        <div style="inline-size:150px"><label for="distN">シミュレーション件数</label><select id="distN"><option>1</option><option selected>100</option><option>1000</option></select></div>
+      </div>
+      <div id="distPools" class="stack"></div>
+      <button type="button" id="distAddPool" class="small">＋ プールを追加 (最大 5)</button>
+      <ul id="distErr" class="err" hidden></ul>
+      <div id="distResult" class="stack"></div>
     </section>
     <p class="note" id="storageNote"></p>
   </main>
@@ -191,7 +214,7 @@ const POOLS = [
   { id: "pool-partner", label: "パートナー専用", port: 8081, color: "#7c2d12" },
   { id: "pool-tenant", label: "テナント専用", port: 8082, color: "#0f766e" },
   { id: "pool-api-v2", label: "Orders API v2", port: 8083, color: "#1d4ed8" },
-  { id: "pool-canary", label: "カナリア", port: 8084, color: "#a16207" },
+  { id: "pool-canary", label: "カナリア (新バージョン)", port: 8080, color: "#a16207" },
   { id: "pool-mobile", label: "モバイル", port: 8085, color: "#7e22ce" },
 ];
 const TYPES = ["Header", "QueryString", "ClientIP", "Method", "Path"];
@@ -204,13 +227,12 @@ const DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Edge/131.0";
 function sampleConfig() {
   return {
     defaultPool: "pool-web",
-    waf: { enabled: true, blocked: ["198.51.100.0/24"] },
+    waf: { enabled: true, blocked: ["198.51.100.0/24"], blockedUA: ["agw-block-demo"] },
     rules: [
       { name: "パートナー連携", priority: 10, conditions: [{ type: "Header", name: "X-Partner-Id", values: ["contoso", "fabrikam"] }], target: { pool: "pool-partner" } },
       { name: "マルチテナント", priority: 20, conditions: [{ type: "Header", name: "X-Tenant-Id", pattern: "^customer-[0-9]+$" }, { type: "Path", pattern: "^/app(/.*)?$" }], target: { pool: "pool-tenant" } },
       { name: "API バージョニング", priority: 30, conditions: [{ type: "Header", name: "X-Api-Version", values: ["2", "2.0"] }, { type: "Path", pattern: "^/api/orders(/.*)?$" }], target: { pool: "pool-api-v2" } },
-      { name: "カナリア (社内ネットワーク)", priority: 40, conditions: [{ type: "ClientIP", values: ["203.0.113.0/24"] }, { type: "Method", values: ["GET", "HEAD"] }], target: { pool: "pool-canary" } },
-      { name: "キャンペーン LP", priority: 50, conditions: [{ type: "QueryString", name: "campaign", values: ["spring", "summer"] }], target: { redirect: "https://www.contoso.com/campaign" } },
+      { name: "キャンペーン LP", priority: 40, conditions: [{ type: "QueryString", name: "campaign", values: ["spring", "summer"] }], target: { redirect: "https://www.contoso.com/campaign" } },
       { name: "モバイル振り分け", priority: 60, conditions: [{ type: "Header", name: "User-Agent", pattern: "(iPhone|Android)" }], target: { pool: "pool-mobile" } },
     ],
   };
@@ -222,10 +244,10 @@ const PRESETS = [
   ["パートナー", () => req("POST", "/api/orders", "", "192.0.2.88", [["X-Partner-Id", "fabrikam"]])],
   ["API v2", () => req("GET", "/api/orders/1001", "", "192.0.2.41", [["X-Api-Version", "2.0"]])],
   ["エンコード済みパス", () => req("GET", "/api%2Forders", "", "192.0.2.41", [["X-Api-Version", "2"]])],
-  ["社内 IP", () => req("GET", "/app/home", "", "203.0.113.25", [["User-Agent", DESKTOP_UA]])],
   ["キャンペーン", () => req("GET", "/landing", "campaign=summer&utm=mail", "192.0.2.41", [["User-Agent", DESKTOP_UA]])],
   ["モバイル", () => req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X)"]])],
-  ["WAF ブロック", () => req("GET", "/app/home", "", "198.51.100.77", [["User-Agent", DESKTOP_UA]])],
+  ["カナリア (ポート 8080)", () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]]), port: 8080 })],
+  ["WAF ブロック", () => req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", "agw-block-demo"]])],
 ];
 
 // ---------- storage (optional: falls back to memory when the browser refuses) ----------
@@ -241,7 +263,7 @@ function load() {
 }
 function save() {
   if (!storageOk) return;
-  try { window.localStorage.setItem(KEY, JSON.stringify({ config: state.config, backendUrl: state.backendUrl })); }
+  try { window.localStorage.setItem(KEY, JSON.stringify({ config: state.config, backendUrl: state.backendUrl, dist: state.dist })); }
   catch (e) { storageOk = false; showStorage(); }
 }
 
@@ -261,7 +283,8 @@ function validateConfig(c) {
   const e = [];
   if (!c || typeof c !== "object") return ["JSON のオブジェクトではありません"];
   if (!POOLS.some((p) => p.id === c.defaultPool)) e.push("defaultPool が不明です");
-  if (!c.waf || typeof c.waf.enabled !== "boolean" || !Array.isArray(c.waf.blocked)) e.push("waf は {enabled, blocked[]} です");
+  if (!c.waf || typeof c.waf.enabled !== "boolean" || !Array.isArray(c.waf.blocked)) e.push("waf は {enabled, blocked[], blockedUA[]} です");
+  if (c.waf && c.waf.blockedUA !== undefined && !(Array.isArray(c.waf.blockedUA) && c.waf.blockedUA.every((x) => typeof x === "string"))) e.push("waf.blockedUA は文字列の配列です");
   if (!Array.isArray(c.rules)) return e.concat("rules は配列です");
   if (c.rules.length > LIMITS.rules) e.push(`ルールは ${LIMITS.rules} 件までです`);
   const prios = new Set();
@@ -331,7 +354,11 @@ function evaluate(cfg, r) {
   if (cfg.waf.enabled) {
     const hit = cfg.waf.blocked.find((x) => inCidr(r.clientIp, x));
     if (hit) return { path, results: order.map(({ i }) => ({ i, status: "skip", conds: [] })), d: { kind: "waf", cidr: hit } };
+    const uaHeader = (r.headers.find((h) => h.name.trim().toLowerCase() === "user-agent") || { value: "" }).value.toLowerCase();
+    const hitUA = (cfg.waf.blockedUA || []).find((x) => x && uaHeader.includes(x.toLowerCase()));
+    if (hitUA) return { path, results: order.map(({ i }) => ({ i, status: "skip", conds: [] })), d: { kind: "waf", cidr: `User-Agent: ${hitUA}` } };
   }
+  if (r.port === 8080) return { path, results: order.map(({ i }) => ({ i, status: "skip", conds: [] })), d: { kind: "weighted", port: 8080 } };
   let d = null;
   const results = order.map(({ r: rule, i }) => {
     if (d) return { i, status: "skip", conds: [] };
@@ -345,6 +372,7 @@ function evaluate(cfg, r) {
 const pool = (id) => POOLS.find((p) => p.id === id) || { id, label: id, port: 0, color: "#334155" };
 function describe(d, cfg) {
   if (d.kind === "waf") return `WAF がブロック (${d.cidr}) — ルーティング評価なし`;
+  if (d.kind === "weighted") return `ポート ${d.port} は重み付け (既定 pool-web 90% / pool-canary 10%)。1 件の経路は確率で決まります`;
   if (d.kind === "pool") return `「${cfg.rules[d.i].name}」に一致 → ${pool(d.pool).label} (${d.pool})`;
   if (d.kind === "redirect") return `「${cfg.rules[d.i].name}」に一致 → ${d.url} へリダイレクト`;
   return `一致ルールなし → 既定プール ${pool(d.pool).label} (${d.pool})`;
@@ -373,7 +401,7 @@ const state = {
   config: saved ? saved.config : sampleConfig(),
   backendUrl: saved && typeof saved.backendUrl === "string" ? saved.backendUrl : "",
   request: PRESETS[1][1](),
-  sent: null, ev: null, live: null, history: [],
+  sent: null, ev: null, live: null, history: [], observedIp: null,
 };
 
 // ---------- request form ----------
@@ -399,7 +427,12 @@ function renderRequest() {
     box.append(row);
   });
   $("clientIp").disabled = isLive();
-  $("ipNote").textContent = isLive() ? "実機モードでは端末の実際の IP で送信されます (予測にはこの値を使用)" : "";
+  $("clientIp").value = isLive() && state.observedIp ? state.observedIp : r.clientIp;
+  $("ipNote").textContent = isLive()
+    ? (state.observedIp
+        ? `実機モード: ゲートウェイが見ている送信元 IP ${state.observedIp} を予測にも使います`
+        : "実機モード: 送信元 IP を取得中です (取得できない場合はプリセットの IP で予測します)")
+    : "";
 }
 ["method", "path", "query", "clientIp"].forEach((id) => $(id).addEventListener("input", () => { state.request[id] = $(id).value; }));
 $("method").addEventListener("change", () => { state.request.method = $("method").value; });
@@ -419,11 +452,16 @@ $("backendUrl").addEventListener("change", () => {
   const v = $("backendUrl").value.trim();
   if (v && !/^https?:\/\/[^\s/]+/.test(v)) { announce("URL は http:// または https:// で始めてください"); $("backendUrl").setAttribute("aria-invalid", "true"); return; }
   $("backendUrl").removeAttribute("aria-invalid");
-  state.backendUrl = v; state.live = null; save(); renderMode(); renderRequest(); renderResponse();
+  state.backendUrl = v; state.live = null; state.observedIp = null; save(); renderMode(); renderRequest(); renderResponse(); detectObservedIp();
   announce(v ? `実機モード: ${v}` : "オフライン モード");
 });
+function baseFor(r) {
+  const u = new URL(normBase(state.backendUrl));
+  if (r.port) u.port = String(r.port);
+  return u.origin;
+}
 async function callGateway(r) {
-  const base = normBase(state.backendUrl);
+  const base = baseFor(r);
   const q = r.query.replace(/^\?/, "");
   const url = base + r.path + (q ? `?${q}` : "");
   if (r.method === "CONNECT") return { kind: "error", message: "CONNECT はブラウザーから送信できません" };
@@ -450,19 +488,43 @@ async function callGateway(r) {
   } finally { clearTimeout(timer); }
 }
 
+// The gateway's view of the client: the backend echoes X-Forwarded-For ("ip:port") in its JSON.
+// Live predictions must use this address, because the rules match on the real source IP.
+async function detectObservedIp() {
+  if (!isLive()) return;
+  const base = normBase(state.backendUrl);
+  let ip = null;
+  try {
+    const res = await fetch(`${base}/app/home?format=json`, { headers: { Accept: "application/json" }, cache: "no-store", mode: "cors" });
+    const body = await res.json();
+    const xff = body && body.headers && body.headers["x-forwarded-for"];
+    const candidate = typeof xff === "string" ? xff.split(",")[0].trim().replace(/:\d+$/, "") : null;
+    ip = candidate && ipv4(candidate) !== null ? candidate : null;
+  } catch (e) { ip = null; }
+  state.observedIp = ip;
+  renderRequest();
+  announce(ip ? `実機から見た送信元 IP: ${ip}` : "送信元 IP を取得できませんでした");
+}
+
 // ---------- send ----------
 async function send() {
   const r = JSON.parse(JSON.stringify(state.request));
+  if (isLive() && state.observedIp) r.clientIp = state.observedIp;
   state.sent = r; state.ev = evaluate(state.config, r); state.live = isLive() ? { kind: "pending" } : null;
-  const line = `${r.method} ${r.path}${r.query ? `?${r.query}` : ""}`;
+  const line = `${r.method} ${r.port ? `:${r.port}` : ""}${r.path}${r.query ? `?${r.query}` : ""}`;
   renderAll();
   announce(`予測: ${describe(state.ev.d, state.config)}`);
   let tone = tones(state.ev.d);
   if (isLive()) {
     $("sendBtn").disabled = true;
-    const live = await callGateway(r);
+    let live = await callGateway(r);
     $("sendBtn").disabled = false;
     if (state.sent !== r) return;
+    // A gateway redirect has no CORS headers, so the browser blocks the response before it can be read.
+    // When the prediction is a redirect, report that as the likely cause instead of a generic failure.
+    if (live.kind === "error" && state.ev.d.kind === "redirect") {
+      live = { kind: "opaque", ms: live.ms, skipped: live.skipped, url: live.url, redirectHint: true };
+    }
     state.live = live; renderResponse();
     const v = verdict();
     announce(`実機: ${liveSummary(live)}${v ? `、${v.text}` : ""}`);
@@ -471,17 +533,18 @@ async function send() {
   state.history = state.history.slice(0, 8);
   renderHistory();
 }
-function tones(d) { return d.kind === "waf" ? ["b-err", "WAF"] : d.kind === "redirect" ? ["b-info", "302"] : d.kind === "default" ? ["b-warn", "既定"] : ["b-ok", "一致"]; }
+function tones(d) { return d.kind === "waf" ? ["b-err", "WAF"] : d.kind === "weighted" ? ["b-info", "90:10"] : d.kind === "redirect" ? ["b-info", "302"] : d.kind === "default" ? ["b-warn", "既定"] : ["b-ok", "一致"]; }
 function liveSummary(l) {
   if (!l) return "";
   if (l.kind === "pending") return "送信中";
   if (l.kind === "redirect") return "リダイレクト応答";
+  if (l.kind === "opaque") return l.redirectHint ? "リダイレクトと思われます (CORS により読めません)" : "応答あり (CORS のため詳細は読めません)";
   if (l.kind === "error") return l.message;
   return `HTTP ${l.status}${l.pool ? ` / ${l.pool}` : ""}`;
 }
 function verdict() {
   const l = state.live, d = state.ev && state.ev.d;
-  if (!l || !d || l.kind === "pending") return null;
+  if (!l || !d || l.kind === "pending" || l.kind === "opaque" || d.kind === "weighted") return null;
   let same;
   if (d.kind === "waf") same = l.kind === "error" || (l.kind === "response" && l.status === 403);
   else if (d.kind === "redirect") same = l.kind === "redirect" || (l.kind === "response" && l.status >= 300 && l.status < 400);
@@ -500,12 +563,16 @@ function renderDiagram() {
   svg.append(s("title", { id: "dgT" }, "要求のルーティング経路図"), s("desc", { id: "dgD" }, summary));
   const on = !!ev, blocked = d && d.kind === "waf";
   const active = d && (d.kind === "pool" || d.kind === "default") ? d.pool : null;
+  const weighted = !!(d && d.kind === "weighted");
+  const hitSet = weighted ? new Set(["pool-web", "pool-canary"]) : new Set(active ? [active] : []);
   const st = (x) => (x ? "var(--primary)" : "var(--line)");
   const stages = [
     { x: 8, l: "クライアント", sub: isLive() ? "このブラウザー" : "", on },
-    { x: 148, l: "Basic リスナー", sub: ":80 / :443", on },
+    { x: 148, l: "Basic リスナー", sub: weighted ? ":8080 (カナリア)" : ":80", on },
     { x: 288, l: "WAF", sub: blocked ? "403 で遮断" : cfg.waf.enabled ? "ポリシー有効" : "無効", on: on && !blocked, bad: blocked },
-    { x: 428, l: "Advanced Routing Map", sub: `ルール ${cfg.rules.length} 件`, on: on && !blocked },
+    weighted
+      ? { x: 428, l: "重み付けルール", sub: "web 90 : canary 10", on: on && !blocked }
+      : { x: 428, l: "Advanced Routing Map", sub: `ルール ${cfg.rules.length} 件`, on: on && !blocked },
   ];
   stages.slice(0, -1).forEach((g, i) => svg.append(s("line", { x1: g.x + 120, y1: mid, x2: stages[i + 1].x, y2: mid, stroke: st(i < 2 ? on : stages[i + 1].on), "stroke-width": on ? 3 : 1.5 })));
   stages.forEach((g) => {
@@ -515,7 +582,7 @@ function renderDiagram() {
   });
   targets.forEach((t, i) => {
     const y = top + i * rowH + rowH / 2;
-    const hit = (t.id === "__redirect" && d && d.kind === "redirect") || t.id === active;
+    const hit = (t.id === "__redirect" && d && d.kind === "redirect") || hitSet.has(t.id);
     svg.append(s("path", { d: `M548 ${mid} C 600 ${mid}, 600 ${y}, 650 ${y}`, fill: "none", stroke: st(hit), "stroke-width": hit ? 3 : 1, "stroke-dasharray": t.id === "__redirect" ? "5 4" : "none" }));
     const p = POOLS.find((x) => x.id === t.id);
     svg.append(s("rect", { x: 650, y: y - 17, width: 202, height: 34, rx: 6, fill: hit ? (p ? p.color : "var(--primary)") : "var(--card)", stroke: hit ? (p ? p.color : "var(--primary)") : "var(--line)", "stroke-width": hit ? 2 : 1 }));
@@ -546,6 +613,7 @@ function renderSim() {
   const out = $("simOut"); out.replaceChildren();
   const d = state.ev.d, r = state.sent;
   if (d.kind === "waf") { out.append(statusBlock(403, "Forbidden", "WAF がブロックしたため、バックエンドには届きません。")); return; }
+  if (d.kind === "weighted") { out.append(statusBlock("—", "", "ポート 8080 の重み付けのため、1 件では pool-web か pool-canary のどちらかに確率で決まります。100 件の割合は canary-check.sh で確認します。")); return; }
   if (d.kind === "redirect") { const q = r.query.replace(/^\?/, ""); out.append(statusBlock(302, "Found", `Location: ${q ? `${d.url}?${q}` : d.url}`)); return; }
   const p = pool(d.pool);
   const hs = r.headers.filter((h) => h.name.trim()).map((h) => [h.name.trim().toLowerCase(), h.value]);
@@ -562,6 +630,13 @@ function renderLive() {
   const meta = el("p", { class: "note", text: `${l.url}${l.ms !== undefined ? ` ・ ${l.ms} ms` : ""}` });
   const skipped = l.skipped && l.skipped.length ? el("p", { class: "alert b-warn", text: `ブラウザーの制限で送れなかったヘッダー: ${l.skipped.join(", ")}。実機の振り分けが予測と変わる場合があります。` }) : null;
   if (l.kind === "error") { out.append(statusBlock("—", "", l.message), meta, skipped); return; }
+  if (l.kind === "opaque") {
+    const text = l.redirectHint
+      ? "リダイレクトの応答と思われます。リダイレクトには CORS ヘッダーがないため、ブラウザーは応答を読めません (302 と Location は curl -i で確認できます)。"
+      : "応答は受け取りましたが、CORS の制限でステータスと本文は読めません。curl -i で確認できます。";
+    out.append(statusBlock(l.redirectHint ? "3xx" : "?", l.redirectHint ? "Redirect (推定)" : "", text), meta, skipped);
+    return;
+  }
   if (l.kind === "redirect") { out.append(statusBlock("3xx", "Redirect", "ゲートウェイがリダイレクトを返しました (ブラウザーの制限で Location は読めません。curl -i で確認できます)。"), meta, skipped); return; }
   const b = l.body;
   if (b && b.pool) {
@@ -578,7 +653,7 @@ function curl(r) {
   if (r.method !== "GET") parts.push(r.method === "HEAD" ? "-I" : `-X ${r.method}`);
   r.headers.forEach((h) => { if (h.name.trim()) parts.push(`-H ${shq(`${h.name.trim()}: ${h.value}`)}`); });
   const q = r.query.replace(/^\?/, "");
-  const base = isLive() ? normBase(state.backendUrl) : "http://<FRONTEND-IP>";
+  const base = isLive() ? baseFor(r) : `http://<FRONTEND-IP>${r.port ? `:${r.port}` : ""}`;
   parts.push(shq(`${base}${r.path}${q ? `?${q}` : ""}`));
   return parts.join(" ");
 }
@@ -620,6 +695,7 @@ function renderRules() {
   $("defaultBadge").replaceChildren(isDef ? badge("b-warn", "既定プール") : "");
   $("wafOn").checked = cfg.waf.enabled;
   if (document.activeElement !== $("wafIps")) $("wafIps").value = cfg.waf.blocked.join(", ");
+  if (document.activeElement !== $("wafUa")) $("wafUa").value = (cfg.waf.blockedUA || []).join(", ");
   $("wafBadge").replaceChildren(state.ev && state.ev.d.kind === "waf" ? badge("b-err", "WAF ブロック") : "");
 }
 function renderHistory() {
@@ -651,6 +727,10 @@ $("wafIps").addEventListener("change", () => {
   if (bad.length) return;
   state.config.waf.blocked = list; save(); reevaluate(); announce("WAF のブロック対象 IP を更新しました");
 });
+$("wafUa").addEventListener("change", () => {
+  state.config.waf.blockedUA = $("wafUa").value.split(",").map((v) => v.trim()).filter(Boolean);
+  save(); reevaluate(); announce("WAF のブロック対象 User-Agent を更新しました");
+});
 $("resetBtn").addEventListener("click", () => {
   state.config = sampleConfig(); save(); reevaluate(); $("rulesH").focus(); announce("サンプル構成に戻しました");
 });
@@ -681,9 +761,286 @@ $("copyCurl").addEventListener("click", async () => {
   }
 });
 
+// ---------- load distribution: pure logic (How requests are distributed) ----------
+// Stage 1 (pool selection): weighted = smooth weighted round robin over pools with weight > 0.
+//                           priority = highest-priority pool (1 is highest) that has >= minHealthy % healthy servers;
+//                           if none qualifies, the highest-priority pool is used.
+// Stage 2 (server selection inside the chosen pool): rr = round robin over healthy servers,
+//                           wrr = smooth weighted round robin over healthy servers, lc = fewest in-flight requests.
+// Each simulated request holds its connection for `concurrency` further requests (used by lc).
+const DIST_ALGOS = [["rr", "Round Robin (既定)"], ["wrr", "Weighted Round Robin"], ["lc", "Least Connections"]];
+const DIST_MAX = { pools: 5, servers: 8, concurrency: 50 };
+const sv = (name, weight = 1, healthy = true) => ({ name, weight, healthy });
+function distSample() {
+  return {
+    mode: "weighted", minHealthy: 60, concurrency: 4,
+    pools: [
+      { id: "pool-web", weight: 8, priority: 1, algo: "rr", servers: [sv("srv-1"), sv("srv-2")] },
+      { id: "pool-canary", weight: 2, priority: 2, algo: "rr", servers: [sv("srv-3")] },
+    ],
+  };
+}
+const DIST_PRESETS = [
+  ["カナリア: ポート 8080 全体 90:10", () => ({ mode: "weighted", minHealthy: 60, concurrency: 4, pools: [
+    { id: "pool-web", weight: 90, priority: 1, algo: "rr", servers: [sv("srv-1"), sv("srv-2")] },
+    { id: "pool-canary", weight: 10, priority: 2, algo: "rr", servers: [sv("srv-3")] },
+  ] })],
+  ["重み 8:2", distSample],
+  ["優先度: 5 台中 1 台異常 → プライマリ", () => ({ mode: "priority", minHealthy: 60, concurrency: 4, pools: [
+    { id: "pool-web", weight: 0, priority: 1, algo: "rr", servers: [sv("srv-1"), sv("srv-2", 1, false), sv("srv-3"), sv("srv-4"), sv("srv-5")] },
+    { id: "pool-tenant", weight: 0, priority: 2, algo: "rr", servers: [sv("srv-6"), sv("srv-7"), sv("srv-8"), sv("srv-9")] },
+  ] })],
+  ["優先度: 5 台中 3 台異常 → スタンバイ", () => ({ mode: "priority", minHealthy: 60, concurrency: 4, pools: [
+    { id: "pool-web", weight: 0, priority: 1, algo: "rr", servers: [sv("srv-1"), sv("srv-2", 1, false), sv("srv-3", 1, false), sv("srv-4", 1, false), sv("srv-5")] },
+    { id: "pool-tenant", weight: 0, priority: 2, algo: "rr", servers: [sv("srv-6"), sv("srv-7"), sv("srv-8"), sv("srv-9")] },
+  ] })],
+  ["WRR 6:3:1 (全台正常)", () => ({ mode: "weighted", minHealthy: 60, concurrency: 4, pools: [
+    { id: "pool-web", weight: 100, priority: 1, algo: "wrr", servers: [sv("srv-6", 6), sv("srv-3", 3), sv("srv-1", 1)] },
+  ] })],
+  ["WRR 6:3:1 (重み 6 が異常)", () => ({ mode: "weighted", minHealthy: 60, concurrency: 4, pools: [
+    { id: "pool-web", weight: 100, priority: 1, algo: "wrr", servers: [sv("srv-6", 6, false), sv("srv-3", 3), sv("srv-1", 1)] },
+  ] })],
+];
+function validateDist(d) {
+  const e = [];
+  if (!d || typeof d !== "object") return ["分散設定がオブジェクトではありません"];
+  if (d.mode !== "weighted" && d.mode !== "priority") e.push('mode は "weighted" か "priority" です');
+  if (!Number.isInteger(d.minHealthy) || d.minHealthy < 0 || d.minHealthy > 100) e.push("最小正常割合は 0〜100 の整数です");
+  if (!Number.isInteger(d.concurrency) || d.concurrency < 1 || d.concurrency > DIST_MAX.concurrency) e.push(`同時処理数は 1〜${DIST_MAX.concurrency} の整数です`);
+  if (!Array.isArray(d.pools) || d.pools.length < 1 || d.pools.length > DIST_MAX.pools) return e.concat(`プールは 1〜${DIST_MAX.pools} 個です`);
+  const ids = new Set(), prios = new Set();
+  d.pools.forEach((p, i) => {
+    const at = `プール ${i + 1}`;
+    if (!POOLS.some((x) => x.id === p.id)) e.push(`${at}: 既知のプールではありません`);
+    else if (ids.has(p.id)) e.push(`${at}: ${p.id} が重複しています`);
+    ids.add(p.id);
+    if (!DIST_ALGOS.some(([v]) => v === p.algo)) e.push(`${at}: サーバー選択が不明です`);
+    if (!Array.isArray(p.servers) || p.servers.length > DIST_MAX.servers) { e.push(`${at}: サーバーは 0〜${DIST_MAX.servers} 台です`); return; }
+    p.servers.forEach((x, j) => {
+      if (typeof x.name !== "string" || !x.name.trim()) e.push(`${at}・サーバー ${j + 1}: 名前が必要です`);
+      if (!Number.isInteger(x.weight) || x.weight < 0 || x.weight > 100) e.push(`${at}・サーバー ${j + 1}: 重みは 0〜100 の整数です`);
+      if (typeof x.healthy !== "boolean") e.push(`${at}・サーバー ${j + 1}: 正常/異常の指定が不正です`);
+    });
+    if (d.mode === "weighted") {
+      if (!Number.isInteger(p.weight) || p.weight < 0 || p.weight > 100) e.push(`${at}: 重みは 0〜100 の整数です`);
+    } else if (!Number.isInteger(p.priority) || p.priority < 1 || p.priority > 5) {
+      e.push(`${at}: 優先度は 1〜5 の整数です`);
+    } else if (prios.has(p.priority)) {
+      e.push(`${at}: 優先度 ${p.priority} が重複しています`);
+    } else {
+      prios.add(p.priority);
+    }
+    if (p.algo === "wrr" && p.servers.length && p.servers.every((x) => x.weight === 0)) e.push(`${at}: WRR はサーバー重みのどれかを 1 以上にしてください`);
+  });
+  if (d.mode === "weighted" && d.pools.every((p) => !(p.weight > 0))) e.push("重み付けでは、どれか 1 つのプールの重みを 1 以上にしてください");
+  return e;
+}
+function distPoolEligible(d, p) {
+  const n = p.servers.length;
+  return n > 0 && p.servers.filter((x) => x.healthy).length * 100 >= d.minHealthy * n;
+}
+function smoothPick(map, items) {
+  const total = items.reduce((a, x) => a + x.weight, 0);
+  let best = null;
+  for (const it of items) {
+    map[it.key] = (map[it.key] || 0) + it.weight;
+    if (best === null || map[it.key] > map[best.key]) best = it;
+  }
+  map[best.key] -= total;
+  return best.key;
+}
+function selectPool(d, st) {
+  if (d.mode === "weighted") {
+    const items = d.pools.filter((p) => p.weight > 0).map((p) => ({ key: p.id, weight: p.weight }));
+    const key = smoothPick(st.pool, items);
+    return d.pools.find((p) => p.id === key);
+  }
+  const order = d.pools.slice().sort((a, b) => a.priority - b.priority);
+  return order.find((p) => distPoolEligible(d, p)) || order[0];
+}
+function selectServer(p, st) {
+  const healthy = p.servers.filter((x) => x.healthy);
+  if (!healthy.length) return null;
+  if (p.algo === "lc") {
+    let best = null;
+    for (const s2 of healthy) {
+      const key = `${p.id}/${s2.name}`;
+      const n = st.active[key] || 0;
+      const served = st.total[key] || 0;
+      if (best === null || n < best.n || (n === best.n && served < best.served)) best = { s: s2, n, served };
+    }
+    return best.s;
+  }
+  if (p.algo === "wrr") {
+    const items = healthy.filter((x) => x.weight > 0).map((x) => ({ key: `${p.id}/${x.name}`, weight: x.weight }));
+    if (!items.length) return null;
+    const key = smoothPick(st.srv, items);
+    return healthy.find((x) => `${p.id}/${x.name}` === key);
+  }
+  const c = st.rr[p.id] || 0;
+  st.rr[p.id] = c + 1;
+  return healthy[c % healthy.length];
+}
+function simulate(d, n) {
+  const st = { pool: {}, srv: {}, rr: {}, active: {}, total: {}, inflight: [] };
+  const poolCount = {}, srvCount = {};
+  let failed = 0, first = null;
+  for (let i = 0; i < n; i++) {
+    const p = selectPool(d, st);
+    const s2 = selectServer(p, st);
+    let rec;
+    if (!s2) {
+      failed += 1;
+      rec = { pool: p.id, server: null };
+    } else {
+      const key = `${p.id}/${s2.name}`;
+      poolCount[p.id] = (poolCount[p.id] || 0) + 1;
+      srvCount[key] = (srvCount[key] || 0) + 1;
+      st.total[key] = (st.total[key] || 0) + 1;
+      st.active[key] = (st.active[key] || 0) + 1;
+      st.inflight.push(key);
+      if (st.inflight.length > d.concurrency) { const old = st.inflight.shift(); st.active[old] -= 1; }
+      rec = { pool: p.id, server: s2.name };
+    }
+    if (first === null) first = rec;
+  }
+  return { n, poolCount, srvCount, failed, first };
+}
+// Expected share (in %) of a server within its pool, or null when it is not computable (lc) or excluded (unhealthy).
+function expectedServerPct(p, s2) {
+  if (!s2.healthy || p.algo === "lc") return null;
+  const healthy = p.servers.filter((x) => x.healthy);
+  if (p.algo === "rr") return 100 / healthy.length;
+  const tot = healthy.reduce((a, x) => a + x.weight, 0);
+  return tot ? (s2.weight / tot) * 100 : 0;
+}
+
+// ---------- load distribution: DOM ----------
+const distBar = (v) => el("div", { class: "bar", role: "img", "aria-label": `${v.toFixed(1)}%` }, el("span", { style: `inline-size:${Math.min(100, Math.max(0, v))}%` }));
+function distChanged(rebuild) { if (rebuild) renderDistEditor(); renderDistResult(); }
+function serverRow(p, s2, j, i) {
+  const nameIn = el("input", { class: "mono", "aria-label": `プール ${i + 1} のサーバー ${j + 1} 名前`, value: s2.name });
+  nameIn.addEventListener("input", () => { s2.name = nameIn.value; distChanged(false); });
+  const wIn = el("input", { type: "number", min: 0, max: 100, class: "mono", style: "inline-size:90px", "aria-label": `プール ${i + 1} のサーバー ${j + 1} の重み`, value: s2.weight });
+  wIn.addEventListener("input", () => { s2.weight = Number(wIn.value); distChanged(false); });
+  const hc = el("input", { type: "checkbox", "aria-label": `プール ${i + 1} のサーバー ${j + 1} を正常とする` });
+  hc.checked = s2.healthy;
+  hc.style.inlineSize = "auto";
+  hc.addEventListener("change", () => { s2.healthy = hc.checked; distChanged(false); });
+  const del = el("button", { type: "button", class: "icon", "aria-label": `プール ${i + 1} のサーバー ${j + 1} を削除`, text: "×" });
+  del.addEventListener("click", () => { p.servers.splice(j, 1); distChanged(true); });
+  return el("div", { class: "row", style: "gap:6px" }, nameIn, el("span", { class: "note", text: "サーバー重み" }), wIn,
+    el("label", { style: "margin:0;font-weight:400" }, hc, " 正常"), del);
+}
+function poolEditor(p, i) {
+  const d = state.dist;
+  const sel = el("select", { "aria-label": `プール ${i + 1}` });
+  POOLS.forEach((x) => { const o = el("option", { value: x.id, text: `${x.id} (${x.label})` }); o.selected = x.id === p.id; sel.append(o); });
+  sel.addEventListener("change", () => { p.id = sel.value; distChanged(false); });
+  const numIn = (label, val, min, max, onSet) => {
+    const inp = el("input", { type: "number", min, max, class: "mono", style: "inline-size:90px", "aria-label": label, value: val });
+    inp.addEventListener("input", () => { onSet(Number(inp.value)); distChanged(false); });
+    return inp;
+  };
+  const valIn = d.mode === "weighted"
+    ? numIn(`プール ${i + 1} の重み`, p.weight, 0, 100, (v) => { p.weight = v; })
+    : numIn(`プール ${i + 1} の優先度`, p.priority, 1, 5, (v) => { p.priority = v; });
+  const algo = el("select", { "aria-label": `プール ${i + 1} のサーバー選択` });
+  DIST_ALGOS.forEach(([v, t]) => { const o = el("option", { value: v, text: t }); o.selected = v === p.algo; algo.append(o); });
+  algo.addEventListener("change", () => { p.algo = algo.value; distChanged(false); });
+  const del = el("button", { type: "button", class: "icon", "aria-label": `プール ${i + 1} を削除`, text: "×" });
+  del.addEventListener("click", () => { d.pools.splice(i, 1); distChanged(true); });
+  const head = el("div", { class: "row" }, el("span", { class: "note", text: "プール" }), sel,
+    el("span", { class: "note", text: d.mode === "weighted" ? "重み (0〜100)" : "優先度 (1〜5)" }), valIn,
+    el("span", { class: "note", text: "サーバー選択" }), algo, del);
+  const srvBox = el("div", { class: "stack", style: "gap:4px" });
+  p.servers.forEach((s2, j) => srvBox.append(serverRow(p, s2, j, i)));
+  const addSrv = el("button", { type: "button", class: "small", text: "＋ サーバー" });
+  addSrv.disabled = p.servers.length >= DIST_MAX.servers;
+  addSrv.addEventListener("click", () => { p.servers.push(sv(`srv-${p.servers.length + 1}`)); distChanged(true); });
+  return el("div", { class: "card stack", style: "gap:6px" }, head, srvBox, addSrv);
+}
+function renderDistEditor() {
+  const d = state.dist;
+  $("distMode").value = d.mode;
+  $("distMin").value = d.minHealthy;
+  $("distConc").value = d.concurrency;
+  $("distMinWrap").hidden = d.mode !== "priority";
+  $("distAddPool").disabled = d.pools.length >= DIST_MAX.pools;
+  const box = $("distPools"); box.replaceChildren();
+  d.pools.forEach((p, i) => box.append(poolEditor(p, i)));
+}
+function distReport(d, r, n) {
+  const pct = (c) => (n ? (c / n) * 100 : 0);
+  const wTot = d.pools.reduce((a, p) => a + (d.mode === "weighted" ? p.weight : 0), 0);
+  const steady = d.mode === "priority" ? selectPool(d, { pool: {}, srv: {}, rr: {}, active: {}, total: {}, inflight: [] }).id : null;
+  const poolExp = (p) => (d.mode === "weighted" ? (wTot ? (p.weight / wTot) * 100 : 0) : (p.id === steady ? 100 : 0));
+  const f = r.first;
+  const firstTxt = f.server ? `${f.pool} → ${f.server}` : `${f.pool} → 正常なサーバーがないため失敗`;
+  const poolRows = d.pools.map((p) => {
+    const c = r.poolCount[p.id] || 0;
+    const h = p.servers.filter((x) => x.healthy).length;
+    let note;
+    if (d.mode === "weighted") {
+      note = p.weight > 0 ? `期待 ${poolExp(p).toFixed(1)}%` : "重み 0 (除外)";
+    } else {
+      const ratio = p.servers.length ? Math.round((h / p.servers.length) * 100) : 0;
+      note = `優先度 ${p.priority}・正常 ${h}/${p.servers.length} 台 (${ratio}%) ${distPoolEligible(d, p) ? "✓ 基準を満たす" : "✗ 基準未満"}${p.id === steady ? " ← 選択中" : ""}`;
+    }
+    return el("div", { class: "dist-row" }, el("span", { class: "mono", text: `${p.id} (${pool(p.id).label})` }), el("div", {}, distBar(pct(c))), el("span", { class: "mono", text: `${c} 件 (${pct(c).toFixed(1)}%)・${note}` }));
+  });
+  if (r.failed) poolRows.push(el("div", { class: "dist-row" }, el("span", { class: "mono", text: "失敗" }), el("div", {}, distBar(pct(r.failed))), el("span", { class: "mono", text: `${r.failed} 件 (${pct(r.failed).toFixed(1)}%)・正常なサーバーなし` })));
+  const srvRows = [];
+  d.pools.forEach((p) => p.servers.forEach((s2) => {
+    const key = `${p.id}/${s2.name}`;
+    const c = r.srvCount[key] || 0;
+    const ex = expectedServerPct(p, s2);
+    let note;
+    if (!s2.healthy) note = "異常 (除外)";
+    else if (p.algo === "lc") note = "接続数により変動";
+    else note = `期待 ${(ex * poolExp(p) / 100).toFixed(1)}%`;
+    srvRows.push(el("div", { class: "dist-row" }, el("span", { class: "mono", text: key }), el("div", {}, distBar(pct(c))), el("span", { class: "mono", text: `${c} 件 (${pct(c).toFixed(1)}%)・${note}` })));
+  }));
+  return el("div", { class: "stack" },
+    el("p", { class: "note", text: `最初の要求の経路: ${firstTxt}` }),
+    el("h3", { text: `① プール別の割合 (${n} 件)` }), poolRows,
+    el("h3", { text: "② サーバー別の割合 (選ばれたプール内)" }), srvRows.length ? srvRows : el("p", { class: "note", text: "サーバーがありません" }),
+    el("p", { class: "note", text: "件数が少ないと割合は期待値から外れます。重み付けは件数を増やすほど期待値に近づきます。" }));
+}
+function renderDistResult() {
+  const d = state.dist, errs = validateDist(d);
+  $("distErr").hidden = errs.length === 0;
+  $("distErr").replaceChildren(...errs.slice(0, 12).map((t) => el("li", { text: t })));
+  const out = $("distResult");
+  if (errs.length) { out.replaceChildren(el("p", { class: "note", text: "設定を修正すると結果が表示されます。" })); return; }
+  save();
+  const n = Number($("distN").value);
+  out.replaceChildren(distReport(d, simulate(d, n), n));
+}
+$("distMode").addEventListener("change", () => { state.dist.mode = $("distMode").value; distChanged(true); });
+$("distMin").addEventListener("input", () => { state.dist.minHealthy = Number($("distMin").value); distChanged(false); });
+$("distConc").addEventListener("input", () => { state.dist.concurrency = Number($("distConc").value); distChanged(false); });
+$("distN").addEventListener("change", () => distChanged(false));
+$("distAddPool").addEventListener("click", () => {
+  const used = new Set(state.dist.pools.map((p) => p.id));
+  const free = POOLS.find((x) => !used.has(x.id));
+  if (!free) return;
+  state.dist.pools.push({ id: free.id, weight: 0, priority: Math.min(5, state.dist.pools.length + 1), algo: "rr", servers: [sv("srv-1")] });
+  distChanged(true);
+});
+
 // ---------- start ----------
 renderMode(); renderRequest(); showStorage();
-if (!isLive()) { send(); } else { renderAll(); renderHistory(); }
+state.dist = saved && saved.dist && validateDist(saved.dist).length === 0 ? saved.dist : distSample();
+// Settings saved before the User-Agent rule existed have no blockedUA: give them the sample value.
+if (!Array.isArray(state.config.waf.blockedUA)) state.config.waf.blockedUA = ["agw-block-demo"];
+DIST_PRESETS.forEach(([label, build]) => {
+  const b = el("button", { type: "button", class: "small", text: label });
+  b.addEventListener("click", () => { state.dist = build(); distChanged(true); });
+  $("distPresets").append(b);
+});
+distChanged(true);
+if (!isLive()) { send(); } else { renderAll(); renderHistory(); detectObservedIp(); }
 })();
 </script>
 </body>
