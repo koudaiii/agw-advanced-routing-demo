@@ -329,6 +329,7 @@ if (req.method === &quot;OPTIONS&quot;) { res.writeHead(204); return res.end(); 
 
 <section id="notes"><h2>8. 制約・注意事項と後片付け</h2><ul>
 <li>Advanced rules はプレビュー機能です。マルチサイト リスナーと L4 (TCP/TLS) プロキシでは使えません</li>
+<li>重み付け (ポート 8080 のカナリア、pool-web 90% / pool-canary 10%) には、サブスクリプションで <code>Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy</code> の登録が必要です。登録していない状態で <code>WEIGHTED_CANARY=true ./deploy.sh</code> を実行すると、<code>SubscriptionNotRegisteredForFeature</code> でデプロイが失敗します。既定の <code>WEIGHTED_CANARY=false</code> では、登録は不要です</li>
 <li>上限: マップ 100 / ゲートウェイ、ルール 100 / マップ、条件 5 / 条件セット、値 5 / 条件、値・正規表現 128 文字</li>
 <li>WAF ポリシーはゲートウェイまたはリスナー単位で関連付け。ルール単位の WAF ポリシーは非対応</li>
 <li>シミュレーターの判定はブラウザーの正規表現エンジンで近似しており、RE2 と完全には一致しません</li>
