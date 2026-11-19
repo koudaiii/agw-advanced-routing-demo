@@ -1,6 +1,6 @@
 # Application Gateway Advanced Routing — 実機デモ キット
 
-シミュレーター アプリと同じ 6 ルールを、実際の Application Gateway (WAF_v2) に構成します。
+https://learn.microsoft.com/en-us/azure/application-gateway/advanced-rules
 
 | フォルダー | 内容 |
 |---|---|
