@@ -306,14 +306,16 @@ if (req.method === &quot;OPTIONS&quot;) { res.writeHead(204); return res.end(); 
 
 <section id="demo"><h2>6. デモの進め方 (例: 15 分)</h2>
 <table><thead><tr><th scope="col">#</th><th scope="col">見せること</th><th scope="col">シミュレーター</th><th scope="col">実機</th></tr></thead><tbody>
-<tr><td>1</td><td>構成と評価の流れ (リスナー → WAF → マップ → プール)</td><td>経路図</td><td>ポータルの [ルール] 画面</td></tr>
-<tr><td>2</td><td>マルチテナント: Header の正規表現 AND Path</td><td>「テナント」→ X-Tenant-Id を消して再送</td><td>test.sh / curl で pool-tenant ⇔ 既定</td></tr>
+<tr><td>1</td><td>構成と評価の流れ (リスナー → WAF → マップ → プール)</td><td>経路図</td><td>ポータルの [ルール] 画面 (<code>rule1</code> が Advanced、マップ <code>advancedRoutingMap1</code>)</td></tr>
+<tr><td>2</td><td>マルチテナント: Header の正規表現 AND Path</td><td>「テナント」→ X-Tenant-Id を消して再送</td><td><code>test.sh</code> / curl で pool-tenant ⇔ 既定 (pool-web)</td></tr>
 <tr><td>3</td><td>優先度: 先に一致したルールが勝つ</td><td>パートナーとテナントの両ヘッダーを付ける</td><td>同じヘッダーで curl → pool-partner</td></tr>
 <tr><td>4</td><td>API バージョニングと URL デコード</td><td>「エンコード済みパス」</td><td><code>/api%2Forders</code> でも pool-api-v2</td></tr>
-<tr><td>5</td><td>リダイレクト</td><td>「キャンペーン」→ 302</td><td>curl -i で Location を確認</td></tr>
-<tr><td>6</td><td>WAF はルーティングより前</td><td>「WAF ブロック」→ 全ルール未評価</td><td><code>curl -A agw-block-demo</code> → 403 (User-Agent の WAF ルール)</td></tr>
+<tr><td>5</td><td>リダイレクト</td><td>「キャンペーン」→ 302</td><td><code>curl -i</code> で 302 と Location (クエリ文字列が引き継がれる) を確認</td></tr>
+<tr><td>6</td><td>WAF はルーティングより前</td><td>「WAF ブロック」→ 全ルール未評価、403</td><td><code>curl -i -A agw-block-demo http://&lt;IP&gt;/app/home</code> → 403 (User-Agent の WAF ルール)</td></tr>
+<tr><td>7</td><td>User-Agent による振り分け</td><td>「モバイル」→ pool-mobile (ブラウザーは User-Agent を送れないため、実機の応答は既定の pool-web になる)</td><td><code>curl -i -A "Mozilla/5.0 (iPhone; ...)" http://&lt;IP&gt;/app/home</code> → pool-mobile</td></tr>
+<tr><td>8</td><td>カナリア (ポート 8080)</td><td>「カナリア (ポート 8080)」→ 重み付けの予測 (設定どおり、既定 90:10)</td><td><code>FRONTEND=&lt;IP&gt;:8080 ./canary-check.sh /app/home 100</code> → 100 件すべて pool-canary (既定の <code>WEIGHTED_CANARY=false</code>)</td></tr>
 </tbody></table>
-<p class="note">カナリアはポート 8080 の 90:10 重み付けです (ポート 80 の高度なルールには影響しません)。割合は <code>FRONTEND=&lt;IP&gt;:8080 ./canary-check.sh /app/home 100</code> で 100 回連続して確認します。</p>
+<p class="note">カナリアは、既定では 8080 番の全件を pool-canary に送ります (<code>WEIGHTED_CANARY=false</code>)。pool-web 90% / pool-canary 10% の重み付けにするには <code>WEIGHTED_CANARY=true ./deploy.sh</code> を実行します。重み付けには、サブスクリプションで <code>Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy</code> の登録が必要です。シミュレーターの予測は、重み付けの設定 (90:10) を表示します。</p>
 </section>
 
 <section id="trouble"><h2>7. トラブルシューティング</h2>
