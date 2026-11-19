@@ -106,7 +106,7 @@ header.top{padding-block:10px}
 header.top h1{font-size:20px}
 .mode,.top label,button,input,select,textarea{font-size:14px}
 button.small{font-size:12px}
-button.active{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+button.active{background:var(--route,var(--fg));color:#fffbf3;border-color:var(--route,var(--fg))}
 .layout{grid-template-columns:360px minmax(0,1fr);max-inline-size:1800px;gap:14px;padding:12px clamp(16px,2vw,40px) 24px}
 .stack{gap:8px}
 .two{gap:8px}
@@ -437,6 +437,15 @@ const state = {
   sent: null, ev: null, live: null, history: [], observedIp: null,
 };
 
+// 判定結果の行き先の色（WAF は赤、リダイレクトと不明は既定色、重み付けは先頭のプール）
+function routeColorOf(d) {
+  if (!d) return "var(--primary)";
+  if (d.kind === "waf") return "#a4493a";
+  if (d.kind === "weighted") return POOLS[0].color;
+  if (d.kind === "pool" || d.kind === "default") { const p = POOLS.find((x) => x.id === d.pool); return p ? p.color : "var(--primary)"; }
+  return "var(--primary)";
+}
+
 // ---------- request form ----------
 METHODS.forEach((m) => $("method").append(el("option", { value: m, text: m })));
 PRESETS.forEach(([label, build]) => {
@@ -445,6 +454,7 @@ PRESETS.forEach(([label, build]) => {
     state.request = build(); renderRequest();
     // Invert the selected preset; the others return to normal.
     $("presets").querySelectorAll("button").forEach((x) => { const on = x === b; x.classList.toggle("active", on); x.setAttribute("aria-pressed", on ? "true" : "false"); });
+    b.style.setProperty("--route", routeColorOf(evaluate(state.config, state.request).d));
   });
   $("presets").append(b);
 });
@@ -603,6 +613,8 @@ function renderDiagram() {
   const weighted = !!(d && d.kind === "weighted");
   const hitSet = weighted ? new Set(["pool-web", "pool-canary"]) : new Set(active ? [active] : []);
   const st = (x) => (x ? "var(--primary)" : "var(--line)");
+  // 経路の左側（クライアント → リスナー → WAF → マップ）は、命中した最初の行き先のプールの色で描く
+  const routeColor = routeColorOf(d);
   const stages = [
     { x: 8, l: "クライアント", sub: isLive() ? "このブラウザー" : "", on },
     { x: 148, l: "Basic リスナー", sub: weighted ? ":8080 (カナリア)" : ":80", on },
@@ -611,17 +623,17 @@ function renderDiagram() {
       ? { x: 428, l: "重み付けルール", sub: "web 90 : canary 10", on: on && !blocked }
       : { x: 428, l: "Advanced Routing Map", sub: `ルール ${cfg.rules.length} 件`, on: on && !blocked },
   ];
-  stages.slice(0, -1).forEach((g, i) => svg.append(s("line", { x1: g.x + 120, y1: mid, x2: stages[i + 1].x, y2: mid, stroke: st(i < 2 ? on : stages[i + 1].on), "stroke-width": on ? 3 : 1.5 })));
+  stages.slice(0, -1).forEach((g, i) => svg.append(s("line", { x1: g.x + 120, y1: mid, x2: stages[i + 1].x, y2: mid, stroke: (i < 2 ? on : stages[i + 1].on) ? routeColor : "var(--line)", "stroke-width": on ? 3 : 1.5 })));
   stages.forEach((g) => {
-    svg.append(s("rect", { x: g.x, y: mid - 26, width: 120, height: 52, rx: 8, fill: "var(--card)", stroke: g.bad ? "#a4493a" : st(g.on), "stroke-width": g.on || g.bad ? 2.5 : 1.5 }));
+    svg.append(s("rect", { x: g.x, y: mid - 26, width: 120, height: 52, rx: 8, fill: "var(--card)", stroke: g.bad ? "#a4493a" : g.on ? routeColor : "var(--line)", "stroke-width": g.on || g.bad ? 2.5 : 1.5 }));
     svg.append(s("text", { x: g.x + 60, y: mid - 3, "text-anchor": "middle", "font-size": g.l.length > 12 ? 9.5 : 12.5, "font-weight": 700, fill: "var(--fg)" }, g.l));
     svg.append(s("text", { x: g.x + 60, y: mid + 14, "text-anchor": "middle", "font-size": 10.5, fill: "var(--fg)" }, g.sub));
   });
   targets.forEach((t, i) => {
     const y = top + i * rowH + rowH / 2;
     const hit = (t.id === "__redirect" && d && d.kind === "redirect") || hitSet.has(t.id);
-    svg.append(s("path", { d: `M548 ${mid} C 600 ${mid}, 600 ${y}, 650 ${y}`, fill: "none", stroke: st(hit), "stroke-width": hit ? 3 : 1, "stroke-dasharray": t.id === "__redirect" ? "5 4" : "none" }));
     const p = POOLS.find((x) => x.id === t.id);
+    svg.append(s("path", { d: `M548 ${mid} C 600 ${mid}, 600 ${y}, 650 ${y}`, fill: "none", stroke: hit && p ? p.color : st(hit), "stroke-width": hit ? 3 : 1, "stroke-dasharray": t.id === "__redirect" ? "5 4" : "none" }));
     svg.append(s("rect", { x: 650, y: y - 17, width: 202, height: 34, rx: 6, fill: hit ? (p ? p.color : "var(--primary)") : "var(--card)", stroke: hit ? (p ? p.color : "var(--primary)") : "var(--line)", "stroke-width": hit ? 2 : 1 }));
     svg.append(s("text", { x: 660, y: y - 2, "font-size": 11.5, "font-weight": 700, fill: hit ? "#ffffff" : "var(--fg)" }, t.t));
     svg.append(s("text", { x: 660, y: y + 11, "font-size": 10, fill: hit ? "#ffffff" : "var(--fg)" }, t.sub));
