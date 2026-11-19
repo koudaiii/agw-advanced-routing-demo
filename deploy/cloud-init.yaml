@@ -41,12 +41,6 @@ write_files:
       PORT=8083
       POOL_LABEL="Orders API v2"
       POOL_COLOR="#1d4ed8"
-  - path: /etc/agw-demo/pool-canary.env
-    content: |
-      POOL_NAME=pool-canary
-      PORT=8084
-      POOL_LABEL="カナリア"
-      POOL_COLOR="#a16207"
   - path: /etc/agw-demo/pool-mobile.env
     content: |
       POOL_NAME=pool-mobile
@@ -59,5 +53,4 @@ runcmd:
   - systemctl enable --now agw-pool@pool-partner
   - systemctl enable --now agw-pool@pool-tenant
   - systemctl enable --now agw-pool@pool-api-v2
-  - systemctl enable --now agw-pool@pool-canary
   - systemctl enable --now agw-pool@pool-mobile
