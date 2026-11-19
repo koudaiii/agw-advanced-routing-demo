@@ -30,7 +30,8 @@ https://learn.microsoft.com/en-us/azure/application-gateway/advanced-rules
 |---|---|
 | `agw-routing-simulator.html` | 単体で動くシミュレーター。ゲートウェイ URL が空ならオフライン、入れると実機に送って予測と比較 |
 | `backend/server.js` | 依存なしの Node.js バックエンド。どのプールが応答したか、受信したヘッダー (App Gateway が付けた X-Forwarded-* などを強調) を HTML / JSON で返します。応答ヘッダー `x-backend-pool` にもプール名が入ります。CORS 対応済み (`ALLOW_ORIGIN`、既定 `*`)。 |
-| `backend/pools.conf` | プール名・ポート・表示名・色 (6 プール = 1 VM 上の 6 プロセス、ポート 8080–8085) |
+| `backend/pools.conf` | VM1 (バックエンド) のプール名・ポート・表示名・色。5 プール (ポート 8080–8083、8085)。`pool-canary` (8084) の行は、VM1 の cloud-init を変えないために残している未使用の行です |
+| `backend/pools-canary.conf` | カナリア VM2 のプール定義 (`pool-canary`、ポート 8080) |
 | `deploy/deploy.sh` | リソースグループを作成し、`deploy/main.bicep` をデプロイ。SSH 鍵がなければ生成 |
 | `deploy/main.bicep` | VNet、バックエンド VM、WAF ポリシー、App Gateway、6 プール、6 条件セット、Advanced routing map、`rule1` (Advanced) を作成 |
 | `deploy/make-cloud-init.sh` / `cloud-init.yaml` | バックエンド VM の初期化データ (`backend/server.js` を埋め込み) |
