@@ -34,7 +34,9 @@ https://learn.microsoft.com/en-us/azure/application-gateway/advanced-rules
 | `backend/pools-canary.conf` | カナリア VM2 のプール定義 (`pool-canary`、ポート 8080) |
 | `deploy/deploy.sh` | リソースグループを作成し、`deploy/main.bicep` をデプロイ。SSH 鍵がなければ生成 |
 | `deploy/main.bicep` | VNet、バックエンド VM 1 (5 プール)、カナリア VM 2 (`pool-canary`、8080)、WAF ポリシー、App Gateway、条件セット 5 つ、Advanced routing map と `rule1` (Advanced、ポート 80)、ポート 8080 の Basic ルール `rule-canary` を作成。`weightedCanary` で 90:10 の重み付けに切り替え |
-| `deploy/make-cloud-init.sh` / `cloud-init.yaml` | バックエンド VM の初期化データ (`backend/server.js` を埋め込み) |
+| `deploy/make-cloud-init.sh` / `cloud-init.yaml` | バックエンド VM 1 の初期化データ (`backend/server.js` を埋め込み) |
+| `deploy/cloud-init-canary.yaml` | カナリア VM 2 の初期化データ (`backend/pools-canary.conf` から生成) |
+| `deploy/canary-check.sh` | 指定した URI に 100 回連続で送り、x-backend-pool でプール別の件数と割合を表示。カナリアは `FRONTEND=<IP>:8080` |
 | `deploy/test.sh` | シミュレーターのシナリオを curl で実機に送り、応答したプールを一覧表示 |
 
 ## 手順
