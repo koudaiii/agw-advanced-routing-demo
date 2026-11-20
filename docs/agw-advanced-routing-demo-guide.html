@@ -327,6 +327,20 @@ API v2             HTTP 200  pool-api-v2
 モバイル           HTTP 200  pool-mobile
 WAF ブロック (UA)  HTTP 403</code></pre>
 <p class="note">上は <code>test.sh</code> の出力の例です。カナリアの行は、8080 番の振り分け (90:10) の 1 回分なので、pool-web と pool-canary のどちらにもなります。</p>
+<h4>優先度ベース (ポート 8090) の確認</h4>
+<p>8090 番は、VM 2 の <code>pool-canary</code> (Primary) を優先し、止まると VM 1 の <code>pool-web</code> (Standby) に切り替わります。<code>canary-check.sh</code> は応答ヘッダーの <code>x-backend-pool</code> (VM 上のプロセス名) を数えるため、Primary は <code>pool-canary</code>、Standby は <code>pool-web</code> と表示されます。</p>
+<pre><code>FRONTEND=&lt;フロントエンド IP&gt;:8090 ./canary-check.sh /app/home 100   # 正常時
+# VM 2 の pool-canary を停止し、2〜3 分待つ
+az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"
+FRONTEND=&lt;フロントエンド IP&gt;:8090 ./canary-check.sh /app/home 100   # 停止後
+# VM 2 を起動し、2〜3 分待つ
+az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-canary"
+FRONTEND=&lt;フロントエンド IP&gt;:8090 ./canary-check.sh /app/home 100   # 復旧後</code></pre>
+<p>期待結果 (例):</p>
+<pre><code>正常時   100 件すべて pool-canary (Primary = VM 2)
+停止後   100 件すべて pool-web    (Standby = VM 1)
+復旧後   100 件すべて pool-canary (Primary = VM 2)</code></pre>
+<p class="note">停止後の切り替えには約 2〜3 分かかります。直後に確認すると、まだ pool-canary が返ることがあります。</p>
 <h3>4.3 ポータルでヘッダーベースのルールを手動で作る (チュートリアルの手順)</h3>
 <p>Microsoft Learn の <a href="https://learn.microsoft.com/ja-jp/azure/application-gateway/configure-advanced-routing-rule">チュートリアル: Azure ポータルで Application Gateway の Advanced Rules を使ってヘッダーベースのルーティングを設定する</a> の手順です。このデモは <code>deploy.sh</code> が作るため、通常は不要です。ポータルの操作を確かめるときに使います。</p>
 <p class="note">ポータルの「アプリケーション ゲートウェイの作成」では Advanced ルールを設定できません。基本ルールで作成した後に、基本ルールを Advanced に変更します。</p>
