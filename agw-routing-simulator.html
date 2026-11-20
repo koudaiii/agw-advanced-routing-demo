@@ -274,7 +274,7 @@ const req = (method, path, query, clientIp, headers) => ({ method, path, query, 
 const PRESETS = [
   ["通常アクセス", () => req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]])],
   ["テナント", () => req("GET", "/app/dashboard", "", "192.0.2.41", [["User-Agent", DESKTOP_UA], ["X-Tenant-Id", "customer-1024"]])],
-  ["パートナー", () => req("POST", "/api/orders", "", "192.0.2.88", [["X-Partner-Id", "fabrikam"]])],
+  ["パートナー", () => req("GET", "/api/orders", "", "192.0.2.88", [["X-Partner-Id", "fabrikam"]])],
   ["API v2", () => req("GET", "/api/orders/1001", "", "192.0.2.41", [["X-Api-Version", "2.0"]])],
   ["エンコード済みパス", () => req("GET", "/api%2Forders", "", "192.0.2.41", [["X-Api-Version", "2"]])],
   ["キャンペーン", () => req("GET", "/landing", "campaign=summer&utm=mail", "192.0.2.41", [["User-Agent", DESKTOP_UA]])],

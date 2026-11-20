@@ -59,7 +59,7 @@ cd deploy && FRONTEND=<表示された IP> ./test.sh
 |---|---|---|
 | 通常アクセス | 200 pool-web | 既定プール |
 | テナント | 200 pool-tenant | `X-Tenant-Id: customer-*` と `/app` |
-| パートナー | 200 pool-partner | `X-Partner-Id` 一致。**現状は POST が 403 になる (既知の問題を参照)** |
+| パートナー | 200 pool-partner | `X-Partner-Id` 一致 (GET で送る) |
 | API v2 | 200 pool-api-v2 | `X-Api-Version: 2.0` と `/api/orders` |
 | エンコード済みパス | 200 pool-api-v2 | `/api%2Forders` はデコードされて一致 |
 | カナリア (:8080 90:10) | 200 pool-web / pool-canary | ポート 8080 全体の重み付け。1 件では片方に決まる |
@@ -123,9 +123,7 @@ az group delete -n rg-agw-advrouting-demo --yes --no-wait
 
 ## 既知の問題
 
-- **POST が 403 になる (未解決)**: `/api/orders` への POST は、ボディの有無、Content-Type、ヘッダーに関係なく、どのパスでも WAF が 403 を返します。GET と PUT は通ります。WAF を Detection に切り替えると 200 になるため、原因は DRS 2.1 のマネージドルールです。ルール ID は未特定です (WAF ログが約 1 時間たっても届かなかったため)。
-  - 対応候補: ルール ID を特定してから [per-rule exclusion](https://learn.microsoft.com/troubleshoot/azure/application-gateway/troubleshoot-waf-blocking-legitimate-requests-403#resolution-a) を追加する。または、ワークショップではパートナーのシナリオを GET ベースで説明する。
-  - 特定の手順: `az monitor diagnostic-settings show` で `ApplicationGatewayFirewallLog` が有効か確認 → POST を再送 → 15〜20 分待ってから `AGWFirewallLogs` を `ruleId_s`、`ruleGroup_s`、`requestUri_s` で検索。
+- **本文のない POST が 403 になる**: `/api/orders` への本文のない POST は、DRS 2.1 のマネージドルールに遮断されます。本文 (JSON) 付きの POST や GET / PUT は通ります。ワークショップのテストとシミュレーターは GET で送ります。原因のルール ID は未特定です。
 - **README の旧 CLI 手順**: 「rule1 を Advanced に切り替えるコマンド」の記述は古く、現在は Bicep が作成します。
 - **高度なルールは 1 プールのみ**: 現在の ARM API では、高度なルールに重み付けを指定できません (`ApplicationGatewayAdvancedRoutingRuleMustReference`)。そのためカナリアの重み付けは、ポート 8080 の Basic ルールで行っています。
 - **VM 1 に残る未使用の `pool-canary` (8084)**: VM 1 の customData を変えると既存 VM の更新が拒否されるため、`backend/pools.conf` の 8084 行は残しています。ルーティングには使われません。

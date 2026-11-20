@@ -65,6 +65,6 @@ FRONTEND=<表示されたフロントエンド IP>:8080 ./canary-check.sh /app/h
   curl -i http://<FRONTEND>/app/home                        # → 200
   ```
   送信元 IP による遮断 (`BlockDemoIp`) も残しています。IP は環境で変わるため、デモでは User-Agent を使います。
-- 既知の問題: `/api/orders` への POST が、どのパスでも WAF の 403 になります (GET / PUT は通ります)。Detection モードでは通るため、マネージドルール (DRS 2.1) が原因です。原因のルール ID は未特定です。
+- 既知の問題: 本文のない POST が、WAF (マネージドルール DRS 2.1) に遮断されて 403 になります。本文 (JSON) を付けた POST や GET / PUT は通ります。テストとシミュレーターのパートナー シナリオは、GET で送るようにしています。原因のルール ID は未特定です。
 - ドキュメントには「パブリック プレビュー中は Header 条件のみサポート」とも書かれています。Path / QueryString / ClientIP / Method の条件作成でエラーになった場合は、該当ルールを Header 条件だけにしてください。
 - 後片付け: `az group delete -n rg-agw-advrouting-demo --yes --no-wait`

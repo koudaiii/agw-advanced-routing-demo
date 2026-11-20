@@ -212,7 +212,7 @@ DynamicUser=yes</code></pre>
 FRONTEND=&lt;フロントエンド IP&gt;:8080 ./canary-check.sh /app/home 100</code></pre>
 <pre><code>通常アクセス       HTTP 200  pool-web
 テナント           HTTP 200  pool-tenant
-パートナー         HTTP 403  (既知の問題: POST が WAF で遮断される)
+パートナー         HTTP 200  pool-partner
 API v2             HTTP 200  pool-api-v2
 エンコード済み     HTTP 200  pool-api-v2   ← /api%2Forders はデコード後に評価
 カナリア (:8080)   HTTP 200  pool-canary
@@ -278,7 +278,7 @@ if (req.method === &quot;OPTIONS&quot;) { res.writeHead(204); return res.end(); 
 <tr><td><code>test.sh</code> のポート 80 の結果が想定と違う</td><td><code>rule1</code> が Advanced で作られているか (デプロイ直後の状態)。条件・優先度の定義は <code>deploy/main.bicep</code> の <code>advancedRoutingConditionSets</code> と <code>advancedRoutingMaps</code> を見る</td></tr>
 <tr><td>8080 の割合が 90:10 にならない</td><td><code>WEIGHTED_CANARY=true</code> で再デプロイしたか。件数が少ないと期待値から外れるため、<code>./canary-check.sh /app/home 100</code> で 100 件以上確認する。機能が登録済みか確認する</td></tr>
 <tr><td>8080 が全件 pool-canary になる</td><td>既定の <code>WEIGHTED_CANARY=false</code> の動作。90:10 にするには <code>WEIGHTED_CANARY=true ./deploy.sh</code> (機能の登録が必要)</td></tr>
-<tr><td>POST が 403 になる (<code>/api/orders</code>)</td><td>既知の問題: DRS のマネージドルールが POST を遮断する (GET / PUT は通る)。原因のルール ID は未特定</td></tr>
+<tr><td>本文のない POST が 403 になる</td><td>既知の問題: DRS のマネージドルールが、本文のない POST を遮断する (本文付きの POST や GET / PUT は通る)。原因のルール ID は未特定。テストは GET で送る</td></tr>
 <tr><td>正規表現が一致しない</td><td>RE2 非対応の構文 (先読み・後方参照など) を使っていないか。シミュレーターと実機で結果が違う場合は実機の結果が正</td></tr>
 <tr><td>シミュレーターと実機で結果が違う</td><td>(1) ブラウザーは User-Agent を送れない (「モバイル」「WAF ブロック」は <code>curl -A</code> で確認)。(2) 送信元 IP は、ゲートウェイが見ている値 (<code>X-Forwarded-For</code>) を使う。(3) ルールの定義 (シミュレーターの JSON と <code>deploy/main.bicep</code>) を比較する</td></tr>
 </tbody></table>
