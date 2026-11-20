@@ -9,9 +9,6 @@ param location string = resourceGroup().location
 @description('Prefix for resource names.')
 param prefix string = 'agwdemo'
 
-@description('Use the weighted 90:10 split on port 8080 (needs Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy). false = all port-8080 traffic goes to pool-canary.')
-param weightedCanary bool = false
-
 @description('Source CIDR that the WAF custom rule blocks (WAF runs before routing).')
 param wafBlockCidr string = '198.51.100.0/24'
 
@@ -29,6 +26,7 @@ var wafName = '${prefix}-waf'
 var gwName = '${prefix}-agw'
 var gwPipName = '${gwName}-pip'
 var mapName = 'advancedRoutingMap1'
+var canaryMapName = 'canaryMap'
 // The new version (pool-canary) runs on its own VM, on port 8080 like pool-web. The weighted /canary split
 // needs both pools to share one backend HTTP setting, so they must use the same port.
 var canaryIp = '192.168.1.11'
@@ -462,35 +460,6 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
     ]
-    // Weighted split on port 8080 (whole port): 90% pool-web (stable), 10% pool-canary (new version).
-    loadDistributionPolicies: weightedCanary ? [
-      {
-        name: 'ld-canary-split'
-        properties: {
-          loadDistributionAlgorithm: 'RoundRobin'
-          loadDistributionTargets: [
-            {
-              name: 'stable'
-              properties: {
-                backendAddressPool: {
-                  id: '${gwId}/backendAddressPools/pool-web'
-                }
-                weightPerServer: 90
-              }
-            }
-            {
-              name: 'canary'
-              properties: {
-                backendAddressPool: {
-                  id: '${gwId}/backendAddressPools/pool-canary'
-                }
-                weightPerServer: 10
-              }
-            }
-          ]
-        }
-      }
-    ] : []
     redirectConfigurations: [
       {
         name: 'redirect-campaign'
@@ -574,6 +543,21 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
               propertyName: 'User-Agent'
               propertyValueMatcher: {
                 pattern: '(iPhone|Android)'
+              }
+            }
+          ]
+        }
+      }
+      {
+        // Port 8080 only: a client that sends "X-Canary: new" always gets the new version (pool-canary).
+        name: 'cs-canary-force'
+        properties: {
+          routingConditions: [
+            {
+              conditionType: 'Header'
+              propertyName: 'X-Canary'
+              propertyValueMatcher: {
+                pattern: '^new$'
               }
             }
           ]
@@ -666,6 +650,42 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
           }
         }
       }
+      {
+        // Port 8080 (whole port): default action splits 90% pool-web / 10% pool-canary.
+        name: canaryMapName
+        properties: {
+          advancedRoutingRules: [
+            {
+              name: 'force-new'
+              properties: {
+                priority: 10
+                advancedRoutingConditionSet: {
+                  id: '${gwId}/advancedRoutingConditionSets/cs-canary-force'
+                }
+                backendAddressPool: {
+                  id: '${gwId}/backendAddressPools/pool-canary'
+                }
+                backendHttpSettings: {
+                  id: '${gwId}/backendHttpSettingsCollection/hs-pool-web'
+                }
+              }
+            }
+          ]
+          defaultBackendAddressPoolsAndSettings: [
+            {
+              backendAddressPool: { id: '${gwId}/backendAddressPools/pool-web' }
+              backendHttpSettings: { id: '${gwId}/backendHttpSettingsCollection/hs-pool-web' }
+              weight: 90
+            }
+            {
+              backendAddressPool: { id: '${gwId}/backendAddressPools/pool-canary' }
+              backendHttpSettings: { id: '${gwId}/backendHttpSettingsCollection/hs-pool-web' }
+              weight: 10
+            }
+          ]
+          defaultPoolSelectionAlgorithm: 'WeightedDistribution'
+        }
+      }
     ]
     requestRoutingRules: [
       {
@@ -682,28 +702,18 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
-        // Basic rule on port 8080: every request on this port is split 90:10 (pool-web / pool-canary).
+        // Advanced rule on port 8080; all requests on this port use the canaryMap (90:10 default action).
         name: 'rule-canary'
-        properties: union({
-          ruleType: 'Basic'
+        properties: {
+          ruleType: 'AdvancedRouting'
           priority: 200
           httpListener: {
             id: '${gwId}/httpListeners/listener-canary'
           }
-          backendHttpSettings: {
-            id: '${gwId}/backendHttpSettingsCollection/hs-pool-web'
+          advancedRoutingMap: {
+            id: '${gwId}/advancedRoutingMaps/${canaryMapName}'
           }
-        }, weightedCanary ? {
-          // 90% pool-web / 10% pool-canary (whole port 8080)
-          loadDistributionPolicy: {
-            id: '${gwId}/loadDistributionPolicies/ld-canary-split'
-          }
-        } : {
-          // all port-8080 traffic goes to the new version until the weighted split is enabled
-          backendAddressPool: {
-            id: '${gwId}/backendAddressPools/pool-canary'
-          }
-        })
+        }
       }
     ]
   }
