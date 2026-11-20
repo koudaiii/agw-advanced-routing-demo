@@ -76,9 +76,9 @@ svg .l{text-anchor:start}
 <section id="arch"><h2>1. 全体構成</h2>
 
 <figure class="diagram">
-<svg viewBox="0 0 960 410" role="img" aria-labelledby="dg-t dg-d">
+<svg viewBox="0 0 960 460" role="img" aria-labelledby="dg-t dg-d">
 <title id="dg-t">デモ環境の全体構成</title>
-<desc id="dg-d">シミュレーター、デモ端末、Public IP (リスナー :80 / :8080 / :8090)、WAF、ポートごとのルーティングマップ (advancedRoutingMap1 / canaryMap / priorityMap)、VM 1 (pool-web、pool-partner、pool-tenant、pool-api-v2、pool-mobile、pool-standby) と VM 2 (pool-canary、pool-primary) の関係</desc>
+<desc id="dg-d">シミュレーター、デモ端末、Public IP (リスナー :80 / :8080 / :8090 / :8100)、WAF、ポートごとのルーティングマップ (advancedRoutingMap1 / canaryMap / priorityMap / abMap)、VM 1 (pool-web、pool-partner、pool-tenant、pool-api-v2、pool-mobile、pool-standby、pool-A) と VM 2 (pool-canary、pool-primary、pool-B) の関係</desc>
 <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="ink"/></marker></defs>
 <rect x="10" y="20" width="190" height="110" rx="8" class="box"/>
 <text x="105" y="46" class="h">シミュレーター</text>
@@ -97,10 +97,12 @@ svg .l{text-anchor:start}
 <text x="330" y="92">リスナー :80 (Basic)</text>
 <text x="330" y="110">リスナー :8080 (Basic)</text>
 <text x="330" y="128">リスナー :8090 (Basic)</text>
-<text x="330" y="162" class="h">Advanced ルール</text>
-<text x="330" y="182">rule1 → :80</text>
-<text x="330" y="200">rule-canary → :8080</text>
-<text x="330" y="218">rule-priority → :8090</text>
+<text x="330" y="146">リスナー :8100 (Basic)</text>
+<text x="330" y="170" class="h">Advanced ルール</text>
+<text x="330" y="190">rule1 → :80</text>
+<text x="330" y="208">rule-canary → :8080</text>
+<text x="330" y="226">rule-priority → :8090</text>
+<text x="330" y="244">rule-ab → :8100</text>
 <path d="M200 210 H245" class="ln" marker-end="url(#ar)"/>
 <rect x="450" y="70" width="120" height="110" rx="8" class="box"/>
 <text x="510" y="96" class="h">WAF</text>
@@ -121,9 +123,14 @@ svg .l{text-anchor:start}
 <text x="675" y="210" class="h">priorityMap :8090</text>
 <text x="675" y="230">priority-split</text>
 <text x="675" y="248">Primary 1 / Standby 2</text>
+<rect x="600" y="280" width="150" height="70" rx="8" class="box"/>
+<text x="675" y="300" class="h">abMap :8100</text>
+<text x="675" y="320">ab-variant-b (X-Variant: B)</text>
+<text x="675" y="338">既定: pool-A</text>
 <path d="M570 125 L600 45" class="ln" marker-end="url(#ar)"/>
 <path d="M570 125 H600" class="ln" marker-end="url(#ar)"/>
 <path d="M570 125 L600 225" class="ln" marker-end="url(#ar)"/>
+<path d="M570 125 L600 315" class="ln" marker-end="url(#ar)"/>
 <rect x="800" y="10" width="150" height="250" rx="8" class="box" style="fill:none;stroke-dasharray:6 4"/>
 <text x="875" y="30" class="h">VM 1</text>
 <text x="875" y="46">192.168.1.10</text>
@@ -134,20 +141,27 @@ svg .l{text-anchor:start}
 <text x="875" y="158" class="m">pool-mobile :8085</text>
 <text x="875" y="180" class="m">pool-standby :8080</text>
 <text x="875" y="198">← :8090 Standby</text>
-<rect x="800" y="280" width="150" height="120" rx="8" class="box" style="fill:none;stroke-dasharray:6 4"/>
+<text x="875" y="220" class="m">pool-A :8080</text>
+<text x="875" y="238">← :8100 変種 A</text>
+<rect x="800" y="280" width="150" height="170" rx="8" class="box" style="fill:none;stroke-dasharray:6 4"/>
 <text x="875" y="300" class="h">VM 2</text>
 <text x="875" y="316">192.168.1.11</text>
 <text x="875" y="342" class="m">pool-canary :8080</text>
 <text x="875" y="364" class="m">pool-primary :8080</text>
 <text x="875" y="382">← :8090 Primary</text>
+<text x="875" y="404" class="m">pool-B :8080</text>
+<text x="875" y="422">← :8100 変種 B</text>
 <path d="M750 45 C775 45,775 120,800 120" class="ln" marker-end="url(#ar)"/>
-<path d="M750 125 C775 125,775 150,800 170" class="ln" marker-end="url(#ar)"/>
-<path d="M750 125 C775 125,775 320,800 320" class="ln" marker-end="url(#ar)"/>
-<path d="M750 225 C775 225,775 340,800 340" class="ln" marker-end="url(#ar)"/>
-<path d="M750 225 C775 225,775 190,800 190" class="ln" marker-end="url(#ar)"/>
+<path d="M750 135 C775 135,775 70,800 70" class="ln" marker-end="url(#ar)"/>
+<path d="M750 135 C775 135,775 342,800 342" class="ln" marker-end="url(#ar)"/>
+<path d="M750 225 C775 225,775 180,800 180" class="ln" marker-end="url(#ar)"/>
+<path d="M750 225 C775 225,775 364,800 364" class="ln" marker-end="url(#ar)"/>
+<path d="M750 315 C775 315,775 220,800 220" class="ln" marker-end="url(#ar)"/>
+<path d="M750 315 C775 315,775 404,800 404" class="ln" marker-end="url(#ar)"/>
 <text x="10" y="300" class="l">実線: 通信。点線: 設定・操作の対応関係。</text>
 <text x="10" y="318" class="l">VM 2 の pool-canary を止めると、8090 番は Standby (VM 1) に切り替わる。</text>
 <text x="10" y="336" class="l">8080 番は、pool-web (VM 1) 90% と pool-canary (VM 2) 10%。</text>
+<text x="10" y="354" class="l">8100 番 (A/B): X-Variant: B → pool-B (VM 2)、それ以外 → pool-A (VM 1)。</text>
 </svg>
 <figcaption>図 1. 構成。VM 1 と VM 2 は枠で分けています。実線は実際の通信、点線は設定・操作の対応関係。</figcaption>
 </figure>
@@ -269,11 +283,11 @@ DynamicUser=yes</code></pre>
 <tr><td>カナリア VM 2</td><td>固定 IP 192.168.1.11。Node.js プロセス × 1 (<code>pool-canary</code>、ポート 8080)</td></tr>
 <tr><td>WAF ポリシー</td><td>Prevention、DRS 2.1。カスタムルール <code>BlockDemoIp</code> (送信元 IP)、<code>BlockDemoUA</code> (User-Agent に <code>agw-block-demo</code> を含む要求を遮断)</td></tr>
 <tr><td>NAT Gateway</td><td>backend サブネットに関連付け (StandardV2、専用の StandardV2 public IP)。バックエンド VM の外向き通信 (apt など) に使う。バックエンド VM には public IP を付けず、サブネットはプライベート (既定の外向き IP なし)</td></tr>
-<tr><td>Application Gateway (WAF_v2)</td><td>リスナー <code>listener-http</code> (:80)、<code>listener-canary</code> (:8080)、<code>listener-priority</code> (:8090)。ルール <code>rule1</code> (Advanced、:80)、<code>rule-canary</code> (Advanced、:8080、マップ <code>canaryMap</code>)、<code>rule-priority</code> (Advanced、:8090、マップ <code>priorityMap</code>)</td></tr>
-<tr><td>プローブ・プール・バックエンド設定</td><td>プローブ <code>healthz</code>。プール 6 つ (<code>pool-web</code>、<code>pool-partner</code>、<code>pool-tenant</code>、<code>pool-api-v2</code>、<code>pool-canary</code>、<code>pool-mobile</code>) と、それぞれのバックエンド設定 <code>hs-&lt;pool&gt;</code></td></tr>
+<tr><td>Application Gateway (WAF_v2)</td><td>リスナー <code>listener-http</code> (:80)、<code>listener-canary</code> (:8080)、<code>listener-priority</code> (:8090)、<code>listener-ab</code> (:8100)。ルール <code>rule1</code> (Advanced、:80、マップ <code>advancedRoutingMap1</code>)、<code>rule-canary</code> (Advanced、:8080、マップ <code>canaryMap</code>)、<code>rule-priority</code> (Advanced、:8090、マップ <code>priorityMap</code>)、<code>rule-ab</code> (Advanced、:8100、マップ <code>abMap</code>)</td></tr>
+<tr><td>プローブ・プール・バックエンド設定</td><td>プローブ <code>healthz</code>。プール 6 つ (<code>pool-web</code>、<code>pool-partner</code>、<code>pool-tenant</code>、<code>pool-api-v2</code>、<code>pool-canary</code>、<code>pool-mobile</code>) と、それぞれのバックエンド設定 <code>hs-&lt;pool&gt;</code>。加えて、優先度ベース用の <code>pool-primary</code> / <code>pool-standby</code> と、A/B テスト用の <code>pool-A</code> / <code>pool-B</code> (それぞれ既存の VM のプロセスを指す)</td></tr>
 <tr><td>リダイレクト</td><td><code>redirect-campaign</code>: 302、<code>https://www.contoso.com/campaign</code> へ。クエリ文字列を引き継ぐ</td></tr>
-<tr><td>条件セット</td><td><code>cs-partner</code>、<code>cs-tenant</code>、<code>cs-apiv2</code>、<code>cs-campaign</code>、<code>cs-mobile</code> の 5 つ</td></tr>
-<tr><td>Advanced routing map</td><td><code>advancedRoutingMap1</code>。既定プール <code>pool-web</code>。ルールは優先度順に partner (10)、tenant (20)、api-v2 (30)、campaign (40)、mobile (60)</td></tr>
+<tr><td>条件セット</td><td><code>cs-partner</code>、<code>cs-tenant</code>、<code>cs-apiv2</code>、<code>cs-campaign</code>、<code>cs-mobile</code>、<code>cs-ab-variant-b</code> (ポート 8100 の abMap) の 6 つ</td></tr>
+<tr><td>Advanced routing map</td><td><code>advancedRoutingMap1</code>。既定プール <code>pool-web</code>。ルールは優先度順に partner (10)、tenant (20)、api-v2 (30)、campaign (40)、mobile (60)。ポート 8100 のマップ <code>abMap</code> は ab-variant-b (10) → pool-B、既定 pool-A</td></tr>
 <tr><td>カナリアの重み付け</td><td>マップ <code>canaryMap</code> のルール <code>canary-split</code> (パス <code>^/</code> の全リクエスト): pool-web 90 : pool-canary 10 (<code>WeightedDistribution</code>)。マップの既定は pool-canary</td></tr>
 <tr><td>優先度ベースの振り分け (ポート 8090)</td><td>リスナー <code>listener-priority</code> (:8090)、Advanced ルール <code>rule-priority</code> (優先度 300) → マップ <code>priorityMap</code> のルール <code>priority-split</code> (全パス): <code>pool-primary</code> (VM 2、優先度 1) → <code>pool-standby</code> (VM 1、優先度 2)、<code>PriorityAware</code>、最小正常割合 60%。既定は <code>pool-standby</code></td></tr>
 </tbody></table>
@@ -310,6 +324,21 @@ DynamicUser=yes</code></pre>
              正常ならここへ              Primary が条件を満たさないとき</code></pre>
 <figcaption>図 4. ポート 8090 の優先度ベースの流れ (VM 2 が止まると Standby に切り替わる)。</figcaption>
 </figure>
+<figure class="diagram"><pre><code>client --:8100--&gt; listener-ab --&gt; rule-ab (Advanced)
+                                    |
+                                    v   マップ abMap
+                          rule: ab-variant-b (ヘッダー X-Variant = B)
+                                    |
+                 +------------------+------------------+
+                 |                                     |
+        X-Variant: B (一致)                  それ以外 (既定 = 変種 A)
+                 |                                     |
+                 v                                     v
+        pool-B (VM2 :8080)                  pool-A (VM1 :8080)
+        = VM 2 の pool-canary               = VM 1 の pool-web
+        変種 B                              変種 A</code></pre>
+<figcaption>図 5. ポート 8100 の A/B テストの流れ (ヘッダー X-Variant で変種を決める)。</figcaption>
+</figure>
 
 <p class="note">Advanced routing rule は Basic リスナーにのみ関連付けできます (マルチサイト リスナーは非対応)。<code>rule1</code> と <code>rule-canary</code> は最初から Advanced で作られるため、後から切り替える手順はありません。</p>
 
@@ -326,6 +355,8 @@ API v2             HTTP 200  pool-api-v2
 カナリア (:8080)   HTTP 200  pool-canary
 キャンペーン       HTTP 302  redirect -&gt; https://www.contoso.com/campaign?...
 モバイル           HTTP 200  pool-mobile
+A/B 変種 A       HTTP 200  pool-web (pool-A)   ← :8100
+A/B 変種 B       HTTP 200  pool-canary (pool-B) ← :8100
 WAF ブロック (UA)  HTTP 403</code></pre>
 <p class="note">上は <code>test.sh</code> の出力の例です。カナリアの行は、8080 番の振り分け (90:10) の 1 回分なので、pool-web と pool-canary のどちらにもなります。</p>
 <h4>優先度ベース (ポート 8090) の確認</h4>
@@ -342,6 +373,15 @@ FRONTEND=&lt;フロントエンド IP&gt;:8090 ./canary-check.sh /app/home 100  
 停止後   100 件すべて pool-web    (Standby = VM 1)
 復旧後   100 件すべて pool-canary (Primary = VM 2)</code></pre>
 <p class="note">停止後の切り替えには約 2〜3 分かかります。直後に確認すると、まだ pool-canary が返ることがあります。</p>
+<h4>A/B テスト (ポート 8100) の確認</h4>
+<p>8100 番の <code>abMap</code> は、ヘッダー <code>X-Variant: B</code> の要求を <code>pool-B</code> (変種 B、VM 2 の 8080 番) に送り、それ以外は既定の <code>pool-A</code> (変種 A、VM 1 の 8080 番) に送ります。<code>x-backend-pool</code> はプロセス名なので、変種 A は <code>pool-web</code>、変種 B は <code>pool-canary</code> と表示されます。</p>
+<pre><code>curl -s -D - -o /dev/null http://&lt;フロントエンド IP&gt;:8100/ | grep -i x-backend-pool
+curl -s -D - -o /dev/null -H "X-Variant: A" http://&lt;フロントエンド IP&gt;:8100/ | grep -i x-backend-pool
+curl -s -D - -o /dev/null -H "X-Variant: B" http://&lt;フロントエンド IP&gt;:8100/ | grep -i x-backend-pool</code></pre>
+<pre><code>変種ヘッダーなし  x-backend-pool: pool-web     (pool-A、変種 A)
+X-Variant: A      x-backend-pool: pool-web     (pool-A、変種 A)
+X-Variant: B      x-backend-pool: pool-canary  (pool-B、変種 B)</code></pre>
+<p class="note">ポート 80 の <code>/ab</code> には A/B のルールがありません。A/B のテストは、必ず 8100 番を使います。</p>
 <h3>4.3 ポータルでヘッダーベースのルールを手動で作る (チュートリアルの手順)</h3>
 <p>Microsoft Learn の <a href="https://learn.microsoft.com/ja-jp/azure/application-gateway/configure-advanced-routing-rule">チュートリアル: Azure ポータルで Application Gateway の Advanced Rules を使ってヘッダーベースのルーティングを設定する</a> の手順です。このデモは <code>deploy.sh</code> が作るため、通常は不要です。ポータルの操作を確かめるときに使います。</p>
 <p class="note">ポータルの「アプリケーション ゲートウェイの作成」では Advanced ルールを設定できません。基本ルールで作成した後に、基本ルールを Advanced に変更します。</p>
@@ -417,6 +457,7 @@ if (req.method === &quot;OPTIONS&quot; &amp;&amp; req.headers[&quot;access-contr
 <tr><td>7</td><td>User-Agent による振り分け</td><td>「モバイル」→ pool-mobile (ブラウザーは User-Agent を送れないため、実機の応答は既定の pool-web になる)</td><td><code>curl -i -A "Mozilla/5.0 (iPhone; ...)" http://&lt;IP&gt;/app/home</code> → pool-mobile</td></tr>
 <tr><td>8</td><td>カナリア (ポート 8080)</td><td>「カナリア (ポート 8080)」→ 重み付けの予測 (90:10)</td><td><code>FRONTEND=&lt;IP&gt;:8080 ./canary-check.sh /app/home 100</code> → pool-web 約 90 件、pool-canary 約 10 件 (実機確認: 91 / 9)</td></tr>
 <tr><td>9</td><td>優先度ベース (ポート 8090)</td><td>「優先度 (ポート 8090)」→ Primary (VM 2) が正常なら Primary、停止していれば Standby (VM 1)</td><td><code>FRONTEND=&lt;IP&gt;:8090 ./canary-check.sh /app/home 100</code> → 正常時は pool-canary (VM 2)。VM 2 の <code>agw-pool@pool-canary</code> を止めて 2〜3 分後は pool-web (VM 1)。確認後は起動して戻す</td></tr>
+<tr><td>10</td><td>A/B テスト (変種 A / B)</td><td>「A/B (変種 A)」「A/B (変種 B)」→ 変種 A は pool-A (VM 1 の pool-web)、変種 B は pool-B (VM 2 の pool-canary)</td><td><code>curl -H "X-Variant: B" http://&lt;IP&gt;:8100/</code> → pool-canary。ヘッダーなし、または <code>X-Variant: A</code> → pool-web</td></tr>
 </tbody></table>
 <p class="note">カナリアは、ポート 8080 の全リクエストを pool-web 90% / pool-canary 10% に振り分けます (高度なルール <code>canary-split</code>)。件数が少ないと期待値から外れるため、100 件以上で確認してください。</p>
 </section>
