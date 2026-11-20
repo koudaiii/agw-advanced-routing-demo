@@ -16,7 +16,7 @@ param wafBlockCidr string = '198.51.100.0/24'
 param sshPublicKey string
 
 @description('Static private IP of the backend VM inside the backend subnet.')
-param backendIp string = '192.168.1.10'
+param vm1Ip string = '192.168.1.10'
 
 var vnetName = '${prefix}-vnet'
 var nsgName = '${prefix}-backend-nsg'
@@ -27,16 +27,17 @@ var gwName = '${prefix}-agw'
 var gwPipName = '${gwName}-pip'
 var mapName = 'advancedRoutingMap1'
 var canaryMapName = 'canaryMap'
+var priorityMapName = 'priorityMap'
 // The new version (pool-canary) runs on its own VM, on port 8080 like pool-web. The weighted /canary split
 // needs both pools to share one backend HTTP setting, so they must use the same port.
-var canaryIp = '192.168.1.11'
+var vm2Ip = '192.168.1.11'
 var canaryVmName = '${vmName}-canary'
 var poolAddressPools = [for p in pools: {
   name: p.name
   properties: {
     backendAddresses: [
       {
-        ipAddress: p.name == 'pool-canary' ? canaryIp : backendIp
+        ipAddress: p.name == 'pool-canary' ? vm2Ip : vm1Ip
       }
     ]
   }
@@ -143,7 +144,7 @@ resource nic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
             id: backendSubnetId
           }
           privateIPAllocationMethod: 'Static'
-          privateIPAddress: backendIp
+          privateIPAddress: vm1Ip
         }
       }
     ]
@@ -216,7 +217,7 @@ resource canaryNic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
             id: backendSubnetId
           }
           privateIPAllocationMethod: 'Static'
-          privateIPAddress: canaryIp
+          privateIPAddress: vm2Ip
         }
       }
     ]
@@ -392,10 +393,17 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
-        // Weighted canary split (Basic/path-based rule). Advanced rules (port 80) support one pool per rule only.
+        // Port 8080: canary rule (advanced rule, weighted 90:10 pool split).
         name: 'port-8080'
         properties: {
           port: 8080
+        }
+      }
+      {
+        // Port 8090: priority-based selection (pool-canary first, pool-web when pool-canary is unhealthy).
+        name: 'port-8090'
+        properties: {
+          port: 8090
         }
       }
     ]
@@ -419,7 +427,29 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
     ]
-    backendAddressPools: poolAddressPools
+    backendAddressPools: concat(poolAddressPools, [
+      {
+        // #50 priority-based selection: primary = VM 2 (canary VM), standby = VM 1 (backend VM).
+        name: 'pool-primary'
+        properties: {
+          backendAddresses: [
+            {
+              ipAddress: vm2Ip
+            }
+          ]
+        }
+      }
+      {
+        name: 'pool-standby'
+        properties: {
+          backendAddresses: [
+            {
+              ipAddress: vm1Ip
+            }
+          ]
+        }
+      }
+    ])
     backendHttpSettingsCollection: [
       for p in pools: {
         name: 'hs-${p.name}'
@@ -455,6 +485,18 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
           }
           frontendPort: {
             id: '${gwId}/frontendPorts/port-8080'
+          }
+          protocol: 'Http'
+        }
+      }
+      {
+        name: 'listener-priority'
+        properties: {
+          frontendIPConfiguration: {
+            id: '${gwId}/frontendIPConfigurations/fe-ip'
+          }
+          frontendPort: {
+            id: '${gwId}/frontendPorts/port-8090'
           }
           protocol: 'Http'
         }
@@ -551,6 +593,20 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
       {
         // Port 8080 only: matches every request (all paths), so the canary split applies to the whole port.
         name: 'cs-canary-split'
+        properties: {
+          routingConditions: [
+            {
+              conditionType: 'Path'
+              propertyValueMatcher: {
+                pattern: '^/'
+              }
+            }
+          ]
+        }
+      }
+      {
+        // Port 8090 only: matches every request (all paths).
+        name: 'cs-priority-all'
         properties: {
           routingConditions: [
             {
@@ -685,6 +741,44 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
           }
         }
       }
+      {
+        // Port 8090: Primary pool (priority 1, VM 2) is used while it has >= 60% healthy servers;
+        // otherwise the Standby pool (priority 2, VM 1) takes over. Each pool here has one server.
+        name: priorityMapName
+        properties: {
+          advancedRoutingRules: [
+            {
+              name: 'priority-split'
+              properties: {
+                priority: 10
+                advancedRoutingConditionSet: {
+                  id: '${gwId}/advancedRoutingConditionSets/cs-priority-all'
+                }
+                backendAddressPoolsAndSettings: [
+                  {
+                    backendAddressPool: { id: '${gwId}/backendAddressPools/pool-primary' }
+                    backendHttpSettings: { id: '${gwId}/backendHttpSettingsCollection/hs-pool-web' }
+                    priority: 1
+                  }
+                  {
+                    backendAddressPool: { id: '${gwId}/backendAddressPools/pool-standby' }
+                    backendHttpSettings: { id: '${gwId}/backendHttpSettingsCollection/hs-pool-web' }
+                    priority: 2
+                  }
+                ]
+                poolSelectionAlgorithm: 'PriorityAware'
+                minimumHealthyPercent: 60
+              }
+            }
+          ]
+          defaultBackendAddressPool: {
+            id: '${gwId}/backendAddressPools/pool-standby'
+          }
+          defaultBackendHttpSettings: {
+            id: '${gwId}/backendHttpSettingsCollection/hs-pool-web'
+          }
+        }
+      }
     ]
     requestRoutingRules: [
       {
@@ -714,6 +808,20 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
           }
         }
       }
+      {
+        // Port 8090: priority-based selection (see priorityMap).
+        name: 'rule-priority'
+        properties: {
+          ruleType: 'AdvancedRouting'
+          priority: 300
+          httpListener: {
+            id: '${gwId}/httpListeners/listener-priority'
+          }
+          advancedRoutingMap: {
+            id: '${gwId}/advancedRoutingMaps/${priorityMapName}'
+          }
+        }
+      }
     ]
   }
   dependsOn: [
@@ -724,4 +832,4 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
 }
 
 output frontendIp string = gwPip.properties.ipAddress
-output backendPrivateIp string = backendIp
+output vm1PrivateIp string = vm1Ip

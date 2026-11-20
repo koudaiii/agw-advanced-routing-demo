@@ -156,6 +156,21 @@ ol.rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
         <button type="button" id="addHeader" class="small" style="margin-block-start:6px">＋ ヘッダーを追加</button>
       </fieldset>
       <button type="submit" class="primary" id="sendBtn">要求を送信</button>
+      <div class="stack" id="testBox" style="border-top:1px solid var(--line-soft);padding-top:12px">
+        <h3 style="margin:0">実機へのテスト要求 (件数分)</h3>
+        <p class="note">ゲートウェイ URL に、上の要求 (プリセットのポート) を件数分送り、どのプールに届いたかを数えます。</p>
+        <div style="inline-size:110px"><label for="testN">件数</label><input id="testN" type="number" min="1" max="1000" value="100" class="mono"></div>
+        <button type="button" id="testBtn" class="primary small">テスト要求を送る</button>
+        <span class="note" id="testState"></span>
+        <div class="err" style="border-left:3px solid var(--line-soft);padding-left:10px">
+          <p style="margin:0"><strong>優先度ベースを実機で試す前に、VM 2 の pool-canary を手動で止めてください。</strong> 止めないと、優先度 1 の Primary (VM 2) に送られ続け、Standby (VM 1) への切り替えは見えません。</p>
+          <p style="margin:6px 0 0">停止 (Azure CLI):</p>
+          <pre class="mono" style="white-space:pre-wrap">az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"</pre>
+          <p style="margin:6px 0 0">復帰 (テスト後に戻す。復旧させると、また Primary (VM 2) に要求が送られます):</p>
+          <pre class="mono" style="white-space:pre-wrap">az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-canary"</pre>
+        </div>
+        <div id="testResult" class="stack"></div>
+      </div>
     </form>
     <section class="card" aria-labelledby="histH">
       <h2 id="histH">送信履歴</h2>
@@ -280,6 +295,7 @@ const PRESETS = [
   ["キャンペーン", () => req("GET", "/landing", "campaign=summer&utm=mail", "192.0.2.41", [["User-Agent", DESKTOP_UA]])],
   ["モバイル", () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X)"]]), uaSensitive: true })],
   ["カナリア (ポート 8080)", () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]]), port: 8080 })],
+  ["優先度 (ポート 8090)", () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]]), port: 8090 })],
   ["WAF ブロック", () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", "agw-block-demo"]]), uaSensitive: true })],
 ];
 
@@ -392,6 +408,7 @@ function evaluate(cfg, r) {
     if (hitUA) return { path, results: order.map(({ i }) => ({ i, status: "skip", conds: [] })), d: { kind: "waf", cidr: `User-Agent: ${hitUA}` } };
   }
   if (r.port === 8080) return { path, results: order.map(({ i }) => ({ i, status: "skip", conds: [] })), d: { kind: "weighted", port: 8080 } };
+  if (r.port === 8090) return { path, results: order.map(({ i }) => ({ i, status: "skip", conds: [] })), d: { kind: "priority", port: 8090 } };
   let d = null;
   const results = order.map(({ r: rule, i }) => {
     if (d) return { i, status: "skip", conds: [] };
@@ -402,10 +419,15 @@ function evaluate(cfg, r) {
   });
   return { path, results, d: d || { kind: "default", pool: cfg.defaultPool } };
 }
-const pool = (id) => POOLS.find((p) => p.id === id) || { id, label: id, port: 0, color: "#334155" };
+const pool = (id) => POOLS.find((p) => p.id === id) || { id, label: id, port: 0, color: PRIORITY_COLOR[id] || "#334155" };
+// 優先度ベース (8090): Primary = VM 2 (実体のプロセス pool-canary)、Standby = VM 1 (実体 pool-web)
+const PRIORITY_COLOR = { "pool-primary": "#b45309", "pool-standby": "#475569" };
+const PRIORITY_NAME_ON_8090 = { "pool-canary": "pool-primary", "pool-web": "pool-standby" };
+function gatewayPoolName(processPool, port) { return Number(port) === 8090 && PRIORITY_NAME_ON_8090[processPool] ? PRIORITY_NAME_ON_8090[processPool] : processPool; }
 function describe(d, cfg) {
   if (d.kind === "waf") return `WAF がブロック (${d.cidr}) — ルーティング評価なし`;
   if (d.kind === "weighted") return `ポート ${d.port} は重み付け (既定 pool-web 90% / pool-canary 10%)。1 件の経路は確率で決まります`;
+  if (d.kind === "priority") return `ポート ${d.port} は優先度ベース。Primary (VM 2) が最小正常割合 60% 以上なら Primary、そうでなければ Standby (VM 1) に送ります`;
   if (d.kind === "pool") return `「${cfg.rules[d.i].name}」に一致 → ${pool(d.pool).label} (${d.pool})`;
   if (d.kind === "redirect") return `「${cfg.rules[d.i].name}」に一致 → ${d.url} へリダイレクト`;
   return `一致ルールなし → 既定プール ${pool(d.pool).label} (${d.pool})`;
@@ -441,7 +463,7 @@ const state = {
 function routeColorOf(d) {
   if (!d) return "var(--primary)";
   if (d.kind === "waf") return "#a4493a";
-  if (d.kind === "weighted") return POOLS[0].color;
+  if (d.kind === "weighted" || d.kind === "priority") return POOLS[0].color;
   if (d.kind === "pool" || d.kind === "default") { const p = POOLS.find((x) => x.id === d.pool); return p ? p.color : "var(--primary)"; }
   return "var(--primary)";
 }
@@ -529,7 +551,8 @@ async function callGateway(r) {
     if (res.type === "opaqueredirect") return { kind: "redirect", ms, skipped, url };
     let body = null;
     if (r.method !== "HEAD" && (res.headers.get("content-type") || "").includes("json")) { try { body = await res.json(); } catch (e) { body = null; } }
-    return { kind: "response", status: res.status, statusText: res.statusText, pool: res.headers.get("x-backend-pool"), body, ms, skipped, url };
+    const processPool = res.headers.get("x-backend-pool");
+    return { kind: "response", status: res.status, statusText: res.statusText, pool: gatewayPoolName(processPool, r.port), rawPool: processPool, port: r.port, body, ms, skipped, url };
   } catch (e) {
     return { kind: "error", message: ctl.signal.aborted ? "10 秒以内に応答がありませんでした" : "応答を読めませんでした (WAF のブロック、CORS 未設定、URL 誤り、混在コンテンツのいずれか)", skipped, url };
   } finally { clearTimeout(timer); }
@@ -580,7 +603,7 @@ async function send() {
   state.history = state.history.slice(0, 8);
   renderHistory();
 }
-function tones(d) { return d.kind === "waf" ? ["b-err", "WAF"] : d.kind === "weighted" ? ["b-info", "90:10"] : d.kind === "redirect" ? ["b-info", "302"] : d.kind === "default" ? ["b-warn", "既定"] : ["b-ok", "一致"]; }
+function tones(d) { return d.kind === "waf" ? ["b-err", "WAF"] : d.kind === "weighted" ? ["b-info", "90:10"] : d.kind === "priority" ? ["b-info", "優先度"] : d.kind === "redirect" ? ["b-info", "302"] : d.kind === "default" ? ["b-warn", "既定"] : ["b-ok", "一致"]; }
 function liveSummary(l) {
   if (!l) return "";
   if (l.kind === "pending") return "送信中";
@@ -591,7 +614,7 @@ function liveSummary(l) {
 }
 function verdict() {
   const l = state.live, d = state.ev && state.ev.d;
-  if (!l || !d || l.kind === "pending" || l.kind === "opaque" || d.kind === "weighted") return null;
+  if (!l || !d || l.kind === "pending" || l.kind === "opaque" || d.kind === "weighted" || d.kind === "priority") return null;
   let same;
   if (d.kind === "waf") same = l.kind === "error" || (l.kind === "response" && l.status === 403);
   else if (d.kind === "redirect") same = l.kind === "redirect" || (l.kind === "response" && l.status >= 300 && l.status < 400);
@@ -603,23 +626,54 @@ function verdict() {
 function renderDiagram() {
   const svg = $("diagram"); svg.replaceChildren();
   const ev = state.ev, d = ev && ev.d, cfg = state.config;
-  const targets = POOLS.map((p) => ({ id: p.id, t: p.id + (p.id === cfg.defaultPool ? " (既定)" : ""), sub: `:${p.port} ${p.label}` })).concat([{ id: "__redirect", t: "リダイレクト", sub: "302 応答" }]);
-  const rowH = 42, top = 12, H = top * 2 + targets.length * rowH, mid = H / 2;
+  // 優先度ベース (8090) の Primary (VM 2) と Standby (VM 1) は、どの経路図でも常に独立したプールとして先頭に出す
+  const priorityPools = [
+    { id: "pool-primary", t: "pool-primary (Primary)", sub: "VM 2 :8080 ・優先度 1", color: "#b45309" },
+    { id: "pool-standby", t: "pool-standby (Standby)", sub: "VM 1 :8080 ・優先度 2", color: "#475569" },
+  ];
+  const rowOf = (id) => {
+    const pp = priorityPools.find((x) => x.id === id);
+    if (pp) return pp;
+    const p = POOLS.find((x) => x.id === id);
+    return { id: p.id, t: p.id + (p.id === cfg.defaultPool ? " (既定)" : ""), sub: `:${p.port} ${p.label}` };
+  };
+  // VM ごとに枠で囲む: VM 2 = pool-primary と pool-canary、VM 1 = pool-standby と残りのプール
+  const vmGroups = [
+    { label: "VM 2 (192.168.1.11)", rows: ["pool-primary", "pool-canary"].map(rowOf) },
+    { label: "VM 1 (192.168.1.10)", rows: ["pool-standby", "pool-web", "pool-partner", "pool-tenant", "pool-api-v2", "pool-mobile"].map(rowOf) },
+  ];
+  const rowH = 42, groupGap = 14, frameHead = 26;
+  const frames = [];
+  let cursor = 10;
+  for (const g of vmGroups) {
+    const y0 = cursor, rowStart = y0 + frameHead;
+    g.rows.forEach((t, i) => { t.y = rowStart + i * rowH + rowH / 2; });
+    const y1 = rowStart + g.rows.length * rowH + 4;
+    frames.push({ label: g.label, x: 632, y: y0, w: 226, h: y1 - y0 });
+    cursor = y1 + groupGap;
+  }
+  const redirect = { id: "__redirect", t: "リダイレクト", sub: "302 応答", y: cursor + rowH / 2 };
+  const targets = vmGroups.flatMap((g) => g.rows).concat([redirect]);
+  const H = cursor + rowH + 10, mid = H / 2;
   svg.setAttribute("viewBox", `0 0 860 ${H}`);
   const summary = ev ? describe(d, cfg) : "テスト要求を送信すると経路が表示されます";
   svg.append(s("title", { id: "dgT" }, "要求のルーティング経路図"), s("desc", { id: "dgD" }, summary));
   const on = !!ev, blocked = d && d.kind === "waf";
   const active = d && (d.kind === "pool" || d.kind === "default") ? d.pool : null;
-  const weighted = !!(d && d.kind === "weighted");
-  const hitSet = weighted ? new Set(["pool-web", "pool-canary"]) : new Set(active ? [active] : []);
+  const weighted = !!(d && (d.kind === "weighted" || d.kind === "priority"));
+  const priority = !!(d && d.kind === "priority");
+  // 優先度ベース: Primary (pool-canary、VM 2) が正常なら命中。停止していれば Standby (pool-web、VM 1)
+  const hitSet = priority ? new Set(["pool-primary"]) : weighted ? new Set(["pool-web", "pool-canary"]) : new Set(active ? [active] : []);
   const st = (x) => (x ? "var(--primary)" : "var(--line)");
   // 経路の左側（クライアント → リスナー → WAF → マップ）は、命中した最初の行き先のプールの色で描く
   const routeColor = routeColorOf(d);
   const stages = [
     { x: 8, l: "クライアント", sub: isLive() ? "このブラウザー" : "", on },
-    { x: 148, l: "Basic リスナー", sub: weighted ? ":8080 (カナリア)" : ":80", on },
+    { x: 148, l: "Basic リスナー", sub: d && d.kind === "priority" ? ":8090 (優先度)" : weighted ? ":8080 (カナリア)" : ":80", on },
     { x: 288, l: "WAF", sub: blocked ? "403 で遮断" : cfg.waf.enabled ? "ポリシー有効" : "無効", on: on && !blocked, bad: blocked },
-    weighted
+    priority
+      ? { x: 428, l: "優先度ルール", sub: "Primary 1 / Standby 2", on: on && !blocked }
+      : weighted
       ? { x: 428, l: "重み付けルール", sub: "web 90 : canary 10", on: on && !blocked }
       : { x: 428, l: "Advanced Routing Map", sub: `ルール ${cfg.rules.length} 件`, on: on && !blocked },
   ];
@@ -629,10 +683,14 @@ function renderDiagram() {
     svg.append(s("text", { x: g.x + 60, y: mid - 3, "text-anchor": "middle", "font-size": g.l.length > 12 ? 9.5 : 12.5, "font-weight": 700, fill: "var(--fg)" }, g.l));
     svg.append(s("text", { x: g.x + 60, y: mid + 14, "text-anchor": "middle", "font-size": 10.5, fill: "var(--fg)" }, g.sub));
   });
-  targets.forEach((t, i) => {
-    const y = top + i * rowH + rowH / 2;
+  frames.forEach((f) => {
+    svg.append(s("rect", { x: f.x, y: f.y, width: f.w, height: f.h, rx: 10, fill: "none", stroke: "var(--line)", "stroke-width": 1.5, "stroke-dasharray": "5 4" }));
+    svg.append(s("text", { x: f.x + 10, y: f.y + 17, "font-size": 12, "font-weight": 700, fill: "var(--fg)" }, f.label));
+  });
+  targets.forEach((t) => {
+    const y = t.y;
     const hit = (t.id === "__redirect" && d && d.kind === "redirect") || hitSet.has(t.id);
-    const p = POOLS.find((x) => x.id === t.id);
+    const p = t.color ? { color: t.color } : POOLS.find((x) => x.id === t.id);
     svg.append(s("path", { d: `M548 ${mid} C 600 ${mid}, 600 ${y}, 650 ${y}`, fill: "none", stroke: hit && p ? p.color : st(hit), "stroke-width": hit ? 3 : 1, "stroke-dasharray": t.id === "__redirect" ? "5 4" : "none" }));
     svg.append(s("rect", { x: 650, y: y - 17, width: 202, height: 34, rx: 6, fill: hit ? (p ? p.color : "var(--primary)") : "var(--card)", stroke: hit ? (p ? p.color : "var(--primary)") : "var(--line)", "stroke-width": hit ? 2 : 1 }));
     svg.append(s("text", { x: 660, y: y - 2, "font-size": 11.5, "font-weight": 700, fill: hit ? "#ffffff" : "var(--fg)" }, t.t));
@@ -663,6 +721,7 @@ function renderSim() {
   const d = state.ev.d, r = state.sent;
   if (d.kind === "waf") { out.append(statusBlock(403, "Forbidden", "WAF がブロックしたため、バックエンドには届きません。")); return; }
   if (d.kind === "weighted") { out.append(statusBlock("—", "", "ポート 8080 の重み付けのため、1 件では pool-web か pool-canary のどちらかに確率で決まります。100 件の割合は canary-check.sh で確認します。")); return; }
+  if (d.kind === "priority") { out.append(statusBlock("—", "", "ポート 8090 は優先度ベース。Primary (VM 2) が正常なら Primary、停止していれば Standby (VM 1) に届きます。テスト要求で件数を送って確認します。")); return; }
   if (d.kind === "redirect") { const q = r.query.replace(/^\?/, ""); out.append(statusBlock(302, "Found", `Location: ${q ? `${d.url}?${q}` : d.url}`)); return; }
   const p = pool(d.pool);
   const hs = r.headers.filter((h) => h.name.trim()).map((h) => [h.name.trim().toLowerCase(), h.value]);
@@ -700,9 +759,9 @@ function renderLive() {
   const b = l.body;
   if (b && b.pool) {
     const hs = Object.entries(b.headers || {}).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : v]);
-    out.append(backendPage(pool(b.pool), b.method || "", b.path || "", new URLSearchParams(b.query || {}).toString(), hs, b.instance || ""));
+    out.append(backendPage(pool(gatewayPoolName(b.pool, l.port)), b.method || "", b.path || "", new URLSearchParams(b.query || {}).toString(), hs, b.instance || ""));
   } else {
-    out.append(statusBlock(l.status, l.statusText || "", l.pool ? `x-backend-pool: ${l.pool}` : "x-backend-pool ヘッダーなし (デモ用バックエンドではないか、CORS の Expose-Headers 未設定)"));
+    out.append(statusBlock(l.status, l.statusText || "", l.pool ? `x-backend-pool: ${l.pool}${l.rawPool && l.rawPool !== l.pool ? ` (VM のプロセス: ${l.rawPool})` : ""}` : "x-backend-pool ヘッダーなし (デモ用バックエンドではないか、CORS の Expose-Headers 未設定)"));
   }
   out.append(meta, skipped);
 }
@@ -1076,6 +1135,95 @@ function renderDistResult() {
   const n = Number($("distN").value);
   out.replaceChildren(distReport(d, simulate(d, n), n));
 }
+// Test requests (live): send N requests to the gateway port of the current preset.
+// Answers are kept in order. Results are shown 50 at a time (paging); cancel stops the requests not yet sent.
+const TEST_PAGE = 50;
+let testRun = null; // { seq, n, url, cancelled, finished, controller, page }
+function setTestButton(running) {
+  const b = $("testBtn");
+  b.textContent = running ? "キャンセル" : "テスト要求を送る (件数は上の件数)";
+  b.className = running ? "small" : "primary small";
+}
+async function runTestRequests() {
+  if (testRun && !testRun.finished) { // second press while running = cancel
+    testRun.cancelled = true; testRun.controller.abort();
+    $("testState").textContent = "キャンセル中…";
+    return;
+  }
+  const out = $("testResult"), state_ = $("testState");
+  if (!isLive()) { state_.textContent = "送信できません"; out.replaceChildren(el("p", { class: "err", text: "ゲートウェイ URL が空です。上の「ゲートウェイ URL」に入力すると、実機に送れます。" })); return; }
+  const port = Number(state.request.port) || 80;
+  const n = Number($("testN").value) || 100;
+  const u = new URL(normBase(state.backendUrl));
+  u.port = String(port);
+  const url = `${u.origin}/app/home`;
+  const run = { seq: new Array(n).fill(null), n, url, cancelled: false, finished: false, controller: new AbortController(), page: 1 };
+  testRun = run;
+  setTestButton(true);
+  state_.textContent = `送信中 0 / ${n} 件`;
+  out.replaceChildren(el("p", { class: "note", text: `${url} に ${n} 件送信中…` }));
+  try {
+    for (let done = 0; done < n && !run.cancelled; ) {
+      const batch = Math.min(10, n - done);
+      await Promise.all(Array.from({ length: batch }, (_, k) => {
+        const i = done + k;
+        return (async () => {
+          try {
+            const res = await fetch(url, { cache: "no-store", mode: "cors", redirect: "manual", signal: run.controller.signal });
+            run.seq[i] = { pool: gatewayPoolName(res.headers.get("x-backend-pool") || "(ヘッダーなし)", port), status: res.status };
+          } catch (e) {
+            run.seq[i] = run.cancelled ? { cancelled: true } : { error: (e && e.message) || "送信に失敗しました" };
+          }
+        })();
+      }));
+      done += batch;
+      state_.textContent = `送信中 ${done} / ${n} 件`;
+    }
+  } finally { run.finished = true; setTestButton(false); }
+  const sent = run.seq.filter(Boolean).length;
+  state_.textContent = run.cancelled ? `キャンセル (${sent} 件まで送信)` : "完了";
+  renderTestRun(run, 1);
+}
+function renderTestRun(run, page) {
+  const out = $("testResult");
+  run.page = page;
+  const pages = Math.max(1, Math.ceil(run.n / TEST_PAGE));
+  const answered = run.seq.filter((r) => r && r.pool).length;
+  const failed = run.seq.filter((r) => r && r.error).length;
+  const sent = run.seq.filter(Boolean).length;
+  const counts = new Map();
+  for (const r of run.seq) if (r && r.pool) counts.set(r.pool, (counts.get(r.pool) || 0) + 1);
+  const colorOf = (pool) => (POOLS.find((p) => p.id === pool) || {}).color || PRIORITY_COLOR[pool] || "#64748b";
+  const start = (page - 1) * TEST_PAGE, end = Math.min(run.n, start + TEST_PAGE);
+  const cells = [];
+  for (let i = start; i < end; i++) {
+    const r = run.seq[i];
+    let style, label, title;
+    if (!r) { style = "background:transparent;border:1px dashed #94a3b8;color:#64748b"; label = "未送信"; title = `${i + 1} 件目: 未送信`; }
+    else if (r.cancelled) { style = "background:transparent;border:1px dashed #94a3b8;color:#64748b"; label = "中止"; title = `${i + 1} 件目: 中止`; }
+    else if (r.error) { style = "background:#e2e8f0;color:#334155"; label = "失敗"; title = `${i + 1} 件目: 失敗 (${r.error})`; }
+    else { style = `background:${colorOf(r.pool)};color:#fff`; label = r.pool; title = `${i + 1} 件目: ${r.pool} (HTTP ${r.status})`; }
+    cells.push(el("span", { title, style: `display:inline-flex;flex-direction:column;justify-content:center;align-items:center;inline-size:70px;block-size:36px;margin:2px;border-radius:6px;font-size:10px;line-height:1.2;padding:1px;overflow:hidden;${style}` },
+      el("b", { text: `#${i + 1}` }), el("span", { text: label })));
+  }
+  const pager = el("div", { class: "row", style: "align-items:center;gap:10px;margin-block:6px" },
+    el("button", { type: "button", class: "small", disabled: page <= 1 ? true : null, text: "‹ 前へ", onclick: null }),
+    el("span", { class: "note", text: `${start + 1}–${end} / ${run.n} 件 (${page} / ${pages} ページ)` }),
+    el("button", { type: "button", class: "small", disabled: page >= pages ? true : null, text: "次へ ›", onclick: null }));
+  const [prevBtn, nextBtn] = [pager.firstChild, pager.lastChild];
+  prevBtn.addEventListener("click", () => renderTestRun(run, page - 1));
+  nextBtn.addEventListener("click", () => renderTestRun(run, page + 1));
+  const legend = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([pool, c]) =>
+    el("span", { class: "note", style: "display:inline-flex;align-items:center;gap:6px;margin-inline-end:14px" },
+      el("span", { style: `display:inline-block;inline-size:12px;block-size:12px;border-radius:3px;background:${colorOf(pool)}` }),
+      el("span", { text: `${pool}: ${c} 件 (${answered ? Math.round((c / answered) * 100) : 0}%)` })));
+  out.replaceChildren(
+    el("p", { class: "note", text: `${run.url} に ${run.n} 件 (送信 ${sent} 件、応答 ${answered} 件${failed ? `、失敗 ${failed} 件` : ""}${run.cancelled ? "、キャンセル" : ""})。` }),
+    el("div", { style: "display:flex;flex-wrap:wrap;margin-block-start:6px" }, legend),
+    pager,
+    el("div", { style: "display:flex;flex-wrap:wrap" }, ...cells));
+}
+$("testBtn").addEventListener("click", runTestRequests);
 $("distMode").addEventListener("change", () => { state.dist.mode = $("distMode").value; distChanged(true); });
 $("distMin").addEventListener("input", () => { state.dist.minHealthy = Number($("distMin").value); distChanged(false); });
 $("distConc").addEventListener("input", () => { state.dist.concurrency = Number($("distConc").value); distChanged(false); });
