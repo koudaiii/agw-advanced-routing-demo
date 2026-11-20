@@ -221,6 +221,35 @@ API v2             HTTP 200  pool-api-v2
 モバイル           HTTP 200  pool-mobile
 WAF ブロック (UA)  HTTP 403</code></pre>
 <p class="note">上は <code>test.sh</code> の出力の例です。カナリアを <code>WEIGHTED_CANARY=false</code> で作った場合、8080 番の全件が pool-canary に送られます。</p>
+<h3>4.3 ポータルでヘッダーベースのルールを手動で作る (チュートリアルの手順)</h3>
+<p>Microsoft Learn の <a href="https://learn.microsoft.com/ja-jp/azure/application-gateway/configure-advanced-routing-rule">チュートリアル: Azure ポータルで Application Gateway の Advanced Rules を使ってヘッダーベースのルーティングを設定する</a> の手順です。このデモは <code>deploy.sh</code> が作るため、通常は不要です。ポータルの操作を確かめるときに使います。</p>
+<p class="note">ポータルの「アプリケーション ゲートウェイの作成」では Advanced ルールを設定できません。基本ルールで作成した後に、基本ルールを Advanced に変更します。</p>
+<p><strong>前提</strong>: 基本ルール、リスナー、既定のバックエンド プールと設定がある Application Gateway。v2 用の 2 つ目のバックエンド プールと、そのバックエンド設定。</p>
+<ol>
+<li>ゲートウェイの <strong>ルール</strong> を開き、基本ルールを選ぶ。</li>
+<li><strong>ルールの種類</strong> を <strong>Advanced</strong> にする。</li>
+<li><strong>リスナー</strong> タブ: ルール名 (例: <code>rule1</code>) と <strong>ルールの優先度</strong> を入力する。数値が小さいほど先に評価される。リスナーは既存のものが事前に入る。</li>
+<li><strong>ルーティング</strong> タブ: <strong>Advanced ルール名</strong> (例: <code>V2-app-routing</code>) と <strong>Advanced ルールの優先度</strong> を入力する。</li>
+<li><strong>条件</strong>: <strong>+ Add conditions</strong> で条件セットを作る。
+  <ul>
+    <li>条件セット名: <code>V2-app-condition</code> (条件セットの名前であり、ヘッダー名ではない)</li>
+    <li>条件の種類: HTTP header / ヘッダーの種類: Custom / カスタム ヘッダー: <code>X-App-Version</code> / 一致の種類: Static / 値: <code>v2</code></li>
+  </ul>
+  <strong>Add Conditions</strong> を押しても、この時点ではまだ保存されない。</li>
+<li><strong>ターゲット</strong>: <strong>+ Add Targets</strong>。ターゲットの種類: Backend pool / バックエンド プール: v2 用のプール / バックエンド設定: v2 用の設定。</li>
+<li><strong>既定のターゲット</strong>: 基本ルールの <code>Target</code> と <code>Backend Settings</code> と同じ値になっていることを確認する (既定の振り分け先)。</li>
+<li><strong>Review</strong> → <strong>Save</strong>。</li>
+</ol>
+<h4>テスト</h4>
+<pre><code>curl http://&lt;FRONTEND-IP&gt;/                              # 既定のプール
+curl -H "X-App-Version: v2" http://&lt;FRONTEND-IP&gt;/      # v2 のプール
+curl -H "X-App-Version: none" http://&lt;FRONTEND-IP&gt;/    # 既定のプール</code></pre>
+<h4>注意 (実際に起きた間違い)</h4>
+<ul>
+  <li><strong>条件セット名をヘッダー名の欄に入れると、一致しない</strong>: ヘッダー名が <code>V2-app-condition</code> になると、<code>X-App-Version: v2</code> は一致せず、既定の振り分け先に送られる。ヘッダー名は必ず <code>X-App-Version</code>。</li>
+  <li><strong>既存のルールを変えると、動きが変わる</strong>: <code>partner</code> を <code>V2-app-routing</code> に変えて <code>X-App-Version: v2</code> の条件を AND で追加すると、<code>X-Partner-Id</code> だけのリクエストは <code>pool-partner</code> に届かなくなる。</li>
+  <li><strong>ポータルでの手作業は、再デプロイで消える</strong>: <code>deploy/main.bicep</code> の定義で作ったルールは、<code>deploy.sh</code> を実行すると定義どおりに戻る。</li>
+</ul>
 </section>
 
 <section id="front"><h2>5. シミュレーターをフロントエンドにする</h2>
