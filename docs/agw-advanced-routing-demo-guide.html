@@ -189,6 +189,13 @@ pool-tenant|8082|テナント専用|#0f766e
 pool-api-v2|8083|Orders API v2|#1d4ed8
 pool-mobile|8085|モバイル|#7e22ce</code></pre>
 <p>シミュレーターのプール一覧と同じ名前・色にそろえているため、シミュレーターの「応答」パネルと実機のページが同じ見た目になります。</p>
+<p><code>pools.conf</code> は、VM 上で動く Node.js プロセス (待ち受けるポート) の定義です。ポート 8090 は、Application Gateway のリスナーのポートで、バックエンドのプロセスは 8090 番を待ち受けません。優先度ベース (8090) は、次のゲートウェイのプールを使い、それぞれ既存のプロセス (8080 番) を指します。</p>
+<table><thead><tr><th scope="col">ゲートウェイのプール</th><th scope="col">指す先 (VM とプロセス)</th><th scope="col">使われる場面</th></tr></thead><tbody>
+<tr><td><code>pool-primary</code></td><td>VM 2 (192.168.1.11) の <code>pool-canary</code> プロセス (:8080)</td><td>:8090 の優先度 1 (Primary)</td></tr>
+<tr><td><code>pool-standby</code></td><td>VM 1 (192.168.1.10) の <code>pool-web</code> プロセス (:8080)</td><td>:8090 の優先度 2 (Standby)、既定</td></tr>
+<tr><td><code>pool-web</code></td><td>VM 1 の <code>pool-web</code> プロセス (:8080)</td><td>:80 の既定、:8080 のカナリア 90%</td></tr>
+<tr><td><code>pool-canary</code></td><td>VM 2 の <code>pool-canary</code> プロセス (:8080)</td><td>:8080 のカナリア 10%、:80 の変種 B (<code>X-Variant: B</code>)</td></tr>
+</tbody></table>
 
 <h3>3.4 サーバー本体 (<code>backend/server.js</code>) の要点</h3>
 <pre><code>const POOL_NAME = process.env.POOL_NAME || &quot;pool-web&quot;;
