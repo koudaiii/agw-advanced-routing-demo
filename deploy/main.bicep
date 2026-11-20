@@ -591,6 +591,27 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
+        // A/B test (#27): /ab with the header X-Variant: B goes to the variant B pool (pool-canary).
+        name: 'cs-ab-variant-b'
+        properties: {
+          routingConditions: [
+            {
+              conditionType: 'Path'
+              propertyValueMatcher: {
+                pattern: '^/ab(/.*)?$'
+              }
+            }
+            {
+              conditionType: 'Header'
+              propertyName: 'X-Variant'
+              propertyValues: [
+                'B'
+              ]
+            }
+          ]
+        }
+      }
+      {
         // Port 8080 only: matches every request (all paths), so the canary split applies to the whole port.
         name: 'cs-canary-split'
         properties: {
@@ -693,6 +714,22 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
                 }
                 backendHttpSettings: {
                   id: '${gwId}/backendHttpSettingsCollection/hs-pool-mobile'
+                }
+              }
+            }
+            {
+              // A/B test (#27): variant B (X-Variant: B on /ab) goes to pool-canary; variant A is the default (pool-web).
+              name: 'ab-variant-b'
+              properties: {
+                priority: 45
+                advancedRoutingConditionSet: {
+                  id: '${gwId}/advancedRoutingConditionSets/cs-ab-variant-b'
+                }
+                backendAddressPool: {
+                  id: '${gwId}/backendAddressPools/pool-canary'
+                }
+                backendHttpSettings: {
+                  id: '${gwId}/backendHttpSettingsCollection/hs-pool-canary'
                 }
               }
             }

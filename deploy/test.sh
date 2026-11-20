@@ -26,6 +26,8 @@ run "API v2"           -H "X-Api-Version: 2.0" "$B/api/orders/1001"
 run "エンコード済み"   -H "X-Api-Version: 2" "$B/api%2Forders"
 run "カナリア (:8080 90:10)" -A "$DESKTOP_UA" "http://$FRONTEND:8080/app/home"
 run "キャンペーン"     -A "$DESKTOP_UA" "$B/landing?campaign=summer&utm=mail"
+run "A/B 変種 A"      -A "$DESKTOP_UA" -H "X-Variant: A" "$B/ab"
+run "A/B 変種 B"      -A "$DESKTOP_UA" -H "X-Variant: B" "$B/ab"
 run "モバイル"         -A "$IPHONE_UA" "$B/app/home"
 run "WAF ブロック (UA)" -A "agw-block-demo" "$B/app/home"
 echo
