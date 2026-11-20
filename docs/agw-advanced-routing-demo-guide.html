@@ -204,6 +204,7 @@ DynamicUser=yes</code></pre>
 <tr><td>条件セット</td><td><code>cs-partner</code>、<code>cs-tenant</code>、<code>cs-apiv2</code>、<code>cs-campaign</code>、<code>cs-mobile</code> の 5 つ</td></tr>
 <tr><td>Advanced routing map</td><td><code>advancedRoutingMap1</code>。既定プール <code>pool-web</code>。ルールは優先度順に partner (10)、tenant (20)、api-v2 (30)、campaign (40)、mobile (60)</td></tr>
 <tr><td>カナリアの重み付け</td><td>マップ <code>canaryMap</code> のルール <code>canary-split</code> (パス <code>^/</code> の全リクエスト): pool-web 90 : pool-canary 10 (<code>WeightedDistribution</code>)。マップの既定は pool-canary</td></tr>
+<tr><td>優先度ベースの振り分け (ポート 8090)</td><td>リスナー <code>listener-priority</code> (:8090)、Advanced ルール <code>rule-priority</code> (優先度 300) → マップ <code>priorityMap</code> のルール <code>priority-split</code> (全パス): <code>pool-primary</code> (VM 2、優先度 1) → <code>pool-standby</code> (VM 1、優先度 2)、<code>PriorityAware</code>、最小正常割合 60%。既定は <code>pool-standby</code></td></tr>
 </tbody></table>
 <figure class="diagram">
 <img src="https://learn.microsoft.com/azure/application-gateway/media/advanced-load-distribution/pool-selection.png" alt="一致したルールのプールを、重み付け配分と優先度ベース選択のどちらで選ぶかを示す図" style="inline-size:100%;block-size:auto;border:1px solid var(--line-soft);border-radius:16px;background:var(--card)">
@@ -315,6 +316,7 @@ if (req.method === &quot;OPTIONS&quot; &amp;&amp; req.headers[&quot;access-contr
 <tr><td>6</td><td>WAF はルーティングより前</td><td>「WAF ブロック」→ 全ルール未評価、403</td><td><code>curl -i -A agw-block-demo http://&lt;IP&gt;/app/home</code> → 403 (User-Agent の WAF ルール)</td></tr>
 <tr><td>7</td><td>User-Agent による振り分け</td><td>「モバイル」→ pool-mobile (ブラウザーは User-Agent を送れないため、実機の応答は既定の pool-web になる)</td><td><code>curl -i -A "Mozilla/5.0 (iPhone; ...)" http://&lt;IP&gt;/app/home</code> → pool-mobile</td></tr>
 <tr><td>8</td><td>カナリア (ポート 8080)</td><td>「カナリア (ポート 8080)」→ 重み付けの予測 (90:10)</td><td><code>FRONTEND=&lt;IP&gt;:8080 ./canary-check.sh /app/home 100</code> → pool-web 約 90 件、pool-canary 約 10 件 (実機確認: 91 / 9)</td></tr>
+<tr><td>9</td><td>優先度ベース (ポート 8090)</td><td>「優先度 (ポート 8090)」→ Primary (VM 2) が正常なら Primary、停止していれば Standby (VM 1)</td><td><code>FRONTEND=&lt;IP&gt;:8090 ./canary-check.sh /app/home 100</code> → 正常時は pool-canary (VM 2)。VM 2 の <code>agw-pool@pool-canary</code> を止めて 2〜3 分後は pool-web (VM 1)。確認後は起動して戻す</td></tr>
 </tbody></table>
 <p class="note">カナリアは、ポート 8080 の全リクエストを pool-web 90% / pool-canary 10% に振り分けます (高度なルール <code>canary-split</code>)。件数が少ないと期待値から外れるため、100 件以上で確認してください。</p>
 </section>
