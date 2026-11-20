@@ -621,13 +621,12 @@ function verdict() {
 function renderDiagram() {
   const svg = $("diagram"); svg.replaceChildren();
   const ev = state.ev, d = ev && ev.d, cfg = state.config;
-  const priorityMode = !!(d && d.kind === "priority");
-  // 優先度ベース (8090): Primary (VM 2) と Standby (VM 1) を独立したプールとして先頭に出す
+  // 優先度ベース (8090) の Primary (VM 2) と Standby (VM 1) は、どの経路図でも常に独立したプールとして先頭に出す
   const priorityPools = [
     { id: "pool-primary", t: "pool-primary (Primary)", sub: "VM 2 :8080 ・優先度 1", color: "#b45309" },
     { id: "pool-standby", t: "pool-standby (Standby)", sub: "VM 1 :8080 ・優先度 2", color: "#475569" },
   ];
-  const targets = (priorityMode ? priorityPools : []).concat(
+  const targets = priorityPools.concat(
     POOLS.map((p) => ({ id: p.id, t: p.id + (p.id === cfg.defaultPool ? " (既定)" : ""), sub: `:${p.port} ${p.label}` })),
     [{ id: "__redirect", t: "リダイレクト", sub: "302 応答" }]);
   const rowH = 42, top = 12, H = top * 2 + targets.length * rowH, mid = H / 2;
