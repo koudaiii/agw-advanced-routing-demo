@@ -21,7 +21,7 @@ run() { # label, curl args...
 
 run "通常アクセス"     -A "$DESKTOP_UA" "$B/app/home"
 run "テナント"         -A "$DESKTOP_UA" -H "X-Tenant-Id: customer-1024" "$B/app/dashboard"
-run "パートナー"       -X POST -H "X-Partner-Id: fabrikam" "$B/api/orders"
+run "パートナー"       -H "X-Partner-Id: fabrikam" "$B/api/orders"
 run "API v2"           -H "X-Api-Version: 2.0" "$B/api/orders/1001"
 run "エンコード済み"   -H "X-Api-Version: 2" "$B/api%2Forders"
 run "カナリア (:8080 90:10)" -A "$DESKTOP_UA" "http://$FRONTEND:8080/app/home"
