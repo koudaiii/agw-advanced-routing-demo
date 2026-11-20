@@ -33,3 +33,4 @@ run "WAF ブロック (UA)" -A "agw-block-demo" "$B/app/home"
 echo
 echo "注: カナリアは ポート 8080 全体を pool-web 90% / pool-canary 10% で振り分けます。割合は FRONTEND=$FRONTEND:8080 ./canary-check.sh /app/home 100 で確認。"
 echo "    WAF ブロック (UA) は User-Agent の WAF ルール (BlockDemoUA) による 403 です。curl -A agw-block-demo で確認できます。"
+echo "    A/B の表示は実体のプロセス名です。変種 A は pool-A (VM 1 の pool-web)、変種 B は pool-B (VM 2 の pool-canary)。"

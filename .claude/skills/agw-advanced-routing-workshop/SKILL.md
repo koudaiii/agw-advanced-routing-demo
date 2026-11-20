@@ -65,8 +65,8 @@ cd deploy && FRONTEND=<表示された IP> ./test.sh
 | カナリア (:8080 90:10) | 200 pool-web / pool-canary | 8080 番の全体を pool-web 90% / pool-canary 10% で振り分け (1 件では片方に決まる) |
 | キャンペーン | 302 (`https://www.contoso.com/campaign?campaign=...`) | 高度なルールのキャンペーン条件 (優先度 40) で一致する |
 | モバイル | 200 pool-mobile | iPhone UA。カナリアはポート 8080 のみのため影響しない |
-| A/B 変種 A | 200 pool-web | `/ab` (変種ヘッダーなし)。既定の振り分け先 |
-| A/B 変種 B | 200 pool-canary | `/ab` + `X-Variant: B`。ルール `ab-variant-b` (優先度 45) |
+| A/B 変種 A | 200 pool-web (`pool-A`) | `/ab` (変種ヘッダーなし)。ルール `ab-variant-a` (優先度 46) |
+| A/B 変種 B | 200 pool-canary (`pool-B`) | `/ab` + `X-Variant: B`。ルール `ab-variant-b` (優先度 45) |
 | WAF ブロック (UA) | 403 | `curl -A agw-block-demo` の要求。ルーティングの前に WAF が遮断する (`BlockDemoUA`) |
 
 **100 回連続の確認** (`deploy/canary-check.sh`、ポート 8080):

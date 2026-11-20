@@ -449,6 +449,27 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
           ]
         }
       }
+      {
+        // #27 A/B test: pool-A = variant A (VM 1, 8080), pool-B = variant B (VM 2, 8080).
+        name: 'pool-A'
+        properties: {
+          backendAddresses: [
+            {
+              ipAddress: vm1Ip
+            }
+          ]
+        }
+      }
+      {
+        name: 'pool-B'
+        properties: {
+          backendAddresses: [
+            {
+              ipAddress: vm2Ip
+            }
+          ]
+        }
+      }
     ])
     backendHttpSettingsCollection: [
       for p in pools: {
@@ -612,6 +633,20 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
+        // A/B test (#27): the path /ab (and below), used by variant A (default) and variant B.
+        name: 'cs-ab-path'
+        properties: {
+          routingConditions: [
+            {
+              conditionType: 'Path'
+              propertyValueMatcher: {
+                pattern: '^/ab(/.*)?$'
+              }
+            }
+          ]
+        }
+      }
+      {
         // Port 8080 only: matches every request (all paths), so the canary split applies to the whole port.
         name: 'cs-canary-split'
         properties: {
@@ -726,10 +761,26 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
                   id: '${gwId}/advancedRoutingConditionSets/cs-ab-variant-b'
                 }
                 backendAddressPool: {
-                  id: '${gwId}/backendAddressPools/pool-canary'
+                  id: '${gwId}/backendAddressPools/pool-B'
                 }
                 backendHttpSettings: {
-                  id: '${gwId}/backendHttpSettingsCollection/hs-pool-canary'
+                  id: '${gwId}/backendHttpSettingsCollection/hs-pool-web'
+                }
+              }
+            }
+            {
+              // A/B test (#27): the rest of /ab (no X-Variant: B) is variant A -> pool-A.
+              name: 'ab-variant-a'
+              properties: {
+                priority: 46
+                advancedRoutingConditionSet: {
+                  id: '${gwId}/advancedRoutingConditionSets/cs-ab-path'
+                }
+                backendAddressPool: {
+                  id: '${gwId}/backendAddressPools/pool-A'
+                }
+                backendHttpSettings: {
+                  id: '${gwId}/backendHttpSettingsCollection/hs-pool-web'
                 }
               }
             }
