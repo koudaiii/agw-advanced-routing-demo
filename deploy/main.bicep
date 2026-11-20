@@ -93,6 +93,8 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
           natGateway: {
             id: natGateway.id
           }
+          // Private subnet: no default outbound IP. Outbound goes through the NAT gateway above.
+          defaultOutboundAccess: false
         }
       }
     ]
