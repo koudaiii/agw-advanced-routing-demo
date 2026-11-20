@@ -14,8 +14,6 @@ RG="${RG:-rg-agw-advrouting-demo}"
 PREFIX="${PREFIX:-agwdemo}"
 SSH_KEY_FILE="${SSH_KEY_FILE:-$HOME/.ssh/id_ed25519.pub}"
 WAF_BLOCK_CIDR="${WAF_BLOCK_CIDR:-198.51.100.0/24}"
-# true = weighted 90:10 split on port 8080 (needs the AllowApplicationGatewayLoadDistributionPolicy feature). false = all port-8080 traffic to pool-canary.
-WEIGHTED_CANARY="${WEIGHTED_CANARY:-false}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 if [ ! -f "$SSH_KEY_FILE" ]; then
@@ -34,7 +32,7 @@ echo "== Deploying main.bicep (Application Gateway provisioning takes several mi
 FRONTEND_IP="$(az deployment group create -g "$RG" -n "agw-advrouting-$(date +%Y%m%d%H%M%S)" \
   -f "$HERE/main.bicep" \
   --parameters location="$LOCATION" prefix="$PREFIX" \
-               wafBlockCidr="$WAF_BLOCK_CIDR" weightedCanary="$WEIGHTED_CANARY" sshPublicKey="$(cat "$SSH_KEY_FILE")" \
+               wafBlockCidr="$WAF_BLOCK_CIDR" sshPublicKey="$(cat "$SSH_KEY_FILE")" \
   --query properties.outputs.frontendIp.value -o tsv)"
 
 echo
