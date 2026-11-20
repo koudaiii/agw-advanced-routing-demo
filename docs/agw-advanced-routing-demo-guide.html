@@ -269,7 +269,7 @@ DynamicUser=yes</code></pre>
 <tr><td>カナリア VM 2</td><td>固定 IP 192.168.1.11。Node.js プロセス × 1 (<code>pool-canary</code>、ポート 8080)</td></tr>
 <tr><td>WAF ポリシー</td><td>Prevention、DRS 2.1。カスタムルール <code>BlockDemoIp</code> (送信元 IP)、<code>BlockDemoUA</code> (User-Agent に <code>agw-block-demo</code> を含む要求を遮断)</td></tr>
 <tr><td>NAT Gateway</td><td>backend サブネットに関連付け (StandardV2、専用の StandardV2 public IP)。バックエンド VM の外向き通信 (apt など) に使う。バックエンド VM には public IP を付けず、サブネットはプライベート (既定の外向き IP なし)</td></tr>
-<tr><td>Application Gateway (WAF_v2)</td><td>リスナー <code>listener-http</code> (:80) と <code>listener-canary</code> (:8080)。ルール <code>rule1</code> (Advanced、:80)、<code>rule-canary</code> (Advanced、:8080、マップ <code>canaryMap</code>)</td></tr>
+<tr><td>Application Gateway (WAF_v2)</td><td>リスナー <code>listener-http</code> (:80)、<code>listener-canary</code> (:8080)、<code>listener-priority</code> (:8090)。ルール <code>rule1</code> (Advanced、:80)、<code>rule-canary</code> (Advanced、:8080、マップ <code>canaryMap</code>)、<code>rule-priority</code> (Advanced、:8090、マップ <code>priorityMap</code>)</td></tr>
 <tr><td>プローブ・プール・バックエンド設定</td><td>プローブ <code>healthz</code>。プール 6 つ (<code>pool-web</code>、<code>pool-partner</code>、<code>pool-tenant</code>、<code>pool-api-v2</code>、<code>pool-canary</code>、<code>pool-mobile</code>) と、それぞれのバックエンド設定 <code>hs-&lt;pool&gt;</code></td></tr>
 <tr><td>リダイレクト</td><td><code>redirect-campaign</code>: 302、<code>https://www.contoso.com/campaign</code> へ。クエリ文字列を引き継ぐ</td></tr>
 <tr><td>条件セット</td><td><code>cs-partner</code>、<code>cs-tenant</code>、<code>cs-apiv2</code>、<code>cs-campaign</code>、<code>cs-mobile</code> の 5 つ</td></tr>
@@ -293,6 +293,21 @@ DynamicUser=yes</code></pre>
              pool-web (VM1 :8080)        pool-canary (VM2 :8080)
              既存バージョン                新バージョン</code></pre>
 <figcaption>図 3. ポート 8080 のカナリアの流れ。</figcaption>
+</figure>
+<figure class="diagram"><pre><code>client --:8090--&gt; listener-priority --&gt; rule-priority (Advanced)
+                                    |
+                                    v   マップ priorityMap
+                          rule: priority-split  (パス ^/ = 全リクエスト)
+                                    |   PriorityAware (最小正常割合 60%)
+                      +-------------+-------------+
+                      |                           |
+                priority 1 (Primary)        priority 2 (Standby)
+                      |                           |
+                      v                           v
+             pool-primary (VM2 :8080)    pool-standby (VM1 :8080)
+             = VM 2 の pool-canary        = VM 1 の pool-web
+             正常ならここへ              Primary が条件を満たさないとき</code></pre>
+<figcaption>図 4. ポート 8090 の優先度ベースの流れ (VM 2 が止まると Standby に切り替わる)。</figcaption>
 </figure>
 
 <p class="note">Advanced routing rule は Basic リスナーにのみ関連付けできます (マルチサイト リスナーは非対応)。<code>rule1</code> と <code>rule-canary</code> は最初から Advanced で作られるため、後から切り替える手順はありません。</p>
