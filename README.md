@@ -26,6 +26,11 @@ https://learn.microsoft.com/en-us/azure/application-gateway/advanced-rules
 
 ![バックエンドプール内で Round Robin、Weighted Round Robin、Least Connections を比較する図](https://learn.microsoft.com/azure/application-gateway/media/advanced-load-distribution/server-selection.png)
 
+**読み方**: 一致したルールのプールは、次の 2 つの方式のどちらかで選ばれます。
+- **重み付け (Weighted)**: 重みの比率で振り分けます (例: 重み 8 と 2 なら 80% / 20%)。プールが異常でも、設定した割合は変わりません。
+- **優先度 (Priority)**: 優先度 1 のプールが条件 (最小正常割合) を満たす間は、そこに送ります。満たさなければ、優先度 2 のスタンバイに切り替えます。
+
+
 | フォルダー | 内容 |
 |---|---|
 | `agw-routing-simulator.html` | 単体で動くシミュレーター。ゲートウェイ URL が空ならオフライン、入れると実機に送って予測と比較 |
@@ -50,6 +55,20 @@ FRONTEND=<表示されたフロントエンド IP>:8080 ./canary-check.sh /app/h
 - カナリア展開: ポート 8080 のリスナーで、ルール `canary-split` が全リクエストを pool-web 90% / pool-canary 10% に振り分けます (高度なルールの重み付け)。URI では絞りません。ポート 80 は高度なルール (A/B やヘッダーの振り分け) のままです。
 - カナリアの配置: pool-canary は VM2 (192.168.1.11) の 8080 番で動かします。pool-web は VM1 の 8080 番です。同じポートで別の応答を返すため、IP アドレスを分けています。VM2 を別ポートにできるかは未検証です (高度なルールでは、プールごとにバックエンド設定を持てます)。
 - 重み付けは Advanced load balancing の機能です。8080 番のカナリアは、高度なルールで `WeightedDistribution` を使います。
+  ```text
+  client --:8080--> listener-canary --> rule-canary (Advanced)
+                                              |
+                                              v   マップ canaryMap
+                                    rule: canary-split  (パス ^/ = 全リクエスト)
+                                              |   WeightedDistribution
+                                +-------------+-------------+
+                                |                           |
+                          weight 90                   weight 10
+                                |                           |
+                                v                           v
+                       pool-web (VM1 :8080)        pool-canary (VM2 :8080)
+                       既存バージョン                新バージョン
+  ```
 - デプロイは Bicep (`main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。Azure CLI 2.87.0 には advanced-routing 用のコマンド (`az network application-gateway advanced-routing-map` など) がないため、CLI では作成できません。
 - ARM API の確認 (2026-11-20): 現在の template は 2026-03-01 / 2026-05-01 / 2026-07-01 のすべてで検証に成功します。高度なルールは、単一プール (`backendAddressPool`) と複数プール (`backendAddressPoolsAndSettings` + `poolSelectionAlgorithm`) のどちらも指定できます。`loadDistributionPolicy` だけを指定すると、ARM は `ApplicationGatewayAdvancedRoutingRuleMustReference` で拒否します。Bicep 0.49.2 は `loadDistributionPolicy` を BCP037 で指摘します。
 - 完了まで 15〜20 分程度かかります (Application Gateway の作成と更新に時間がかかるため)。

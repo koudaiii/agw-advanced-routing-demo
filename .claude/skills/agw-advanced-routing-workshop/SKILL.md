@@ -106,6 +106,20 @@ curl -i http://<FRONTEND>/app/home                        # → 200 (比較用)
 
 ## 5. 負荷分散シミュレーション (シミュレーター)
 
+```text
+                  一致したルール
+                        |
+                        v
+              プール選択アルゴリズム
+              |                   |
+              v                   v
+   重み付け (Weighted)        優先度 (Priority)
+   Pool A: 重み 8 (80%)       Priority 1 = 主系 (条件を満たす間)
+   Pool B: 重み 2 (20%)       Priority 2 = 待機系 (主系が使えないとき)
+   異常でも割合は変わらない    最小正常割合で適格かを判定
+```
+
+
 `agw-routing-simulator.html` の「負荷分散: プール選択 → サーバー選択」セクションは **シミュレーションのみ** です。実機には反映されません (実機の各プールはサーバー 1 台です)。
 
 - プリセット: ポート 8080 全体のカナリア 90:10 (実機と同じ構成)、重み 8:2、優先度 (5 台中 1 台異常 → プライマリ、5 台中 3 台異常 → スタンバイ)、WRR 6:3:1 (全台正常 / 重み 6 が異常)
@@ -140,6 +154,21 @@ az group delete -n rg-agw-advrouting-demo --yes --no-wait
 | 重み付けによるカナリア (ポート全体 90:10) | advanced-load-balancing: Weighted distribution (Advanced ルール) | ポート 8080 の `rule-canary` と マップ `canaryMap`、`canary-check.sh` |
 
 ## 設計メモ: なぜカナリア用の VM2 が必要か
+
+```text
+ VM1 (192.168.1.10)                      VM2 (192.168.1.11)
+ +----------------------------+          +----------------------------+
+ | :8080 pool-web (既存)      |          | :8080 pool-canary (新版)   |
+ | :8081 pool-partner         |          +----------------------------+
+ | :8082 pool-tenant          |
+ | :8083 pool-api-v2          |
+ | :8085 pool-mobile          |
+ +----------------------------+
+
+ 8080 番の流れ: listener-canary -> rule-canary -> canaryMap -> canary-split
+                 -> WeightedDistribution (pool-web 90 / pool-canary 10)
+```
+
 
 - 高度なルールでは、プールごとにバックエンド設定 (`backendHttpSettings`) を持てます。pool-web と pool-canary は、どちらも `hs-pool-web` (8080 番) を使っています。
 - pool-web は VM1 の 8080 番で動いています。同じポートで別の応答を返す pool-canary を置くには、**別の IP アドレス** が必要です。そのため新バージョン (pool-canary) は VM2 (192.168.1.11) の 8080 番で動かします。
