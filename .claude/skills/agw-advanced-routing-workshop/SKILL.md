@@ -155,6 +155,12 @@ az group delete -n rg-agw-advrouting-demo --yes --no-wait
 - `true`: ポート 8080 を pool-web 90% / pool-canary 10% に重み付けします。`AllowApplicationGatewayLoadDistributionPolicy` の登録が `Registered` になってから `WEIGHTED_CANARY=true ./deploy.sh` で有効にします。
 - 登録が `Pending` のままの間は、`weightedCanary=false` で運用します。
 
+## 設計メモ: 外向き通信 (NAT Gateway)
+
+- バックエンド VM には public IP を付けません。受信は NSG の既定ルール (インターネットからの受信は拒否) で遮断します。
+- 外向き通信 (apt など) は NAT Gateway (StandardV2、専用の StandardV2 public IP) を backend サブネットに関連付けて行います。
+- backend サブネットは `defaultOutboundAccess: false` (プライベート サブネット) です。既定の外向き IP は付きません。既存の VM では、この変更を反映するには停止と割り当て解除が必要です。
+
 ## 関連ファイル
 
 - `deploy/main.bicep`: インフラ全体 (テンプレート)

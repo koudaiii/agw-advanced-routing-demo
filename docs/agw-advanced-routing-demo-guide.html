@@ -183,7 +183,7 @@ EnvironmentFile=/etc/agw-demo/%i.env
 ExecStart=/usr/bin/node /opt/agw-demo/server.js
 Restart=always
 DynamicUser=yes</code></pre>
-<p class="note">VM にはパッケージ取得のためのパブリック IP を付けますが、NSG の受信規則は作成しません (<code>--nsg-rule NONE</code>)。インターネットからバックエンドへ直接は到達できず、App Gateway 経由のみになります。</p>
+<p class="note">バックエンド VM にはパブリック IP を付けません。外向き通信 (パッケージ取得など) は NAT Gateway 経由です。受信は NSG の既定ルールで遮断するため、インターネットからバックエンドへ直接は到達できず、App Gateway 経由のみになります。</p>
 </section>
 
 <section id="agw"><h2>4. Application Gateway の構築</h2>
@@ -197,6 +197,7 @@ DynamicUser=yes</code></pre>
 <tr><td>バックエンド VM 1</td><td>固定 IP 10.20.1.10。Node.js プロセス × 5 (ポート 8080–8083、8085)。cloud-init で <code>server.js</code> を配置</td></tr>
 <tr><td>カナリア VM 2</td><td>固定 IP 10.20.1.11。Node.js プロセス × 1 (<code>pool-canary</code>、ポート 8080)</td></tr>
 <tr><td>WAF ポリシー</td><td>Prevention、DRS 2.1。カスタムルール <code>BlockDemoIp</code> (送信元 IP)、<code>BlockDemoUA</code> (User-Agent に <code>agw-block-demo</code> を含む要求を遮断)</td></tr>
+<tr><td>NAT Gateway</td><td>backend サブネットに関連付け (StandardV2、専用の StandardV2 public IP)。バックエンド VM の外向き通信 (apt など) に使う。バックエンド VM には public IP を付けず、サブネットはプライベート (既定の外向き IP なし)</td></tr>
 <tr><td>Application Gateway (WAF_v2)</td><td>リスナー <code>listener-http</code> (:80) と <code>listener-canary</code> (:8080)。ルール <code>rule1</code> (Advanced、:80)、<code>rule-canary</code> (Basic、:8080)</td></tr>
 <tr><td>プローブ・プール・バックエンド設定</td><td>プローブ <code>healthz</code>。プール 6 つ (<code>pool-web</code>、<code>pool-partner</code>、<code>pool-tenant</code>、<code>pool-api-v2</code>、<code>pool-canary</code>、<code>pool-mobile</code>) と、それぞれのバックエンド設定 <code>hs-&lt;pool&gt;</code></td></tr>
 <tr><td>リダイレクト</td><td><code>redirect-campaign</code>: 302、<code>https://www.contoso.com/campaign</code> へ。クエリ文字列を引き継ぐ</td></tr>

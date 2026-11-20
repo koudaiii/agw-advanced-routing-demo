@@ -25,7 +25,6 @@ var vnetName = '${prefix}-vnet'
 var nsgName = '${prefix}-backend-nsg'
 var vmName = '${prefix}-backend'
 var nicName = '${prefix}-backend-nic'
-var vmPipName = '${vmName}-pip'
 var wafName = '${prefix}-waf'
 var gwName = '${prefix}-agw'
 var gwPipName = '${gwName}-pip'
@@ -91,21 +90,46 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
           networkSecurityGroup: {
             id: nsg.id
           }
+          natGateway: {
+            id: natGateway.id
+          }
+          // Private subnet: no default outbound IP. Outbound goes through the NAT gateway above.
+          defaultOutboundAccess: false
         }
       }
     ]
   }
 }
 
-// Public IP on the backend VM is only for outbound package installation (inbound is blocked by the NSG).
-resource vmPip 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
-  name: vmPipName
+// Backend VMs have no public IP. Outbound traffic (cloud-init packages, etc.) goes through this NAT gateway.
+// Inbound from the Internet is blocked by the NSG; only the App Gateway subnet reaches the pool ports.
+// NAT gateway (StandardV2: zone redundant by default). A NAT gateway V2 needs a StandardV2 public IP.
+resource natPip 'Microsoft.Network/publicIPAddresses@2024-01-01' = {
+  name: '${prefix}-nat-pip'
   location: location
   sku: {
-    name: 'Standard'
+    name: 'StandardV2'
   }
   properties: {
+    publicIPAddressVersion: 'IPv4'
     publicIPAllocationMethod: 'Static'
+    idleTimeoutInMinutes: 4
+  }
+}
+
+resource natGateway 'Microsoft.Network/natGateways@2024-01-01' = {
+  name: '${prefix}-nat'
+  location: location
+  sku: {
+    name: 'StandardV2'
+  }
+  properties: {
+    idleTimeoutInMinutes: 4
+    publicIpAddresses: [
+      {
+        id: natPip.id
+      }
+    ]
   }
 }
 
@@ -122,9 +146,6 @@ resource nic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
           }
           privateIPAllocationMethod: 'Static'
           privateIPAddress: backendIp
-          publicIPAddress: {
-            id: vmPip.id
-          }
         }
       }
     ]
@@ -185,17 +206,6 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
 
 // ---------- Canary backend VM (new version; serves pool-canary on 8080, see cloud-init-canary.yaml) ----------
 
-resource canaryPip 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
-  name: '${canaryVmName}-pip'
-  location: location
-  sku: {
-    name: 'Standard'
-  }
-  properties: {
-    publicIPAllocationMethod: 'Static'
-  }
-}
-
 resource canaryNic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
   name: '${canaryVmName}-nic'
   location: location
@@ -209,9 +219,6 @@ resource canaryNic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
           }
           privateIPAllocationMethod: 'Static'
           privateIPAddress: canaryIp
-          publicIPAddress: {
-            id: canaryPip.id
-          }
         }
       }
     ]
