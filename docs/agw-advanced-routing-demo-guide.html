@@ -71,7 +71,7 @@ svg .l{text-anchor:start}
 <nav aria-label="目次"><h2>目次</h2><ol>
 <li><a href="#arch">全体構成</a></li><li><a href="#prereq">前提条件</a></li><li><a href="#backend">バックエンドの作り方</a></li>
 <li><a href="#agw">Application Gateway の構築</a></li><li><a href="#front">シミュレーターをフロントエンドにする</a></li>
-<li><a href="#demo">デモの進め方</a></li><li><a href="#trouble">トラブルシューティング</a></li><li><a href="#notes">制約・注意事項と後片付け</a></li></ol></nav>
+<li><a href="#demo">デモの進め方</a></li><li><a href="#trouble">トラブルシューティング</a></li><li><a href="#notes">制約・注意事項</a></li><li><a href="#cleanup">後片付け</a></li></ol></nav>
 
 <section id="arch"><h2>1. 全体構成</h2>
 
@@ -163,7 +163,7 @@ svg .l{text-anchor:start}
 <li>Azure サブスクリプションと、リソース グループを作成できる権限</li>
 <li>Azure CLI (<code>az login</code> 済み)。高度なルールは CLI (2.87.0 時点) では作れないため、ガイドのデプロイは Bicep で行う (Bicep は <code>az</code> に同梱)</li>
 <li>bash 環境 (Azure Cloud Shell で可)。SSH 鍵 (<code>~/.ssh/id_ed25519.pub</code>) がなければ <code>deploy.sh</code> が自動作成</li>
-<li>WAF_v2 の Application Gateway は稼働時間で課金されます。デモ後は<a href="#notes">後片付け</a>を実施してください</li></ul>
+<li>WAF_v2 の Application Gateway は稼働時間で課金されます。デモ後は<a href="#cleanup">後片付け</a>を実施してください</li></ul>
 </section>
 
 <section id="backend"><h2>3. バックエンドの作り方</h2>
@@ -434,14 +434,17 @@ if (req.method === &quot;OPTIONS&quot; &amp;&amp; req.headers[&quot;access-contr
 </tbody></table>
 </section>
 
-<section id="notes"><h2>8. 制約・注意事項と後片付け</h2><ul>
+<section id="notes"><h2>8. 制約・注意事項</h2><ul>
 <li>Advanced rules はプレビュー機能です。マルチサイト リスナーと L4 (TCP/TLS) プロキシでは使えません</li>
 <li>重み付け (ポート 8080 のカナリア、pool-web 90% / pool-canary 10%) は、高度なルールで <code>WeightedDistribution</code> を指定して作ります</li>
 <li>上限: マップ 100 / ゲートウェイ、条件セット 10,000 / ゲートウェイ、ルール 100 / マップ、条件 5 / 条件セット、値 5 / 条件、値・正規表現 128 文字</li>
-<li>ARM API (2026-11-20 確認): 高度なルールでも複数プールを指定できる (<code>backendAddressPoolsAndSettings</code> と <code>poolSelectionAlgorithm</code>)。<code>loadDistributionPolicy</code> だけを指定すると <code>ApplicationGatewayAdvancedRoutingRuleMustReference</code> で拒否される。公開の REST API 仕様には複数プールの項目がない</li>
 <li>WAF ポリシーはゲートウェイまたはリスナー単位で関連付け。ルール単位の WAF ポリシーは非対応</li>
 <li>シミュレーターの判定はブラウザーの正規表現エンジンで近似しており、RE2 と完全には一致しません</li>
 <li><code>deploy.sh</code> はまだ実環境で実行していません。初回は手順ごとに結果を確認しながら実行してください</li></ul>
+</section>
+
+<section id="cleanup"><h2>9. 後片付け</h2>
+<p>デモ後は、リソース グループごと削除してください。ゲートウェイ (WAF_v2) とバックエンド VM は稼働時間で課金されます。リソース グループを削除すると、作成したリソースはすべて消えます。</p>
 <pre><code>az group delete -n rg-agw-advrouting-demo --yes --no-wait</code></pre>
 </section>
 </main></body></html>
