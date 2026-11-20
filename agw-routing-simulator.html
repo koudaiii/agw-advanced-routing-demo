@@ -697,11 +697,34 @@ function renderDiagram() {
     svg.append(s("rect", { x: f.x, y: f.y, width: f.w, height: f.h, rx: 10, fill: "none", stroke: "var(--line)", "stroke-width": 1.5, "stroke-dasharray": "5 4" }));
     svg.append(s("text", { x: f.x + 10, y: f.y + 17, "font-size": 12, "font-weight": 700, fill: "var(--fg)" }, f.label));
   });
+  // 各マップが、どの行き先につながるかは常に表示する (細い灰色の線)。
+  // 要求で使われた経路だけは、呼ばれたマップから命中したプールへ、色の太い線で重ねる。
+  const mapTargets = (port) => {
+    if (port === 80) {
+      const ids = [cfg.defaultPool, ...cfg.rules.map((r) => (r.target && r.target.pool ? r.target.pool : null))].filter(Boolean);
+      if (cfg.rules.some((r) => r.target && r.target.redirect)) ids.push("__redirect");
+      return ids;
+    }
+    if (port === 8080) return ["pool-web", "pool-canary"];
+    return ["pool-primary", "pool-standby"];
+  };
+  mapDefs.forEach((m) => {
+    mapTargets(m.port).forEach((id) => {
+      const row = targets.find((t) => t.id === id);
+      if (!row) return;
+      svg.append(s("path", { d: `M548 ${m.y} C 600 ${m.y}, 600 ${row.y}, 650 ${row.y}`, fill: "none", stroke: "var(--muted)", "stroke-width": 1.2, "stroke-dasharray": id === "__redirect" ? "5 4" : "none" }));
+    });
+  });
+  targets.forEach((t) => {
+    const hit = (t.id === "__redirect" && d && d.kind === "redirect") || hitSet.has(t.id);
+    if (!hit) return;
+    const p = t.color ? { color: t.color } : POOLS.find((x) => x.id === t.id);
+    svg.append(s("path", { d: `M548 ${activeY} C 600 ${activeY}, 600 ${t.y}, 650 ${t.y}`, fill: "none", stroke: p ? p.color : "var(--primary)", "stroke-width": 3, "stroke-dasharray": t.id === "__redirect" ? "5 4" : "none" }));
+  });
   targets.forEach((t) => {
     const y = t.y;
     const hit = (t.id === "__redirect" && d && d.kind === "redirect") || hitSet.has(t.id);
     const p = t.color ? { color: t.color } : POOLS.find((x) => x.id === t.id);
-    svg.append(s("path", { d: `M548 ${activeY} C 600 ${activeY}, 600 ${y}, 650 ${y}`, fill: "none", stroke: hit && p ? p.color : st(hit), "stroke-width": hit ? 3 : 1, "stroke-dasharray": t.id === "__redirect" ? "5 4" : "none" }));
     svg.append(s("rect", { x: 650, y: y - 17, width: 202, height: 34, rx: 6, fill: hit ? (p ? p.color : "var(--primary)") : "var(--card)", stroke: hit ? (p ? p.color : "var(--primary)") : "var(--line)", "stroke-width": hit ? 2 : 1 }));
     svg.append(s("text", { x: 660, y: y - 2, "font-size": 11.5, "font-weight": 700, fill: hit ? "#ffffff" : "var(--fg)" }, t.t));
     svg.append(s("text", { x: 660, y: y + 11, "font-size": 10, fill: hit ? "#ffffff" : "var(--fg)" }, t.sub));
