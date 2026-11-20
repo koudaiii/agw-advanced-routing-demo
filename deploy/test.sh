@@ -30,4 +30,4 @@ run "モバイル"         -A "$IPHONE_UA" "$B/app/home"
 run "WAF ブロック (UA)" -A "agw-block-demo" "$B/app/home"
 echo
 echo "注: カナリアは ポート 8080 全体を pool-web 90% / pool-canary 10% で振り分けます。割合は FRONTEND=$FRONTEND:8080 ./canary-check.sh /app/home 100 で確認。"
-echo "    WAF ブロックを見せるには: WAF のカスタム ルールに自分の IP を追加し、もう一度実行します。"
+echo "    WAF ブロック (UA) は User-Agent の WAF ルール (BlockDemoUA) による 403 です。curl -A agw-block-demo で確認できます。"
