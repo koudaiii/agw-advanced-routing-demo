@@ -101,22 +101,25 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
 
 // Backend VMs have no public IP. Outbound traffic (cloud-init packages, etc.) goes through this NAT gateway.
 // Inbound from the Internet is blocked by the NSG; only the App Gateway subnet reaches the pool ports.
-resource natPip 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
+// NAT gateway (StandardV2: zone redundant by default). A NAT gateway V2 needs a StandardV2 public IP.
+resource natPip 'Microsoft.Network/publicIPAddresses@2024-01-01' = {
   name: '${prefix}-nat-pip'
   location: location
   sku: {
-    name: 'Standard'
+    name: 'StandardV2'
   }
   properties: {
+    publicIPAddressVersion: 'IPv4'
     publicIPAllocationMethod: 'Static'
+    idleTimeoutInMinutes: 4
   }
 }
 
-resource natGateway 'Microsoft.Network/natGateways@2024-05-01' = {
+resource natGateway 'Microsoft.Network/natGateways@2024-01-01' = {
   name: '${prefix}-nat'
   location: location
   sku: {
-    name: 'Standard'
+    name: 'StandardV2'
   }
   properties: {
     idleTimeoutInMinutes: 4
