@@ -626,10 +626,30 @@ function renderDiagram() {
     { id: "pool-primary", t: "pool-primary (Primary)", sub: "VM 2 :8080 ・優先度 1", color: "#b45309" },
     { id: "pool-standby", t: "pool-standby (Standby)", sub: "VM 1 :8080 ・優先度 2", color: "#475569" },
   ];
-  const targets = priorityPools.concat(
-    POOLS.map((p) => ({ id: p.id, t: p.id + (p.id === cfg.defaultPool ? " (既定)" : ""), sub: `:${p.port} ${p.label}` })),
-    [{ id: "__redirect", t: "リダイレクト", sub: "302 応答" }]);
-  const rowH = 42, top = 12, H = top * 2 + targets.length * rowH, mid = H / 2;
+  const rowOf = (id) => {
+    const pp = priorityPools.find((x) => x.id === id);
+    if (pp) return pp;
+    const p = POOLS.find((x) => x.id === id);
+    return { id: p.id, t: p.id + (p.id === cfg.defaultPool ? " (既定)" : ""), sub: `:${p.port} ${p.label}` };
+  };
+  // VM ごとに枠で囲む: VM 2 = pool-primary と pool-canary、VM 1 = pool-standby と残りのプール
+  const vmGroups = [
+    { label: "VM 2 (192.168.1.11)", rows: ["pool-primary", "pool-canary"].map(rowOf) },
+    { label: "VM 1 (192.168.1.10)", rows: ["pool-standby", "pool-web", "pool-partner", "pool-tenant", "pool-api-v2", "pool-mobile"].map(rowOf) },
+  ];
+  const rowH = 42, groupGap = 14, frameHead = 26;
+  const frames = [];
+  let cursor = 10;
+  for (const g of vmGroups) {
+    const y0 = cursor, rowStart = y0 + frameHead;
+    g.rows.forEach((t, i) => { t.y = rowStart + i * rowH + rowH / 2; });
+    const y1 = rowStart + g.rows.length * rowH + 4;
+    frames.push({ label: g.label, x: 632, y: y0, w: 226, h: y1 - y0 });
+    cursor = y1 + groupGap;
+  }
+  const redirect = { id: "__redirect", t: "リダイレクト", sub: "302 応答", y: cursor + rowH / 2 };
+  const targets = vmGroups.flatMap((g) => g.rows).concat([redirect]);
+  const H = cursor + rowH + 10, mid = H / 2;
   svg.setAttribute("viewBox", `0 0 860 ${H}`);
   const summary = ev ? describe(d, cfg) : "テスト要求を送信すると経路が表示されます";
   svg.append(s("title", { id: "dgT" }, "要求のルーティング経路図"), s("desc", { id: "dgD" }, summary));
@@ -658,8 +678,12 @@ function renderDiagram() {
     svg.append(s("text", { x: g.x + 60, y: mid - 3, "text-anchor": "middle", "font-size": g.l.length > 12 ? 9.5 : 12.5, "font-weight": 700, fill: "var(--fg)" }, g.l));
     svg.append(s("text", { x: g.x + 60, y: mid + 14, "text-anchor": "middle", "font-size": 10.5, fill: "var(--fg)" }, g.sub));
   });
-  targets.forEach((t, i) => {
-    const y = top + i * rowH + rowH / 2;
+  frames.forEach((f) => {
+    svg.append(s("rect", { x: f.x, y: f.y, width: f.w, height: f.h, rx: 10, fill: "none", stroke: "var(--line)", "stroke-width": 1.5, "stroke-dasharray": "5 4" }));
+    svg.append(s("text", { x: f.x + 10, y: f.y + 17, "font-size": 12, "font-weight": 700, fill: "var(--fg)" }, f.label));
+  });
+  targets.forEach((t) => {
+    const y = t.y;
     const hit = (t.id === "__redirect" && d && d.kind === "redirect") || hitSet.has(t.id);
     const p = t.color ? { color: t.color } : POOLS.find((x) => x.id === t.id);
     svg.append(s("path", { d: `M548 ${mid} C 600 ${mid}, 600 ${y}, 650 ${y}`, fill: "none", stroke: hit && p ? p.color : st(hit), "stroke-width": hit ? 3 : 1, "stroke-dasharray": t.id === "__redirect" ? "5 4" : "none" }));
