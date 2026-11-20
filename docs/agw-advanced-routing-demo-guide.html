@@ -205,7 +205,27 @@ DynamicUser=yes</code></pre>
 <tr><td>Advanced routing map</td><td><code>advancedRoutingMap1</code>。既定プール <code>pool-web</code>。ルールは優先度順に partner (10)、tenant (20)、api-v2 (30)、campaign (40)、mobile (60)</td></tr>
 <tr><td>カナリアの重み付け</td><td>マップ <code>canaryMap</code> のルール <code>canary-split</code> (パス <code>^/</code> の全リクエスト): pool-web 90 : pool-canary 10 (<code>WeightedDistribution</code>)。マップの既定は pool-canary</td></tr>
 </tbody></table>
+<figure class="diagram">
+<img src="https://learn.microsoft.com/azure/application-gateway/media/advanced-load-distribution/pool-selection.png" alt="一致したルールのプールを、重み付け配分と優先度ベース選択のどちらで選ぶかを示す図" style="inline-size:100%;block-size:auto;border:1px solid var(--line-soft);border-radius:16px;background:var(--card)">
+<figcaption>図 2. プール選択 (出典: Microsoft Learn「Advanced load balancing」)。重み付けは比率どおりに振り分け、優先度は優先度 1 のプールが条件を満たす間だけ使う。</figcaption>
+</figure>
+<figure class="diagram"><pre><code>client --:8080--&gt; listener-canary --&gt; rule-canary (Advanced)
+                                    |
+                                    v   マップ canaryMap
+                          rule: canary-split  (パス ^/ = 全リクエスト)
+                                    |   WeightedDistribution
+                      +-------------+-------------+
+                      |                           |
+                weight 90                   weight 10
+                      |                           |
+                      v                           v
+             pool-web (VM1 :8080)        pool-canary (VM2 :8080)
+             既存バージョン                新バージョン</code></pre>
+<figcaption>図 3. ポート 8080 のカナリアの流れ。</figcaption>
+</figure>
+
 <p class="note">Advanced routing rule は Basic リスナーにのみ関連付けできます (マルチサイト リスナーは非対応)。<code>rule1</code> と <code>rule-canary</code> は最初から Advanced で作られるため、後から切り替える手順はありません。</p>
+
 
 <h3>4.2 動作確認</h3>
 <p>確認は <code>deploy/test.sh</code> と <code>deploy/canary-check.sh</code> で行います。</p>
