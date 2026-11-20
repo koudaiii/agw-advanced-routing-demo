@@ -31,6 +31,8 @@ var priorityMapName = 'priorityMap'
 // The new version (pool-canary) runs on its own VM, on port 8080 like pool-web. The weighted /canary split
 // needs both pools to share one backend HTTP setting, so they must use the same port.
 var canaryIp = '192.168.1.11'
+var vm1Ip = backendIp
+var vm2Ip = canaryIp
 var canaryVmName = '${vmName}-canary'
 var poolAddressPools = [for p in pools: {
   name: p.name
@@ -434,7 +436,7 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         properties: {
           backendAddresses: [
             {
-              ipAddress: canaryIp
+              ipAddress: vm2Ip
             }
           ]
         }
@@ -444,7 +446,7 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         properties: {
           backendAddresses: [
             {
-              ipAddress: backendIp
+              ipAddress: vm1Ip
             }
           ]
         }
