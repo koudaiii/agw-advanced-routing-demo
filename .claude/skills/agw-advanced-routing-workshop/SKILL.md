@@ -39,7 +39,7 @@ cd deploy
 
 - `make-cloud-init.sh` で 2 つの初期化ファイルを生成 (`backend/server.js` を埋め込み): `cloud-init.yaml` (バックエンド VM 1) と `cloud-init-canary.yaml` (カナリア VM 2、`backend/pools-canary.conf`)
 - リソースグループ `rg-agw-advrouting-demo` を作成
-- `main.bicep` をデプロイ: VNet (`appgw` 10.20.0.0/24 / `backend` 10.20.1.0/24)、バックエンド NSG、バックエンド VM 1 (Ubuntu 24.04、固定 IP 10.20.1.10、ポート 8080〜8085 の各プロセス)、カナリア VM 2 (固定 IP 10.20.1.11、ポート 8080 の `pool-canary`)、WAF_v2 ポリシー (Prevention、DRS 2.1、カスタムルール `BlockDemoIp` と `BlockDemoUA`)、Application Gateway、Advanced routing map (`advancedRoutingMap1`、条件セット 5 つ、ルール 5 つ)、`rule1` (Advanced、ポート 80)、ポート 8080 のリスナーと Basic ルール `rule-canary` (`loadDistributionPolicy` で pool-web 90 / pool-canary 10)
+- `main.bicep` をデプロイ: VNet (`appgw` 10.20.0.0/24 / `backend` 10.20.1.0/24)、バックエンド NSG、バックエンド VM 1 (Ubuntu 24.04、固定 IP 10.20.1.10、Node.js プロセス 5 つ = ポート 8080–8083、8085)、カナリア VM 2 (固定 IP 10.20.1.11、`pool-canary` をポート 8080)、WAF_v2 ポリシー (Prevention、DRS 2.1、カスタムルール `BlockDemoIp` と `BlockDemoUA`)、Application Gateway、Advanced routing map (`advancedRoutingMap1`、条件セット 5 つ、ルール 5 つ)、`rule1` (Advanced、ポート 80)、ポート 8080 のリスナー `listener-canary` と Basic ルール `rule-canary` (既定 `WEIGHTED_CANARY=false` では 8080 番の全件を pool-canary に送る。`WEIGHTED_CANARY=true` では `loadDistributionPolicy` で pool-web 90 / pool-canary 10)
 
 ゲートウェイのバックエンドが Healthy になるまで数分かかることがあります。確認:
 
