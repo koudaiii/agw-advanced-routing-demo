@@ -16,7 +16,7 @@ param wafBlockCidr string = '198.51.100.0/24'
 param sshPublicKey string
 
 @description('Static private IP of the backend VM inside the backend subnet.')
-param backendIp string = '192.168.1.10'
+param vm1Ip string = '192.168.1.10'
 
 var vnetName = '${prefix}-vnet'
 var nsgName = '${prefix}-backend-nsg'
@@ -30,16 +30,14 @@ var canaryMapName = 'canaryMap'
 var priorityMapName = 'priorityMap'
 // The new version (pool-canary) runs on its own VM, on port 8080 like pool-web. The weighted /canary split
 // needs both pools to share one backend HTTP setting, so they must use the same port.
-var canaryIp = '192.168.1.11'
-var vm1Ip = backendIp
-var vm2Ip = canaryIp
+var vm2Ip = '192.168.1.11'
 var canaryVmName = '${vmName}-canary'
 var poolAddressPools = [for p in pools: {
   name: p.name
   properties: {
     backendAddresses: [
       {
-        ipAddress: p.name == 'pool-canary' ? canaryIp : backendIp
+        ipAddress: p.name == 'pool-canary' ? vm2Ip : vm1Ip
       }
     ]
   }
@@ -146,7 +144,7 @@ resource nic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
             id: backendSubnetId
           }
           privateIPAllocationMethod: 'Static'
-          privateIPAddress: backendIp
+          privateIPAddress: vm1Ip
         }
       }
     ]
@@ -219,7 +217,7 @@ resource canaryNic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
             id: backendSubnetId
           }
           privateIPAllocationMethod: 'Static'
-          privateIPAddress: canaryIp
+          privateIPAddress: vm2Ip
         }
       }
     ]
@@ -834,4 +832,4 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
 }
 
 output frontendIp string = gwPip.properties.ipAddress
-output backendPrivateIp string = backendIp
+output backendPrivateIp string = vm1Ip
