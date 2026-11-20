@@ -65,6 +65,7 @@ cd deploy && FRONTEND=<表示された IP> ./test.sh
 | カナリア (:8080 90:10) | 200 pool-web / pool-canary | ポート 8080 全体の重み付け。1 件では片方に決まる |
 | キャンペーン | 302 (`https://www.contoso.com/campaign?campaign=...`) | キャンペーン条件 (優先度 40) はカナリア (優先度 50) より先に評価される |
 | モバイル | 200 pool-mobile | iPhone UA。カナリアはポート 8080 のみのため影響しない |
+| WAF ブロック (UA) | 403 | `curl -A agw-block-demo` の要求。ルーティングの前に WAF が遮断する (`BlockDemoUA`) |
 
 **100 回連続の確認** (`deploy/canary-check.sh`、ポート 8080):
 
