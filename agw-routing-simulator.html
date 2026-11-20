@@ -1285,6 +1285,11 @@ renderMode(); renderRequest(); showStorage();
 state.dist = saved && saved.dist && validateDist(saved.dist).length === 0 ? saved.dist : distSample();
 // Settings saved before the User-Agent rule existed have no blockedUA: give them the sample value.
 if (!Array.isArray(state.config.waf.blockedUA)) state.config.waf.blockedUA = ["agw-block-demo"];
+// Settings saved before the A/B test rules existed: add the sample A/B rules, so the diagram shows pool-A / pool-B.
+if (!state.config.rules.some((r) => r.name === "A/B テスト (変種 B)")) {
+  const abRules = sampleConfig().rules.filter((r) => r.name.startsWith("A/B テスト"));
+  state.config.rules = [...state.config.rules, ...abRules].sort((a, b) => a.priority - b.priority);
+}
 DIST_PRESETS.forEach(([label, build]) => {
   const b = el("button", { type: "button", class: "small", text: label });
   b.addEventListener("click", () => { state.dist = build(); distChanged(true); });
