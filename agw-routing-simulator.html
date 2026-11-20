@@ -1095,8 +1095,21 @@ function renderDistResult() {
   const n = Number($("distN").value);
   out.replaceChildren(distReport(d, simulate(d, n), n));
 }
-// Test requests (live): send N requests to the gateway port and count the pool that answered (x-backend-pool).
+// Test requests (live): send N requests to the gateway port of the current preset.
+// Answers are kept in order. Results are shown 50 at a time (paging); cancel stops the requests not yet sent.
+const TEST_PAGE = 50;
+let testRun = null; // { seq, n, url, cancelled, finished, controller, page }
+function setTestButton(running) {
+  const b = $("testBtn");
+  b.textContent = running ? "キャンセル" : "テスト要求を送る (件数は上の件数)";
+  b.className = running ? "small" : "primary small";
+}
 async function runTestRequests() {
+  if (testRun && !testRun.finished) { // second press while running = cancel
+    testRun.cancelled = true; testRun.controller.abort();
+    $("testState").textContent = "キャンセル中…";
+    return;
+  }
   const out = $("testResult"), state_ = $("testState");
   if (!isLive()) { state_.textContent = "送信できません"; out.replaceChildren(el("p", { class: "err", text: "ゲートウェイ URL が空です。上の「ゲートウェイ URL」に入力すると、実機に送れます。" })); return; }
   const port = Number(state.request.port) || 80;
@@ -1104,35 +1117,71 @@ async function runTestRequests() {
   const u = new URL(normBase(state.backendUrl));
   u.port = String(port);
   const url = `${u.origin}/app/home`;
-  const counts = new Map();
-  let errors = 0;
-  const btn = $("testBtn");
-  btn.disabled = true;
+  const run = { seq: new Array(n).fill(null), n, url, cancelled: false, finished: false, controller: new AbortController(), page: 1 };
+  testRun = run;
+  setTestButton(true);
+  state_.textContent = `送信中 0 / ${n} 件`;
   out.replaceChildren(el("p", { class: "note", text: `${url} に ${n} 件送信中…` }));
   try {
-    for (let done = 0; done < n; ) {
+    for (let done = 0; done < n && !run.cancelled; ) {
       const batch = Math.min(10, n - done);
-      const results = await Promise.all(Array.from({ length: batch }, async () => {
-        try {
-          const res = await fetch(url, { cache: "no-store", mode: "cors", redirect: "manual" });
-          return res.headers.get("x-backend-pool");
-        } catch (e) { return undefined; }
+      await Promise.all(Array.from({ length: batch }, (_, k) => {
+        const i = done + k;
+        return (async () => {
+          try {
+            const res = await fetch(url, { cache: "no-store", mode: "cors", redirect: "manual", signal: run.controller.signal });
+            run.seq[i] = { pool: res.headers.get("x-backend-pool") || "(ヘッダーなし)", status: res.status };
+          } catch (e) {
+            run.seq[i] = run.cancelled ? { cancelled: true } : { error: (e && e.message) || "送信に失敗しました" };
+          }
+        })();
       }));
-      for (const pool of results) {
-        if (pool === undefined) errors++;
-        else { const k = pool || "(ヘッダーなし)"; counts.set(k, (counts.get(k) || 0) + 1); }
-      }
       done += batch;
-      state_.textContent = `${done} / ${n} 件`;
+      state_.textContent = `送信中 ${done} / ${n} 件`;
     }
-  } finally { btn.disabled = false; }
-  const total = [...counts.values()].reduce((a, b) => a + b, 0);
-  const rows = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([pool, c]) =>
-    el("tr", {}, el("td", { text: pool }), el("td", { text: String(c) }), el("td", { text: total ? `${Math.round((c / total) * 100)}%` : "-" })));
+  } finally { run.finished = true; setTestButton(false); }
+  const sent = run.seq.filter(Boolean).length;
+  state_.textContent = run.cancelled ? `キャンセル (${sent} 件まで送信)` : "完了";
+  renderTestRun(run, 1);
+}
+function renderTestRun(run, page) {
+  const out = $("testResult");
+  run.page = page;
+  const pages = Math.max(1, Math.ceil(run.n / TEST_PAGE));
+  const answered = run.seq.filter((r) => r && r.pool).length;
+  const failed = run.seq.filter((r) => r && r.error).length;
+  const sent = run.seq.filter(Boolean).length;
+  const counts = new Map();
+  for (const r of run.seq) if (r && r.pool) counts.set(r.pool, (counts.get(r.pool) || 0) + 1);
+  const colorOf = (pool) => (POOLS.find((p) => p.id === pool) || {}).color || "#64748b";
+  const start = (page - 1) * TEST_PAGE, end = Math.min(run.n, start + TEST_PAGE);
+  const cells = [];
+  for (let i = start; i < end; i++) {
+    const r = run.seq[i];
+    let style, label, title;
+    if (!r) { style = "background:transparent;border:1px dashed #94a3b8;color:#64748b"; label = "未送信"; title = `${i + 1} 件目: 未送信`; }
+    else if (r.cancelled) { style = "background:transparent;border:1px dashed #94a3b8;color:#64748b"; label = "中止"; title = `${i + 1} 件目: 中止`; }
+    else if (r.error) { style = "background:#e2e8f0;color:#334155"; label = "失敗"; title = `${i + 1} 件目: 失敗 (${r.error})`; }
+    else { style = `background:${colorOf(r.pool)};color:#fff`; label = r.pool; title = `${i + 1} 件目: ${r.pool} (HTTP ${r.status})`; }
+    cells.push(el("span", { title, style: `display:inline-flex;flex-direction:column;justify-content:center;align-items:center;inline-size:70px;block-size:36px;margin:2px;border-radius:6px;font-size:10px;line-height:1.2;padding:1px;overflow:hidden;${style}` },
+      el("b", { text: `#${i + 1}` }), el("span", { text: label })));
+  }
+  const pager = el("div", { class: "row", style: "align-items:center;gap:10px;margin-block:6px" },
+    el("button", { type: "button", class: "small", disabled: page <= 1 ? true : null, text: "‹ 前へ", onclick: null }),
+    el("span", { class: "note", text: `${start + 1}–${end} / ${run.n} 件 (${page} / ${pages} ページ)` }),
+    el("button", { type: "button", class: "small", disabled: page >= pages ? true : null, text: "次へ ›", onclick: null }));
+  const [prevBtn, nextBtn] = [pager.firstChild, pager.lastChild];
+  prevBtn.addEventListener("click", () => renderTestRun(run, page - 1));
+  nextBtn.addEventListener("click", () => renderTestRun(run, page + 1));
+  const legend = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([pool, c]) =>
+    el("span", { class: "note", style: "display:inline-flex;align-items:center;gap:6px;margin-inline-end:14px" },
+      el("span", { style: `display:inline-block;inline-size:12px;block-size:12px;border-radius:3px;background:${colorOf(pool)}` }),
+      el("span", { text: `${pool}: ${c} 件 (${answered ? Math.round((c / answered) * 100) : 0}%)` })));
   out.replaceChildren(
-    el("p", { class: "note", text: `${url} に ${n} 件送信 (応答 ${total} 件${errors ? `、失敗 ${errors} 件` : ""})。` }),
-    el("table", {}, el("thead", {}, el("tr", {}, el("th", { text: "応答したプール" }), el("th", { text: "件数" }), el("th", { text: "割合" }))), el("tbody", {}, ...rows)));
-  state_.textContent = "完了";
+    el("p", { class: "note", text: `${run.url} に ${run.n} 件 (送信 ${sent} 件、応答 ${answered} 件${failed ? `、失敗 ${failed} 件` : ""}${run.cancelled ? "、キャンセル" : ""})。` }),
+    el("div", { style: "display:flex;flex-wrap:wrap;margin-block-start:6px" }, legend),
+    pager,
+    el("div", { style: "display:flex;flex-wrap:wrap" }, ...cells));
 }
 $("testBtn").addEventListener("click", runTestRequests);
 $("distMode").addEventListener("change", () => { state.dist.mode = $("distMode").value; distChanged(true); });
