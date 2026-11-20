@@ -671,11 +671,6 @@ function renderDiagram() {
     { x: 8, l: "クライアント", sub: isLive() ? "このブラウザー" : "", on },
     { x: 148, l: "Basic リスナー", sub: d && d.kind === "priority" ? ":8090 (優先度)" : weighted ? ":8080 (カナリア)" : ":80", on },
     { x: 288, l: "WAF", sub: blocked ? "403 で遮断" : cfg.waf.enabled ? "ポリシー有効" : "無効", on: on && !blocked, bad: blocked },
-    priority
-      ? { x: 428, l: "優先度ルール", sub: "Primary 1 / Standby 2", on: on && !blocked }
-      : weighted
-      ? { x: 428, l: "重み付けルール", sub: "web 90 : canary 10", on: on && !blocked }
-      : { x: 428, l: "Advanced Routing Map", sub: `ルール ${cfg.rules.length} 件`, on: on && !blocked },
   ];
   stages.slice(0, -1).forEach((g, i) => svg.append(s("line", { x1: g.x + 120, y1: mid, x2: stages[i + 1].x, y2: mid, stroke: (i < 2 ? on : stages[i + 1].on) ? routeColor : "var(--line)", "stroke-width": on ? 3 : 1.5 })));
   stages.forEach((g) => {
@@ -683,15 +678,53 @@ function renderDiagram() {
     svg.append(s("text", { x: g.x + 60, y: mid - 3, "text-anchor": "middle", "font-size": g.l.length > 12 ? 9.5 : 12.5, "font-weight": 700, fill: "var(--fg)" }, g.l));
     svg.append(s("text", { x: g.x + 60, y: mid + 14, "text-anchor": "middle", "font-size": 10.5, fill: "var(--fg)" }, g.sub));
   });
+  // 3 つの Advanced routing map (リスナーのポートごと)。呼ばれたポートのマップを強調し、そこから行き先へ線を引く
+  const activePort = d && d.port ? d.port : 80;
+  const mapDefs = [
+    { port: 80, y: mid - 70, l: "Routing map :80", sub: "advancedRoutingMap1" },
+    { port: 8080, y: mid, l: "canaryMap :8080", sub: "canary-split 90 : 10" },
+    { port: 8090, y: mid + 70, l: "priorityMap :8090", sub: "Primary 1 / Standby 2" },
+  ];
+  const activeY = (mapDefs.find((m) => m.port === activePort) || mapDefs[0]).y;
+  mapDefs.forEach((m) => {
+    const isActive = on && !blocked && m.port === activePort;
+    svg.append(s("line", { x1: 408, y1: mid, x2: 428, y2: m.y, stroke: isActive ? routeColor : "var(--line)", "stroke-width": isActive ? 3 : 1.5 }));
+    svg.append(s("rect", { x: 428, y: m.y - 26, width: 120, height: 52, rx: 8, fill: "var(--card)", stroke: isActive ? routeColor : "var(--line)", "stroke-width": isActive ? 2.5 : 1.5 }));
+    svg.append(s("text", { x: 488, y: m.y - 3, "text-anchor": "middle", "font-size": 9.5, "font-weight": 700, fill: "var(--fg)" }, m.l));
+    svg.append(s("text", { x: 488, y: m.y + 14, "text-anchor": "middle", "font-size": 9.5, fill: "var(--fg)" }, m.sub));
+  });
   frames.forEach((f) => {
     svg.append(s("rect", { x: f.x, y: f.y, width: f.w, height: f.h, rx: 10, fill: "none", stroke: "var(--line)", "stroke-width": 1.5, "stroke-dasharray": "5 4" }));
     svg.append(s("text", { x: f.x + 10, y: f.y + 17, "font-size": 12, "font-weight": 700, fill: "var(--fg)" }, f.label));
+  });
+  // 各マップが、どの行き先につながるかは常に表示する (細い灰色の線)。
+  // 要求で使われた経路だけは、呼ばれたマップから命中したプールへ、色の太い線で重ねる。
+  const mapTargets = (port) => {
+    if (port === 80) {
+      const ids = [cfg.defaultPool, ...cfg.rules.map((r) => (r.target && r.target.pool ? r.target.pool : null))].filter(Boolean);
+      if (cfg.rules.some((r) => r.target && r.target.redirect)) ids.push("__redirect");
+      return ids;
+    }
+    if (port === 8080) return ["pool-web", "pool-canary"];
+    return ["pool-primary", "pool-standby"];
+  };
+  mapDefs.forEach((m) => {
+    mapTargets(m.port).forEach((id) => {
+      const row = targets.find((t) => t.id === id);
+      if (!row) return;
+      svg.append(s("path", { d: `M548 ${m.y} C 600 ${m.y}, 600 ${row.y}, 650 ${row.y}`, fill: "none", stroke: "var(--muted)", "stroke-width": 1.2, "stroke-dasharray": id === "__redirect" ? "5 4" : "none" }));
+    });
+  });
+  targets.forEach((t) => {
+    const hit = (t.id === "__redirect" && d && d.kind === "redirect") || hitSet.has(t.id);
+    if (!hit) return;
+    const p = t.color ? { color: t.color } : POOLS.find((x) => x.id === t.id);
+    svg.append(s("path", { d: `M548 ${activeY} C 600 ${activeY}, 600 ${t.y}, 650 ${t.y}`, fill: "none", stroke: p ? p.color : "var(--primary)", "stroke-width": 3, "stroke-dasharray": t.id === "__redirect" ? "5 4" : "none" }));
   });
   targets.forEach((t) => {
     const y = t.y;
     const hit = (t.id === "__redirect" && d && d.kind === "redirect") || hitSet.has(t.id);
     const p = t.color ? { color: t.color } : POOLS.find((x) => x.id === t.id);
-    svg.append(s("path", { d: `M548 ${mid} C 600 ${mid}, 600 ${y}, 650 ${y}`, fill: "none", stroke: hit && p ? p.color : st(hit), "stroke-width": hit ? 3 : 1, "stroke-dasharray": t.id === "__redirect" ? "5 4" : "none" }));
     svg.append(s("rect", { x: 650, y: y - 17, width: 202, height: 34, rx: 6, fill: hit ? (p ? p.color : "var(--primary)") : "var(--card)", stroke: hit ? (p ? p.color : "var(--primary)") : "var(--line)", "stroke-width": hit ? 2 : 1 }));
     svg.append(s("text", { x: 660, y: y - 2, "font-size": 11.5, "font-weight": 700, fill: hit ? "#ffffff" : "var(--fg)" }, t.t));
     svg.append(s("text", { x: 660, y: y + 11, "font-size": 10, fill: hit ? "#ffffff" : "var(--fg)" }, t.sub));

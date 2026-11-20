@@ -179,6 +179,29 @@ az group delete -n rg-agw-advrouting-demo --yes --no-wait
 
 - 8080 番のカナリアは、高度なルール `canary-split` (`WeightedDistribution`、pool-web 90 / pool-canary 10) で動きます。切り替えのスイッチはありません。
 
+## 優先度ベースの確認 (ポート 8090)
+
+構成: リスナー `listener-priority` (8090)、ルール `rule-priority` (Advanced、優先度 300)、マップ `priorityMap`。マップの中で、全パスに一致するルール `priority-split` が、`pool-primary` (VM 2、優先度 1) と `pool-standby` (VM 1、優先度 2) を `PriorityAware`、最小正常割合 60% で振り分けます。既定の振り分け先は `pool-standby` です。
+
+確認は 3 つの状態で行います。
+
+| 状態 | 期待 | 手順 |
+|---|---|---|
+| 正常 | 100 件すべて `pool-primary` (VM 2) | `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100` |
+| VM 2 停止 | 切り替わるまで約 2〜3 分。その後 100 件すべて `pool-standby` (VM 1) | 下のコマンドで停止し、2〜3 分待つ |
+| 復旧 | 100 件すべて `pool-primary` に戻る | 下のコマンドで起動し、2〜3 分待つ |
+
+```bash
+# 停止 (VM 2 の pool-canary)
+az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"
+# 復旧
+az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-canary"
+```
+
+- VM 2 の pool-canary を止めないと、Primary に送られ続けるため、Standby への切り替えは見えません。
+- シミュレーターの「テスト要求」は、選んでいる要求のポートに件数分送ります。優先度 (8090) のプリセットを選んでから押すと、Primary / Standby の件数を数えられます。押すと「キャンセル」に変わり、送信を止められます。結果は 50 件ずつ表示します。
+
+
 ## 設計メモ: 外向き通信 (NAT Gateway)
 
 - バックエンド VM には public IP を付けません。受信は NSG の既定ルール (インターネットからの受信は拒否) で遮断します。

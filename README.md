@@ -54,6 +54,10 @@ FRONTEND=<表示されたフロントエンド IP>:8080 ./canary-check.sh /app/h
 ```
 - カナリア展開: ポート 8080 のリスナーで、ルール `canary-split` が全リクエストを pool-web 90% / pool-canary 10% に振り分けます (高度なルールの重み付け)。URI では絞りません。ポート 80 は高度なルール (A/B やヘッダーの振り分け) のままです。
 - カナリアの配置: pool-canary は VM2 (192.168.1.11) の 8080 番で動かします。pool-web は VM1 の 8080 番です。同じポートで別の応答を返すため、IP アドレスを分けています。VM2 を別ポートにできるかは未検証です (高度なルールでは、プールごとにバックエンド設定を持てます)。
+- 優先度ベースのプール選択 (ポート 8090): ルール `rule-priority` (Advanced、優先度 300) がマップ `priorityMap` を参照します。マップの中では、全パスに一致するルール `priority-split` が、`pool-primary` (Primary、VM 2 の 8080 番、優先度 1) を使い、`pool-primary` の正常なサーバーが最小正常割合 60% に達しない場合は `pool-standby` (Standby、VM 1 の 8080 番、優先度 2) に切り替えます。既定の振り分け先は `pool-standby` です。各プールは 1 台のため、切り替えはプール全体の単位です。
+  - 確認: `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100` で件数を見ます。
+  - 停止と復旧 (手動): `az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"` で VM 2 を止めると、切り替わるまで約 2〜3 分かかります。`systemctl start agw-pool@pool-canary` で戻すと、また `pool-primary` に送られます。
+  - シミュレーターの「テスト要求」は、選んでいる要求のポートに件数分送り、どのプールに届いたかを数えます。Primary / Standby の名前で表示します。
 - 重み付けは Advanced load balancing の機能です。8080 番のカナリアは、高度なルールで `WeightedDistribution` を使います。
   ```text
   client --:8080--> listener-canary --> rule-canary (Advanced)
