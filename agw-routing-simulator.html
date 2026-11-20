@@ -419,7 +419,11 @@ function evaluate(cfg, r) {
   });
   return { path, results, d: d || { kind: "default", pool: cfg.defaultPool } };
 }
-const pool = (id) => POOLS.find((p) => p.id === id) || { id, label: id, port: 0, color: "#334155" };
+const pool = (id) => POOLS.find((p) => p.id === id) || { id, label: id, port: 0, color: PRIORITY_COLOR[id] || "#334155" };
+// 優先度ベース (8090): Primary = VM 2 (実体のプロセス pool-canary)、Standby = VM 1 (実体 pool-web)
+const PRIORITY_COLOR = { "pool-primary": "#b45309", "pool-standby": "#475569" };
+const PRIORITY_NAME_ON_8090 = { "pool-canary": "pool-primary", "pool-web": "pool-standby" };
+function gatewayPoolName(processPool, port) { return Number(port) === 8090 && PRIORITY_NAME_ON_8090[processPool] ? PRIORITY_NAME_ON_8090[processPool] : processPool; }
 function describe(d, cfg) {
   if (d.kind === "waf") return `WAF がブロック (${d.cidr}) — ルーティング評価なし`;
   if (d.kind === "weighted") return `ポート ${d.port} は重み付け (既定 pool-web 90% / pool-canary 10%)。1 件の経路は確率で決まります`;
@@ -547,7 +551,8 @@ async function callGateway(r) {
     if (res.type === "opaqueredirect") return { kind: "redirect", ms, skipped, url };
     let body = null;
     if (r.method !== "HEAD" && (res.headers.get("content-type") || "").includes("json")) { try { body = await res.json(); } catch (e) { body = null; } }
-    return { kind: "response", status: res.status, statusText: res.statusText, pool: res.headers.get("x-backend-pool"), body, ms, skipped, url };
+    const processPool = res.headers.get("x-backend-pool");
+    return { kind: "response", status: res.status, statusText: res.statusText, pool: gatewayPoolName(processPool, r.port), rawPool: processPool, port: r.port, body, ms, skipped, url };
   } catch (e) {
     return { kind: "error", message: ctl.signal.aborted ? "10 秒以内に応答がありませんでした" : "応答を読めませんでした (WAF のブロック、CORS 未設定、URL 誤り、混在コンテンツのいずれか)", skipped, url };
   } finally { clearTimeout(timer); }
@@ -754,9 +759,9 @@ function renderLive() {
   const b = l.body;
   if (b && b.pool) {
     const hs = Object.entries(b.headers || {}).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : v]);
-    out.append(backendPage(pool(b.pool), b.method || "", b.path || "", new URLSearchParams(b.query || {}).toString(), hs, b.instance || ""));
+    out.append(backendPage(pool(gatewayPoolName(b.pool, l.port)), b.method || "", b.path || "", new URLSearchParams(b.query || {}).toString(), hs, b.instance || ""));
   } else {
-    out.append(statusBlock(l.status, l.statusText || "", l.pool ? `x-backend-pool: ${l.pool}` : "x-backend-pool ヘッダーなし (デモ用バックエンドではないか、CORS の Expose-Headers 未設定)"));
+    out.append(statusBlock(l.status, l.statusText || "", l.pool ? `x-backend-pool: ${l.pool}${l.rawPool && l.rawPool !== l.pool ? ` (VM のプロセス: ${l.rawPool})` : ""}` : "x-backend-pool ヘッダーなし (デモ用バックエンドではないか、CORS の Expose-Headers 未設定)"));
   }
   out.append(meta, skipped);
 }
@@ -1165,7 +1170,7 @@ async function runTestRequests() {
         return (async () => {
           try {
             const res = await fetch(url, { cache: "no-store", mode: "cors", redirect: "manual", signal: run.controller.signal });
-            run.seq[i] = { pool: res.headers.get("x-backend-pool") || "(ヘッダーなし)", status: res.status };
+            run.seq[i] = { pool: gatewayPoolName(res.headers.get("x-backend-pool") || "(ヘッダーなし)", port), status: res.status };
           } catch (e) {
             run.seq[i] = run.cancelled ? { cancelled: true } : { error: (e && e.message) || "送信に失敗しました" };
           }
@@ -1188,7 +1193,7 @@ function renderTestRun(run, page) {
   const sent = run.seq.filter(Boolean).length;
   const counts = new Map();
   for (const r of run.seq) if (r && r.pool) counts.set(r.pool, (counts.get(r.pool) || 0) + 1);
-  const colorOf = (pool) => (POOLS.find((p) => p.id === pool) || {}).color || "#64748b";
+  const colorOf = (pool) => (POOLS.find((p) => p.id === pool) || {}).color || PRIORITY_COLOR[pool] || "#64748b";
   const start = (page - 1) * TEST_PAGE, end = Math.min(run.n, start + TEST_PAGE);
   const cells = [];
   for (let i = start; i < end; i++) {
