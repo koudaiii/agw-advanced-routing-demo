@@ -39,7 +39,7 @@ cd deploy
 
 - `make-cloud-init.sh` で 2 つの初期化ファイルを生成 (`backend/server.js` を埋め込み): `cloud-init.yaml` (バックエンド VM 1) と `cloud-init-canary.yaml` (カナリア VM 2、`backend/pools-canary.conf`)
 - リソースグループ `rg-agw-advrouting-demo` を作成
-- `main.bicep` をデプロイ: VNet (`appgw` 10.20.0.0/24 / `backend` 10.20.1.0/24)、バックエンド NSG、バックエンド VM 1 (Ubuntu 24.04、固定 IP 10.20.1.10、Node.js プロセス 5 つ = ポート 8080–8083、8085)、カナリア VM 2 (固定 IP 10.20.1.11、`pool-canary` をポート 8080)、WAF_v2 ポリシー (Prevention、DRS 2.1、カスタムルール `BlockDemoIp` と `BlockDemoUA`)、Application Gateway、Advanced routing map (`advancedRoutingMap1`、条件セット 5 つ、ルール 5 つ)、`rule1` (Advanced、ポート 80)、ポート 8080 のリスナー `listener-canary` と Basic ルール `rule-canary` (既定 `WEIGHTED_CANARY=false` では 8080 番の全件を pool-canary に送る。`WEIGHTED_CANARY=true` では `loadDistributionPolicy` で pool-web 90 / pool-canary 10)
+- `main.bicep` をデプロイ: VNet (`appgw` 192.168.0.0/24 / `backend` 192.168.1.0/24)、バックエンド NSG、バックエンド VM 1 (Ubuntu 24.04、固定 IP 192.168.1.10、Node.js プロセス 5 つ = ポート 8080–8083、8085)、カナリア VM 2 (固定 IP 192.168.1.11、`pool-canary` をポート 8080)、WAF_v2 ポリシー (Prevention、DRS 2.1、カスタムルール `BlockDemoIp` と `BlockDemoUA`)、Application Gateway、Advanced routing map (`advancedRoutingMap1`、条件セット 5 つ、ルール 5 つ)、`rule1` (Advanced、ポート 80)、ポート 8080 のリスナー `listener-canary` と Basic ルール `rule-canary` (既定 `WEIGHTED_CANARY=false` では 8080 番の全件を pool-canary に送る。`WEIGHTED_CANARY=true` では `loadDistributionPolicy` で pool-web 90 / pool-canary 10)
 
 ゲートウェイのバックエンドが Healthy になるまで数分かかることがあります。確認:
 
@@ -144,7 +144,7 @@ az group delete -n rg-agw-advrouting-demo --yes --no-wait
 ## 設計メモ: なぜカナリア用の VM2 が必要か
 
 - 重み付け (`loadDistributionPolicy`) は 1 つの Basic ルールに付き、ルール内の全プールが **同じバックエンド HTTP 設定 (同じポート)** を使います。ARM の振り分けターゲットには、プールごとのポート指定がありません。
-- pool-web は VM1 の 8080 番で動いています。同じポートで別の応答を返す pool-canary を置くには、**別の IP アドレス** が必要です。そのため新バージョン (pool-canary) は VM2 (10.20.1.11) の 8080 番で動かします。
+- pool-web は VM1 の 8080 番で動いています。同じポートで別の応答を返す pool-canary を置くには、**別の IP アドレス** が必要です。そのため新バージョン (pool-canary) は VM2 (192.168.1.11) の 8080 番で動かします。
 - 以前の構成 (VM1 の 8084 番) では、ポートが一致せず重み付けの対象にできませんでした。
 - 代替案: VM1 に 2 つ目の IP を付け、同じ方法で動かせば VM が 1 台減ります。ただし VM1 の初期化データ (customData) の変更は既存 VM で拒否されるため、VM1 の再作成が必要になります。
 

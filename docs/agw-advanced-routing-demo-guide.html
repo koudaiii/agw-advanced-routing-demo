@@ -193,9 +193,9 @@ DynamicUser=yes</code></pre>
 
 <h3>4.1 作成されるリソース</h3>
 <table><thead><tr><th scope="col">リソース</th><th scope="col">内容</th></tr></thead><tbody>
-<tr><td>VNet / サブネット</td><td><code>appgw</code> 10.20.0.0/24 (Application Gateway 専用)、<code>backend</code> 10.20.1.0/24 (NSG 付き)</td></tr>
-<tr><td>バックエンド VM 1</td><td>固定 IP 10.20.1.10。Node.js プロセス × 5 (ポート 8080–8083、8085)。cloud-init で <code>server.js</code> を配置</td></tr>
-<tr><td>カナリア VM 2</td><td>固定 IP 10.20.1.11。Node.js プロセス × 1 (<code>pool-canary</code>、ポート 8080)</td></tr>
+<tr><td>VNet / サブネット</td><td><code>appgw</code> 192.168.0.0/24 (Application Gateway 専用)、<code>backend</code> 192.168.1.0/24 (NSG 付き)</td></tr>
+<tr><td>バックエンド VM 1</td><td>固定 IP 192.168.1.10。Node.js プロセス × 5 (ポート 8080–8083、8085)。cloud-init で <code>server.js</code> を配置</td></tr>
+<tr><td>カナリア VM 2</td><td>固定 IP 192.168.1.11。Node.js プロセス × 1 (<code>pool-canary</code>、ポート 8080)</td></tr>
 <tr><td>WAF ポリシー</td><td>Prevention、DRS 2.1。カスタムルール <code>BlockDemoIp</code> (送信元 IP)、<code>BlockDemoUA</code> (User-Agent に <code>agw-block-demo</code> を含む要求を遮断)</td></tr>
 <tr><td>Application Gateway (WAF_v2)</td><td>リスナー <code>listener-http</code> (:80) と <code>listener-canary</code> (:8080)。ルール <code>rule1</code> (Advanced、:80)、<code>rule-canary</code> (Basic、:8080)</td></tr>
 <tr><td>プローブ・プール・バックエンド設定</td><td>プローブ <code>healthz</code>。プール 6 つ (<code>pool-web</code>、<code>pool-partner</code>、<code>pool-tenant</code>、<code>pool-api-v2</code>、<code>pool-canary</code>、<code>pool-mobile</code>) と、それぞれのバックエンド設定 <code>hs-&lt;pool&gt;</code></td></tr>

@@ -667,7 +667,7 @@ function renderSim() {
   const p = pool(d.pool);
   const hs = r.headers.filter((h) => h.name.trim()).map((h) => [h.name.trim().toLowerCase(), h.value]);
   const gw = [["x-forwarded-for", `${r.clientIp}:50432`], ["x-forwarded-proto", "http"], ["x-forwarded-port", "80"], ["x-original-host", "<FRONTEND>"]];
-  const merged = hs.filter(([k]) => !gw.some(([g]) => g === k)).concat(gw, [["host", `10.20.1.4:${p.port}`]]);
+  const merged = hs.filter(([k]) => !gw.some(([g]) => g === k)).concat(gw, [["host", `192.168.1.10:${p.port}`]]);
   out.append(backendPage(p, r.method, state.ev.path, r.query.replace(/^\?/, ""), merged, `backend-vm:${p.port}`));
 }
 function renderLive() {

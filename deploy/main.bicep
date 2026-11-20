@@ -19,7 +19,7 @@ param wafBlockCidr string = '198.51.100.0/24'
 param sshPublicKey string
 
 @description('Static private IP of the backend VM inside the backend subnet.')
-param backendIp string = '10.20.1.10'
+param backendIp string = '192.168.1.10'
 
 var vnetName = '${prefix}-vnet'
 var nsgName = '${prefix}-backend-nsg'
@@ -32,7 +32,7 @@ var gwPipName = '${gwName}-pip'
 var mapName = 'advancedRoutingMap1'
 // The new version (pool-canary) runs on its own VM, on port 8080 like pool-web. The weighted /canary split
 // needs both pools to share one backend HTTP setting, so they must use the same port.
-var canaryIp = '10.20.1.11'
+var canaryIp = '192.168.1.11'
 var canaryVmName = '${vmName}-canary'
 var poolAddressPools = [for p in pools: {
   name: p.name
@@ -75,19 +75,19 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   location: location
   properties: {
     addressSpace: {
-      addressPrefixes: [ '10.20.0.0/16' ]
+      addressPrefixes: [ '192.168.0.0/16' ]
     }
     subnets: [
       {
         name: 'appgw'
         properties: {
-          addressPrefix: '10.20.0.0/24'
+          addressPrefix: '192.168.0.0/24'
         }
       }
       {
         name: 'backend'
         properties: {
-          addressPrefix: '10.20.1.0/24'
+          addressPrefix: '192.168.1.0/24'
           networkSecurityGroup: {
             id: nsg.id
           }
