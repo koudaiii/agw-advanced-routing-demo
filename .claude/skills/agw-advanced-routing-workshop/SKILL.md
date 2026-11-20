@@ -152,9 +152,9 @@ az group delete -n rg-agw-advrouting-demo --yes --no-wait
 
 ## 現在の実装状態 (8080 番のカナリア)
 
-- テンプレートのパラメーター `weightedCanary` (既定 `false`) で切り替えます。
+- 切り替えは環境変数 `WEIGHTED_CANARY` (既定 `false`) で行います。`deploy.sh` がテンプレートのパラメーター `weightedCanary` に渡します。
 - `false` (現在): ポート 8080 の全件を pool-canary (VM2) に送ります。重み付けの機能登録が不要です。
-- `true`: ポート 8080 を pool-web 90% / pool-canary 10% に重み付けします。`AllowApplicationGatewayLoadDistributionPolicy` の登録が `Registered` になってから `./deploy.sh` の代わりに `az deployment group create ... --parameters weightedCanary=true` で有効にします。
+- `true`: ポート 8080 を pool-web 90% / pool-canary 10% に重み付けします。`AllowApplicationGatewayLoadDistributionPolicy` の登録が `Registered` になってから `WEIGHTED_CANARY=true ./deploy.sh` で有効にします。
 - 登録が `Pending` のままの間は、`weightedCanary=false` で運用します。
 
 ## 関連ファイル
