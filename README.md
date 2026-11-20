@@ -33,7 +33,7 @@ https://learn.microsoft.com/en-us/azure/application-gateway/advanced-rules
 | `backend/pools.conf` | VM1 (バックエンド) のプール名・ポート・表示名・色。5 プール (ポート 8080–8083、8085) |
 | `backend/pools-canary.conf` | カナリア VM2 のプール定義 (`pool-canary`、ポート 8080) |
 | `deploy/deploy.sh` | リソースグループを作成し、`deploy/main.bicep` をデプロイ。SSH 鍵がなければ生成 |
-| `deploy/main.bicep` | VNet、バックエンド VM 1 (5 プール)、カナリア VM 2 (`pool-canary`、8080)、WAF ポリシー、App Gateway、条件セット 5 つ、Advanced routing map と `rule1` (Advanced、ポート 80)、ポート 8080 の Basic ルール `rule-canary` を作成。`weightedCanary` で 90:10 の重み付けに切り替え |
+| `deploy/main.bicep` | VNet、バックエンド VM 1 (5 プール)、カナリア VM 2 (`pool-canary`、8080)、WAF ポリシー、App Gateway、条件セット 6 つ、Advanced routing map (`advancedRoutingMap1` と `canaryMap`)、ルール `rule1` (ポート 80) と `rule-canary` (ポート 8080、`canaryMap` の 90:10) を作成 |
 | `deploy/make-cloud-init.sh` / `cloud-init.yaml` | バックエンド VM 1 の初期化データ (`backend/server.js` を埋め込み) |
 | `deploy/cloud-init-canary.yaml` | カナリア VM 2 の初期化データ (`backend/pools-canary.conf` から生成) |
 | `deploy/canary-check.sh` | 指定した URI に 100 回連続で送り、x-backend-pool でプール別の件数と割合を表示。カナリアは `FRONTEND=<IP>:8080` |
@@ -47,15 +47,11 @@ cd deploy
 FRONTEND=<表示されたフロントエンド IP> ./test.sh
 FRONTEND=<表示されたフロントエンド IP>:8080 ./canary-check.sh /app/home 100   # ポート 8080 に 100 回連続で送り、プール別の件数を表示
 ```
-- カナリア展開: ポート 8080 のリスナーで、新バージョン (pool-canary) への振り分けを行います。`WEIGHTED_CANARY=false` (既定) では 8080 番の全件を pool-canary に送ります。`WEIGHTED_CANARY=true` では、ポート 8080 全体を pool-web 90% / pool-canary 10% に重み付けします。URI では絞りません。ポート 80 は高度なルール (A/B やヘッダーの振り分け) のままです。
-- なぜカナリア用の VM (VM2) が必要か: 重み付け (`loadDistributionPolicy`) は 1 つの Basic ルールに付き、ルール内の全プールが同じバックエンド HTTP 設定 (同じポート) を使います。ARM の振り分けターゲットにはプールごとのポート指定がありません。pool-web は VM1 の 8080 番で動くため、同じポートで別の応答を返す pool-canary を置くには、別の IP アドレスが必要です。そこで新バージョン (pool-canary) を VM2 (192.168.1.11) の 8080 番で動かします。以前の 8084 番では、ポートが一致せず重み付けの対象にできませんでした。VM1 を作り直さずに済ませるなら、VM1 に 2 つ目の IP を付けて同じ方法で動かす代替案もあります (VM1 の初期化データの変更は既存 VM で拒否されるため、再作成が必要になります)。
-- 重み付けは Advanced load balancing の機能です。`WEIGHTED_CANARY=true` にはサブスクリプションで `Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy` の登録が必要です。
-  ```bash
-  WEIGHTED_CANARY=true ./deploy.sh    # 重み付け 90:10 に切り替え
-  WEIGHTED_CANARY=false ./deploy.sh   # 8080 番の全件を pool-canary に戻す
-  ```
+- カナリア展開: ポート 8080 のリスナーで、ルール `canary-split` が全リクエストを pool-web 90% / pool-canary 10% に振り分けます (高度なルールの重み付け)。URI では絞りません。ポート 80 は高度なルール (A/B やヘッダーの振り分け) のままです。
+- カナリアの配置: pool-canary は VM2 (192.168.1.11) の 8080 番で動かします。pool-web は VM1 の 8080 番です。同じポートで別の応答を返すため、IP アドレスを分けています。VM2 を別ポートにできるかは未検証です (高度なルールでは、プールごとにバックエンド設定を持てます)。
+- 重み付けは Advanced load balancing の機能です。8080 番のカナリアは、高度なルールで `WeightedDistribution` を使います。
 - デプロイは Bicep (`main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。Azure CLI 2.87.0 には advanced-routing 用のコマンド (`az network application-gateway advanced-routing-map` など) がないため、CLI では作成できません。
-- ARM API の確認 (2026-11-20): 現在の template は 2026-03-01 / 2026-05-01 / 2026-07-01 のすべてで検証に成功します。高度なルールの振り分け先は `backendAddressPool` の 1 つだけです。`loadDistributionPolicy` を指定すると、3 バージョンすべてで `ApplicationGatewayAdvancedRoutingRuleMustReference` になります。Bicep 0.49.2 でも BCP037 で指摘されます (型情報あり)。
+- ARM API の確認 (2026-11-20): 現在の template は 2026-03-01 / 2026-05-01 / 2026-07-01 のすべてで検証に成功します。高度なルールは、単一プール (`backendAddressPool`) と複数プール (`backendAddressPoolsAndSettings` + `poolSelectionAlgorithm`) のどちらも指定できます。`loadDistributionPolicy` だけを指定すると、ARM は `ApplicationGatewayAdvancedRoutingRuleMustReference` で拒否します。Bicep 0.49.2 は `loadDistributionPolicy` を BCP037 で指摘します。
 - 完了まで 15〜20 分程度かかります (Application Gateway の作成と更新に時間がかかるため)。
 ブラウザーで `http://<フロントエンド IP>/app/home` を開くと、応答したプールのページが表示されます。ヘッダーを付ける場合は curl か、ブラウザー拡張 (ModHeader など) を使います。
 
