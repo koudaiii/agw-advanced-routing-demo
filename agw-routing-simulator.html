@@ -283,8 +283,7 @@ function sampleConfig() {
       { name: "マルチテナント", priority: 20, conditions: [{ type: "Header", name: "X-Tenant-Id", pattern: "^customer-[0-9]+$" }, { type: "Path", pattern: "^/app(/.*)?$" }], target: { pool: "pool-tenant" } },
       { name: "API バージョニング", priority: 30, conditions: [{ type: "Header", name: "X-Api-Version", values: ["2", "2.0"] }, { type: "Path", pattern: "^/api/orders(/.*)?$" }], target: { pool: "pool-api-v2" } },
       { name: "キャンペーン LP", priority: 40, conditions: [{ type: "QueryString", name: "campaign", values: ["spring", "summer"] }], target: { redirect: "https://www.contoso.com/campaign" } },
-      { name: "A/B テスト (変種 B)", priority: 45, conditions: [{ type: "Path", pattern: "^/ab(/.*)?$" }, { type: "Header", name: "X-Variant", values: ["B"] }], target: { pool: "pool-B" } },
-      { name: "A/B テスト (変種 A)", priority: 46, conditions: [{ type: "Path", pattern: "^/ab(/.*)?$" }], target: { pool: "pool-A" } },
+      { map: 8100, name: "A/B テスト (変種 B)", priority: 10, conditions: [{ type: "Header", name: "X-Variant", values: ["B"] }], target: { pool: "pool-B" } },
       { name: "モバイル振り分け", priority: 60, conditions: [{ type: "Header", name: "User-Agent", pattern: "(iPhone|Android)" }], target: { pool: "pool-mobile" } },
     ],
   };
@@ -297,8 +296,8 @@ const PRESETS = [
   ["API v2", () => req("GET", "/api/orders/1001", "", "192.0.2.41", [["X-Api-Version", "2.0"]])],
   ["エンコード済みパス", () => req("GET", "/api%2Forders", "", "192.0.2.41", [["X-Api-Version", "2"]])],
   ["キャンペーン", () => req("GET", "/landing", "campaign=summer&utm=mail", "192.0.2.41", [["User-Agent", DESKTOP_UA]])],
-  ["A/B (変種 A)", () => req("GET", "/ab", "", "192.0.2.41", [])],
-  ["A/B (変種 B)", () => req("GET", "/ab", "", "192.0.2.41", [["X-Variant", "B"]])],
+  ["A/B (変種 A)", () => ({ ...req("GET", "/", "", "192.0.2.41", []), port: 8100 })],
+  ["A/B (変種 B)", () => ({ ...req("GET", "/", "", "192.0.2.41", [["X-Variant", "B"]]), port: 8100 })],
   ["モバイル", () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X)"]]), uaSensitive: true })],
   ["カナリア (ポート 8080)", () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]]), port: 8080 })],
   ["優先度 (ポート 8090)", () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]]), port: 8090 })],
@@ -345,6 +344,7 @@ function validateConfig(c) {
   const prios = new Set();
   c.rules.forEach((r, i) => {
     const at = `rules[${i}]${r && r.name ? ` (${r.name})` : ""}`;
+    if (r && r.map !== undefined && r.map !== 80 && r.map !== 8100) e.push(`${at}: map は 80 (既定) か 8100 (A/B) です`);
     if (!r || typeof r.name !== "string" || !r.name.trim()) e.push(`${at}: name が必要です`);
     if (!Number.isInteger(r && r.priority) || r.priority < 1) e.push(`${at}: priority は 1 以上の整数です`);
     else if (prios.has(r.priority)) e.push(`${at}: priority ${r.priority} が重複しています`); else prios.add(r.priority);
@@ -403,9 +403,12 @@ function matches(c, v) {
   return c.values.includes(v);
 }
 const sorted = (rules) => rules.map((r, i) => ({ r, i })).sort((a, b) => a.r.priority - b.r.priority);
+const ruleMap = (rule) => (rule.map === 8100 ? 8100 : 80);
+const AB_DEFAULT_POOL = "pool-A";
 function evaluate(cfg, r) {
   const path = decodePath(r.path);
   const order = sorted(cfg.rules);
+  const mapPort = Number(r.port) === 8100 ? 8100 : 80;
   if (cfg.waf.enabled) {
     const hit = cfg.waf.blocked.find((x) => inCidr(r.clientIp, x));
     if (hit) return { path, results: order.map(({ i }) => ({ i, status: "skip", conds: [] })), d: { kind: "waf", cidr: hit } };
@@ -417,22 +420,22 @@ function evaluate(cfg, r) {
   if (r.port === 8090) return { path, results: order.map(({ i }) => ({ i, status: "skip", conds: [] })), d: { kind: "priority", port: 8090 } };
   let d = null;
   const results = order.map(({ r: rule, i }) => {
-    if (d) return { i, status: "skip", conds: [] };
+    if (d || ruleMap(rule) !== mapPort) return { i, status: "skip", conds: [] };
     const conds = rule.conditions.map((c) => { const v = actual(c, r, path); return { v, ok: matches(c, v) }; });
     const ok = conds.every((x) => x.ok);
-    if (ok) d = rule.target.pool ? { kind: "pool", i, pool: rule.target.pool } : { kind: "redirect", i, url: rule.target.redirect };
+    if (ok) d = rule.target.pool ? { kind: "pool", i, pool: rule.target.pool, port: mapPort } : { kind: "redirect", i, url: rule.target.redirect, port: mapPort };
     return { i, status: ok ? "ok" : "no", conds };
   });
-  return { path, results, d: d || { kind: "default", pool: cfg.defaultPool } };
+  return { path, results, d: d || { kind: "default", pool: mapPort === 8100 ? AB_DEFAULT_POOL : cfg.defaultPool, port: mapPort } };
 }
 const pool = (id) => POOLS.find((p) => p.id === id) || { id, label: id, port: 0, color: PRIORITY_COLOR[id] || "#334155" };
 // 優先度ベース (8090): Primary = VM 2 (実体のプロセス pool-canary)、Standby = VM 1 (実体 pool-web)
 const PRIORITY_COLOR = { "pool-primary": "#b45309", "pool-standby": "#475569" };
 const PRIORITY_NAME_ON_8090 = { "pool-canary": "pool-primary", "pool-web": "pool-standby" };
-const AB_NAME_ON_AB_PATH = { "pool-web": "pool-A", "pool-canary": "pool-B" };
+const AB_NAME_ON_8100 = { "pool-web": "pool-A", "pool-canary": "pool-B" };
 function gatewayPoolName(processPool, port, path) {
   if (Number(port) === 8090 && PRIORITY_NAME_ON_8090[processPool]) return PRIORITY_NAME_ON_8090[processPool];
-  if ((Number(port) || 80) === 80 && String(path || "").startsWith("/ab") && AB_NAME_ON_AB_PATH[processPool]) return AB_NAME_ON_AB_PATH[processPool];
+  if (Number(port) === 8100 && AB_NAME_ON_8100[processPool]) return AB_NAME_ON_8100[processPool];
   return processPool;
 }
 function describe(d, cfg) {
@@ -692,9 +695,10 @@ function renderDiagram() {
   // 3 つの Advanced routing map (リスナーのポートごと)。呼ばれたポートのマップを強調し、そこから行き先へ線を引く
   const activePort = d && d.port ? d.port : 80;
   const mapDefs = [
-    { port: 80, y: mid - 70, l: "Routing map :80", sub: "advancedRoutingMap1" },
-    { port: 8080, y: mid, l: "canaryMap :8080", sub: "canary-split 90 : 10" },
-    { port: 8090, y: mid + 70, l: "priorityMap :8090", sub: "Primary 1 / Standby 2" },
+    { port: 80, y: mid - 105, l: "Routing map :80", sub: "advancedRoutingMap1" },
+    { port: 8080, y: mid - 35, l: "canaryMap :8080", sub: "canary-split 90 : 10" },
+    { port: 8090, y: mid + 35, l: "priorityMap :8090", sub: "Primary 1 / Standby 2" },
+    { port: 8100, y: mid + 105, l: "abMap :8100", sub: "変種 B → pool-B" },
   ];
   const activeY = (mapDefs.find((m) => m.port === activePort) || mapDefs[0]).y;
   mapDefs.forEach((m) => {
@@ -712,10 +716,12 @@ function renderDiagram() {
   // 要求で使われた経路だけは、呼ばれたマップから命中したプールへ、色の太い線で重ねる。
   const mapTargets = (port) => {
     if (port === 80) {
-      const ids = [cfg.defaultPool, ...cfg.rules.map((r) => (r.target && r.target.pool ? r.target.pool : null))].filter(Boolean);
-      if (cfg.rules.some((r) => r.target && r.target.redirect)) ids.push("__redirect");
+      const own = cfg.rules.filter((r) => ruleMap(r) === 80);
+      const ids = [cfg.defaultPool, ...own.map((r) => (r.target && r.target.pool ? r.target.pool : null))].filter(Boolean);
+      if (own.some((r) => r.target && r.target.redirect)) ids.push("__redirect");
       return ids;
     }
+    if (port === 8100) return ["pool-B", "pool-A"];
     if (port === 8080) return ["pool-web", "pool-canary"];
     return ["pool-primary", "pool-standby"];
   };
@@ -1285,10 +1291,10 @@ renderMode(); renderRequest(); showStorage();
 state.dist = saved && saved.dist && validateDist(saved.dist).length === 0 ? saved.dist : distSample();
 // Settings saved before the User-Agent rule existed have no blockedUA: give them the sample value.
 if (!Array.isArray(state.config.waf.blockedUA)) state.config.waf.blockedUA = ["agw-block-demo"];
-// Settings saved before the A/B test rules existed: add the sample A/B rules, so the diagram shows pool-A / pool-B.
-if (!state.config.rules.some((r) => r.name === "A/B テスト (変種 B)")) {
-  const abRules = sampleConfig().rules.filter((r) => r.name.startsWith("A/B テスト"));
-  state.config.rules = [...state.config.rules, ...abRules].sort((a, b) => a.priority - b.priority);
+// Settings saved before the A/B test had its own map (8100): replace the old A/B rules with the sample ones.
+if (!state.config.rules.some((r) => r.map === 8100)) {
+  state.config.rules = state.config.rules.filter((r) => !r.name.startsWith("A/B テスト")).concat(sampleConfig().rules.filter((r) => r.map === 8100));
+  state.config.rules.sort((a, b) => a.priority - b.priority);
 }
 DIST_PRESETS.forEach(([label, build]) => {
   const b = el("button", { type: "button", class: "small", text: label });

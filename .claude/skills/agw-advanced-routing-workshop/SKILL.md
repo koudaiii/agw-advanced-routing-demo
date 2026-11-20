@@ -65,8 +65,8 @@ cd deploy && FRONTEND=<表示された IP> ./test.sh
 | カナリア (:8080 90:10) | 200 pool-web / pool-canary | 8080 番の全体を pool-web 90% / pool-canary 10% で振り分け (1 件では片方に決まる) |
 | キャンペーン | 302 (`https://www.contoso.com/campaign?campaign=...`) | 高度なルールのキャンペーン条件 (優先度 40) で一致する |
 | モバイル | 200 pool-mobile | iPhone UA。カナリアはポート 8080 のみのため影響しない |
-| A/B 変種 A | 200 pool-web (`pool-A`) | `/ab` (変種ヘッダーなし)。ルール `ab-variant-a` (優先度 46) |
-| A/B 変種 B | 200 pool-canary (`pool-B`) | `/ab` + `X-Variant: B`。ルール `ab-variant-b` (優先度 45) |
+| A/B 変種 A | 200 pool-web (`pool-A`) | ポート 8100 (変種ヘッダーなし)。マップ `abMap` の既定 |
+| A/B 変種 B | 200 pool-canary (`pool-B`) | ポート 8100 + `X-Variant: B`。ルール `ab-variant-b` (優先度 10) |
 | WAF ブロック (UA) | 403 | `curl -A agw-block-demo` の要求。ルーティングの前に WAF が遮断する (`BlockDemoUA`) |
 
 **100 回連続の確認** (`deploy/canary-check.sh`、ポート 8080):
@@ -206,17 +206,17 @@ az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --c
 
 ## A/B テスト (ヘッダーで変種を決める)
 
-ポート 80 の高度なルール `ab-variant-b` (優先度 45) で、`/ab` への要求を変種に振り分けます。条件セット `cs-ab-variant-b` は、パス `^/ab(/.*)?$` と、ヘッダー `X-Variant` = `B` の両方に一致したときだけ一致します。
+A/B テストは、専用のリスナー (ポート 8100) と、専用のマップ `abMap` で処理します。ルール `ab-variant-b` (優先度 10) は、ヘッダー `X-Variant` = `B` に一致した要求を `pool-B` (VM 2 の 8080 番) に送ります。一致しない要求は、マップの既定 `pool-A` (VM 1 の 8080 番) に送ります。`rule-ab` (ポート 8100) が `abMap` を参照します。
 
 | 要求 | 期待 |
 |---|---|
-| `GET /ab` (ヘッダーなし) | pool-web (変種 A、既定) |
-| `GET /ab` + `X-Variant: A` | pool-web (変種 A、既定) |
-| `GET /ab` + `X-Variant: B` | pool-canary (変種 B) |
-| `GET /app/home` + `X-Variant: B` | pool-web (パスが違うため影響なし) |
+| `:8100/` (ヘッダーなし) | pool-web (`pool-A`、変種 A、既定) |
+| `:8100/` + `X-Variant: A` | pool-web (`pool-A`、変種 A、既定) |
+| `:8100/` + `X-Variant: B` | pool-canary (`pool-B`、変種 B) |
+| `:80/ab` + `X-Variant: B` | pool-web (ポート 80 には A/B のルールがない) |
 
 ```bash
-curl -s -D - -o /dev/null -H "X-Variant: B" http://<FRONTEND-IP>/ab | grep -i x-backend-pool
+curl -s -D - -o /dev/null -H "X-Variant: B" http://<FRONTEND-IP>:8100/ | grep -i x-backend-pool
 ```
 
 - シミュレーターの「A/B (変種 A / B)」プリセットで、同じ予測を確認できます。

@@ -28,6 +28,7 @@ var gwPipName = '${gwName}-pip'
 var mapName = 'advancedRoutingMap1'
 var canaryMapName = 'canaryMap'
 var priorityMapName = 'priorityMap'
+var abMapName = 'abMap'
 // The new version (pool-canary) runs on its own VM, on port 8080 like pool-web. The weighted /canary split
 // needs both pools to share one backend HTTP setting, so they must use the same port.
 var vm2Ip = '192.168.1.11'
@@ -406,6 +407,13 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
           port: 8090
         }
       }
+      {
+        // Port 8100: A/B test (#27). Variant B (X-Variant: B) -> pool-B; otherwise variant A -> pool-A.
+        name: 'port-8100'
+        properties: {
+          port: 8100
+        }
+      }
     ]
     probes: [
       {
@@ -522,6 +530,18 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
           protocol: 'Http'
         }
       }
+      {
+        name: 'listener-ab'
+        properties: {
+          frontendIPConfiguration: {
+            id: '${gwId}/frontendIPConfigurations/fe-ip'
+          }
+          frontendPort: {
+            id: '${gwId}/frontendPorts/port-8100'
+          }
+          protocol: 'Http'
+        }
+      }
     ]
     redirectConfigurations: [
       {
@@ -612,36 +632,16 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
-        // A/B test (#27): /ab with the header X-Variant: B goes to the variant B pool (pool-canary).
+        // A/B test (#27) on port 8100: the header X-Variant: B selects variant B (pool-B).
         name: 'cs-ab-variant-b'
         properties: {
           routingConditions: [
-            {
-              conditionType: 'Path'
-              propertyValueMatcher: {
-                pattern: '^/ab(/.*)?$'
-              }
-            }
             {
               conditionType: 'Header'
               propertyName: 'X-Variant'
               propertyValues: [
                 'B'
               ]
-            }
-          ]
-        }
-      }
-      {
-        // A/B test (#27): the path /ab (and below), used by variant A (default) and variant B.
-        name: 'cs-ab-path'
-        properties: {
-          routingConditions: [
-            {
-              conditionType: 'Path'
-              propertyValueMatcher: {
-                pattern: '^/ab(/.*)?$'
-              }
             }
           ]
         }
@@ -752,38 +752,6 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
                 }
               }
             }
-            {
-              // A/B test (#27): variant B (X-Variant: B on /ab) goes to pool-canary; variant A is the default (pool-web).
-              name: 'ab-variant-b'
-              properties: {
-                priority: 45
-                advancedRoutingConditionSet: {
-                  id: '${gwId}/advancedRoutingConditionSets/cs-ab-variant-b'
-                }
-                backendAddressPool: {
-                  id: '${gwId}/backendAddressPools/pool-B'
-                }
-                backendHttpSettings: {
-                  id: '${gwId}/backendHttpSettingsCollection/hs-pool-web'
-                }
-              }
-            }
-            {
-              // A/B test (#27): the rest of /ab (no X-Variant: B) is variant A -> pool-A.
-              name: 'ab-variant-a'
-              properties: {
-                priority: 46
-                advancedRoutingConditionSet: {
-                  id: '${gwId}/advancedRoutingConditionSets/cs-ab-path'
-                }
-                backendAddressPool: {
-                  id: '${gwId}/backendAddressPools/pool-A'
-                }
-                backendHttpSettings: {
-                  id: '${gwId}/backendHttpSettingsCollection/hs-pool-web'
-                }
-              }
-            }
           ]
           defaultBackendAddressPool: {
             id: '${gwId}/backendAddressPools/pool-web'
@@ -867,6 +835,35 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
           }
         }
       }
+      {
+        // A/B test (#27) on port 8100: variant B -> pool-B; the default (variant A) -> pool-A.
+        name: abMapName
+        properties: {
+          advancedRoutingRules: [
+            {
+              name: 'ab-variant-b'
+              properties: {
+                priority: 10
+                advancedRoutingConditionSet: {
+                  id: '${gwId}/advancedRoutingConditionSets/cs-ab-variant-b'
+                }
+                backendAddressPool: {
+                  id: '${gwId}/backendAddressPools/pool-B'
+                }
+                backendHttpSettings: {
+                  id: '${gwId}/backendHttpSettingsCollection/hs-pool-web'
+                }
+              }
+            }
+          ]
+          defaultBackendAddressPool: {
+            id: '${gwId}/backendAddressPools/pool-A'
+          }
+          defaultBackendHttpSettings: {
+            id: '${gwId}/backendHttpSettingsCollection/hs-pool-web'
+          }
+        }
+      }
     ]
     requestRoutingRules: [
       {
@@ -907,6 +904,20 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
           }
           advancedRoutingMap: {
             id: '${gwId}/advancedRoutingMaps/${priorityMapName}'
+          }
+        }
+      }
+      {
+        // Port 8100: A/B test (see abMap).
+        name: 'rule-ab'
+        properties: {
+          ruleType: 'AdvancedRouting'
+          priority: 400
+          httpListener: {
+            id: '${gwId}/httpListeners/listener-ab'
+          }
+          advancedRoutingMap: {
+            id: '${gwId}/advancedRoutingMaps/${abMapName}'
           }
         }
       }
