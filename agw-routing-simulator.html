@@ -156,6 +156,24 @@ ol.rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
         <button type="button" id="addHeader" class="small" style="margin-block-start:6px">＋ ヘッダーを追加</button>
       </fieldset>
       <button type="submit" class="primary" id="sendBtn">要求を送信</button>
+      <div class="stack" id="testBox" style="border-top:1px solid var(--line-soft);padding-top:12px">
+        <h3 style="margin:0">実機へのテスト要求 (件数分)</h3>
+        <p class="note">ゲートウェイ URL に件数分の要求を送り、どのプールに届いたかを数えます。</p>
+        <div class="row">
+          <div style="inline-size:110px"><label for="testPort">ポート</label><input id="testPort" type="number" min="1" max="65535" value="8090" class="mono"></div>
+          <div style="inline-size:110px"><label for="testN">件数</label><input id="testN" type="number" min="1" max="1000" value="100" class="mono"></div>
+        </div>
+        <button type="button" id="testBtn" class="primary small">テスト要求を送る</button>
+        <span class="note" id="testState"></span>
+        <div class="err" style="border-left:3px solid var(--line-soft);padding-left:10px">
+          <p style="margin:0"><strong>優先度ベースを実機で試す前に、VM 2 の pool-canary を手動で止めてください。</strong> 止めないと、優先度 1 の Primary (VM 2) に送られ続け、Standby (VM 1) への切り替えは見えません。</p>
+          <p style="margin:6px 0 0">停止 (Azure CLI):</p>
+          <pre class="mono" style="white-space:pre-wrap">az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"</pre>
+          <p style="margin:6px 0 0">復帰 (テスト後に戻す。復旧させると、また Primary (VM 2) に要求が送られます):</p>
+          <pre class="mono" style="white-space:pre-wrap">az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-canary"</pre>
+        </div>
+        <div id="testResult" class="stack"></div>
+      </div>
     </form>
     <section class="card" aria-labelledby="histH">
       <h2 id="histH">送信履歴</h2>
@@ -220,23 +238,6 @@ ol.rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
       <button type="button" id="distAddPool" class="small">＋ プールを追加 (最大 5)</button>
       <ul id="distErr" class="err" hidden></ul>
       <div id="distResult" class="stack"></div>
-      <div class="stack" id="testBox" style="border-top:1px solid var(--line-soft);padding-top:12px">
-        <h3 style="margin:0">テスト要求 (実機)</h3>
-        <p class="note">ゲートウェイ URL に送った要求が、どのプールに届いたかを数えます。ポートと件数は下の欄で指定します。</p>
-        <div class="row">
-          <div style="inline-size:150px"><label for="testPort">ポート</label><input id="testPort" type="number" min="1" max="65535" value="8090" class="mono"></div>
-          <button type="button" id="testBtn" class="primary small">テスト要求を送る (件数は「シミュレーション件数」)</button>
-          <span class="note" id="testState"></span>
-        </div>
-        <div class="err" style="border-left:3px solid var(--line-soft);padding-left:10px">
-          <p style="margin:0"><strong>優先度ベースを実機で試す前に、VM 2 の pool-canary を手動で止めてください。</strong> 止めないと、優先度 1 の Primary (VM 2) に送られ続け、Standby (VM 1) への切り替えは見えません。</p>
-          <p style="margin:6px 0 0">停止 (Azure CLI):</p>
-          <pre class="mono" style="white-space:pre-wrap">az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"</pre>
-          <p style="margin:6px 0 0">復帰 (テスト後に戻す。復旧させると、また Primary (VM 2) に要求が送られます):</p>
-          <pre class="mono" style="white-space:pre-wrap">az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-canary"</pre>
-        </div>
-        <div id="testResult" class="stack"></div>
-      </div>
     </section>
     <p class="note" id="storageNote"></p>
   </main>
@@ -1098,7 +1099,7 @@ async function runTestRequests() {
   const out = $("testResult"), state_ = $("testState");
   if (!isLive()) { state_.textContent = "ゲートウェイ URL を入力すると実機に送れます"; out.replaceChildren(); return; }
   const port = Number($("testPort").value) || 8090;
-  const n = Number($("distN").value) || 100;
+  const n = Number($("testN").value) || 100;
   const u = new URL(normBase(state.backendUrl));
   u.port = String(port);
   const url = `${u.origin}/app/home`;
