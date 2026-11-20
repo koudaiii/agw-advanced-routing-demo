@@ -832,4 +832,4 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
 }
 
 output frontendIp string = gwPip.properties.ipAddress
-output backendPrivateIp string = vm1Ip
+output vm1PrivateIp string = vm1Ip
