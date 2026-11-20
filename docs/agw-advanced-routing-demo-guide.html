@@ -110,10 +110,10 @@ svg .l{text-anchor:start}
 </figure>
 <table><thead><tr><th scope="col">要素</th><th scope="col">役割</th><th scope="col">実体</th></tr></thead><tbody>
 <tr><td>シミュレーター</td><td>ルールの評価順・AND/OR・WAF の位置を図で説明し、同じ要求を実機に送る curl を生成する</td><td>App Builder アプリ (ブラウザー内で判定)</td></tr>
-<tr><td>Application Gateway</td><td>Basic リスナー (:80) → WAF → Advanced routing map → バックエンド プール / リダイレクト。ポート 8080 のリスナーは Basic ルールで pool-web と pool-canary に重み付けして振り分け</td><td>WAF_v2、容量 1</td></tr>
+<tr><td>Application Gateway</td><td>Advanced ルール (:80): リスナー → WAF → Advanced routing map (<code>advancedRoutingMap1</code>) → バックエンド プール / リダイレクト。ポート 8080 のリスナーは Advanced ルール <code>rule-canary</code> → マップ <code>canaryMap</code> で、pool-web 90% / pool-canary 10% に重み付けして振り分け</td><td>WAF_v2、容量 1</td></tr>
 <tr><td>バックエンド</td><td>どのプールが応答したか・受信ヘッダーを表示する</td><td>VM 1: Node.js プロセス × 5 (ポート 8080–8083、8085)。VM 2: カナリア (ポート 8080)</td></tr>
 </tbody></table>
-<p class="note">VM 1 の 5 プールは、同じ VM の別ポートを指します。カナリア (pool-canary) は VM 2 に分けています。重み付けは同じバックエンド設定 (同じポート) のプールにしか使えないため、ポート 8080 で動かす必要があるからです。</p>
+<p class="note">VM 1 の 5 プールは、同じ VM の別ポートを指します。カナリア (pool-canary) は VM 2 に分けています。pool-web (VM 1 の 8080 番) と同じポートで別の応答を返すため、IP アドレスを分けています。VM 2 を別ポートにできるかは未検証です。</p>
 </section>
 
 <section id="prereq"><h2>2. 前提条件</h2><ul>
@@ -198,14 +198,14 @@ DynamicUser=yes</code></pre>
 <tr><td>カナリア VM 2</td><td>固定 IP 192.168.1.11。Node.js プロセス × 1 (<code>pool-canary</code>、ポート 8080)</td></tr>
 <tr><td>WAF ポリシー</td><td>Prevention、DRS 2.1。カスタムルール <code>BlockDemoIp</code> (送信元 IP)、<code>BlockDemoUA</code> (User-Agent に <code>agw-block-demo</code> を含む要求を遮断)</td></tr>
 <tr><td>NAT Gateway</td><td>backend サブネットに関連付け (StandardV2、専用の StandardV2 public IP)。バックエンド VM の外向き通信 (apt など) に使う。バックエンド VM には public IP を付けず、サブネットはプライベート (既定の外向き IP なし)</td></tr>
-<tr><td>Application Gateway (WAF_v2)</td><td>リスナー <code>listener-http</code> (:80) と <code>listener-canary</code> (:8080)。ルール <code>rule1</code> (Advanced、:80)、<code>rule-canary</code> (Basic、:8080)</td></tr>
+<tr><td>Application Gateway (WAF_v2)</td><td>リスナー <code>listener-http</code> (:80) と <code>listener-canary</code> (:8080)。ルール <code>rule1</code> (Advanced、:80)、<code>rule-canary</code> (Advanced、:8080、マップ <code>canaryMap</code>)</td></tr>
 <tr><td>プローブ・プール・バックエンド設定</td><td>プローブ <code>healthz</code>。プール 6 つ (<code>pool-web</code>、<code>pool-partner</code>、<code>pool-tenant</code>、<code>pool-api-v2</code>、<code>pool-canary</code>、<code>pool-mobile</code>) と、それぞれのバックエンド設定 <code>hs-&lt;pool&gt;</code></td></tr>
 <tr><td>リダイレクト</td><td><code>redirect-campaign</code>: 302、<code>https://www.contoso.com/campaign</code> へ。クエリ文字列を引き継ぐ</td></tr>
 <tr><td>条件セット</td><td><code>cs-partner</code>、<code>cs-tenant</code>、<code>cs-apiv2</code>、<code>cs-campaign</code>、<code>cs-mobile</code> の 5 つ</td></tr>
 <tr><td>Advanced routing map</td><td><code>advancedRoutingMap1</code>。既定プール <code>pool-web</code>。ルールは優先度順に partner (10)、tenant (20)、api-v2 (30)、campaign (40)、mobile (60)</td></tr>
-<tr><td>重み付け (任意)</td><td><code>WEIGHTED_CANARY=true ./deploy.sh</code> のときだけ、<code>ld-canary-split</code> (pool-web 90 : pool-canary 10) を使う。既定の <code>false</code> では、ポート 8080 の全件を pool-canary に送る</td></tr>
+<tr><td>カナリアの重み付け</td><td>マップ <code>canaryMap</code> のルール <code>canary-split</code> (パス <code>^/</code> の全リクエスト): pool-web 90 : pool-canary 10 (<code>WeightedDistribution</code>)。マップの既定は pool-canary</td></tr>
 </tbody></table>
-<p class="note">Advanced routing rule は Basic リスナーにのみ関連付けできます (マルチサイト リスナーは非対応)。<code>rule1</code> は最初から Advanced で作られるため、後から切り替える手順はありません。重み付けには、サブスクリプションで <code>Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy</code> の登録が必要です (README を参照)。</p>
+<p class="note">Advanced routing rule は Basic リスナーにのみ関連付けできます (マルチサイト リスナーは非対応)。<code>rule1</code> と <code>rule-canary</code> は最初から Advanced で作られるため、後から切り替える手順はありません。</p>
 
 <h3>4.2 動作確認</h3>
 <p>確認は <code>deploy/test.sh</code> と <code>deploy/canary-check.sh</code> で行います。</p>
@@ -220,7 +220,7 @@ API v2             HTTP 200  pool-api-v2
 キャンペーン       HTTP 302  redirect -&gt; https://www.contoso.com/campaign?...
 モバイル           HTTP 200  pool-mobile
 WAF ブロック (UA)  HTTP 403</code></pre>
-<p class="note">上は <code>test.sh</code> の出力の例です。カナリアを <code>WEIGHTED_CANARY=false</code> で作った場合、8080 番の全件が pool-canary に送られます。</p>
+<p class="note">上は <code>test.sh</code> の出力の例です。カナリアの行は、8080 番の振り分け (90:10) の 1 回分なので、pool-web と pool-canary のどちらにもなります。</p>
 <h3>4.3 ポータルでヘッダーベースのルールを手動で作る (チュートリアルの手順)</h3>
 <p>Microsoft Learn の <a href="https://learn.microsoft.com/ja-jp/azure/application-gateway/configure-advanced-routing-rule">チュートリアル: Azure ポータルで Application Gateway の Advanced Rules を使ってヘッダーベースのルーティングを設定する</a> の手順です。このデモは <code>deploy.sh</code> が作るため、通常は不要です。ポータルの操作を確かめるときに使います。</p>
 <p class="note">ポータルの「アプリケーション ゲートウェイの作成」では Advanced ルールを設定できません。基本ルールで作成した後に、基本ルールを Advanced に変更します。</p>
@@ -294,9 +294,9 @@ if (req.method === &quot;OPTIONS&quot; &amp;&amp; req.headers[&quot;access-contr
 <tr><td>5</td><td>リダイレクト</td><td>「キャンペーン」→ 302</td><td><code>curl -i</code> で 302 と Location (クエリ文字列が引き継がれる) を確認</td></tr>
 <tr><td>6</td><td>WAF はルーティングより前</td><td>「WAF ブロック」→ 全ルール未評価、403</td><td><code>curl -i -A agw-block-demo http://&lt;IP&gt;/app/home</code> → 403 (User-Agent の WAF ルール)</td></tr>
 <tr><td>7</td><td>User-Agent による振り分け</td><td>「モバイル」→ pool-mobile (ブラウザーは User-Agent を送れないため、実機の応答は既定の pool-web になる)</td><td><code>curl -i -A "Mozilla/5.0 (iPhone; ...)" http://&lt;IP&gt;/app/home</code> → pool-mobile</td></tr>
-<tr><td>8</td><td>カナリア (ポート 8080)</td><td>「カナリア (ポート 8080)」→ 重み付けの予測 (設定どおり、既定 90:10)</td><td><code>FRONTEND=&lt;IP&gt;:8080 ./canary-check.sh /app/home 100</code> → 100 件すべて pool-canary (既定の <code>WEIGHTED_CANARY=false</code>)</td></tr>
+<tr><td>8</td><td>カナリア (ポート 8080)</td><td>「カナリア (ポート 8080)」→ 重み付けの予測 (90:10)</td><td><code>FRONTEND=&lt;IP&gt;:8080 ./canary-check.sh /app/home 100</code> → pool-web 約 90 件、pool-canary 約 10 件 (実機確認: 91 / 9)</td></tr>
 </tbody></table>
-<p class="note">カナリアは、既定では 8080 番の全件を pool-canary に送ります (<code>WEIGHTED_CANARY=false</code>)。pool-web 90% / pool-canary 10% の重み付けにするには <code>WEIGHTED_CANARY=true ./deploy.sh</code> を実行します。重み付けには、サブスクリプションで <code>Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy</code> の登録が必要です。シミュレーターの予測は、重み付けの設定 (90:10) を表示します。</p>
+<p class="note">カナリアは、ポート 8080 の全リクエストを pool-web 90% / pool-canary 10% に振り分けます (高度なルール <code>canary-split</code>)。件数が少ないと期待値から外れるため、100 件以上で確認してください。</p>
 </section>
 
 <section id="trouble"><h2>7. トラブルシューティング</h2>
@@ -304,11 +304,10 @@ if (req.method === &quot;OPTIONS&quot; &amp;&amp; req.headers[&quot;access-contr
 <table><thead><tr><th scope="col">症状</th><th scope="col">確認すること</th></tr></thead><tbody>
 <tr><td><code>test.sh</code> が 502 を返す</td><td>バックエンドの正常性が未確認。再デプロイ直後は、cloud-init (パッケージ取得と起動) が終わるまで数分かかる。少し待ってから <code>./test.sh</code> を再実行する。改善しない場合は <code>deploy.sh</code> を再実行する (バックエンド VM の初期化データが変わっていなければ、再作成は不要)</td></tr>
 <tr><td><code>deploy.sh</code> がプリフライトでエラーになる</td><td>出力の <code>InnerErrors</code> の <code>message</code> を読む。例: <code>ApplicationGatewayAdvancedRoutingRuleMustReference</code> は、高度なルールに <code>backendAddressPool</code> が必要という意味</td></tr>
-<tr><td><code>deploy.sh</code> が <code>SubscriptionNotRegisteredForFeature</code> で失敗する</td><td><code>WEIGHTED_CANARY=true</code> を指定している場合、サブスクリプションで <code>Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy</code> の登録が必要。登録が終わるまでは <code>WEIGHTED_CANARY=false</code> (既定) で実行する</td></tr>
 <tr><td><code>deploy.sh</code> が <code>PropertyChangeNotAllowed</code> (<code>osProfile.customData</code>) で失敗する</td><td>既存の VM の初期化データ (cloud-init) が変わったため。VM を作り直す (VM 1 または VM 2 を削除してから <code>deploy.sh</code> を再実行する)</td></tr>
 <tr><td><code>test.sh</code> のポート 80 の結果が想定と違う</td><td><code>rule1</code> が Advanced で作られているか (デプロイ直後の状態)。条件・優先度の定義は <code>deploy/main.bicep</code> の <code>advancedRoutingConditionSets</code> と <code>advancedRoutingMaps</code> を見る</td></tr>
-<tr><td>8080 の割合が 90:10 にならない</td><td><code>WEIGHTED_CANARY=true</code> で再デプロイしたか。件数が少ないと期待値から外れるため、<code>./canary-check.sh /app/home 100</code> で 100 件以上確認する。機能が登録済みか確認する</td></tr>
-<tr><td>8080 が全件 pool-canary になる</td><td>既定の <code>WEIGHTED_CANARY=false</code> の動作。90:10 にするには <code>WEIGHTED_CANARY=true ./deploy.sh</code> (機能の登録が必要)</td></tr>
+<tr><td>8080 の割合が 90:10 にならない</td><td>件数が少ないと期待値から外れる。<code>./canary-check.sh /app/home 100</code> で 100 件以上確認する。マップ <code>canaryMap</code> のルール <code>canary-split</code> の重みを確認する (ポータルで変更した場合は、<code>deploy.sh</code> で定義に戻る)</td></tr>
+<tr><td>8080 が全件 pool-canary になる</td><td>ルール <code>canary-split</code> が一致していない (条件セット <code>cs-canary-split</code> のパス条件)。マップの既定 (pool-canary) だけが使われている状態</td></tr>
 <tr><td>本文のない POST が 403 になる</td><td>既知の問題: DRS のマネージドルールが、本文のない POST を遮断する (本文付きの POST や GET / PUT は通る)。原因のルール ID は未特定。テストは GET で送る</td></tr>
 <tr><td>正規表現が一致しない</td><td>RE2 非対応の構文 (先読み・後方参照など) を使っていないか。シミュレーターと実機で結果が違う場合は実機の結果が正</td></tr>
 <tr><td>シミュレーターと実機で結果が違う</td><td>(1) ブラウザーは User-Agent を送れない (「モバイル」「WAF ブロック」は <code>curl -A</code> で確認)。(2) 送信元 IP は、ゲートウェイが見ている値 (<code>X-Forwarded-For</code>) を使う。(3) ルールの定義 (シミュレーターの JSON と <code>deploy/main.bicep</code>) を比較する</td></tr>
@@ -317,9 +316,9 @@ if (req.method === &quot;OPTIONS&quot; &amp;&amp; req.headers[&quot;access-contr
 
 <section id="notes"><h2>8. 制約・注意事項と後片付け</h2><ul>
 <li>Advanced rules はプレビュー機能です。マルチサイト リスナーと L4 (TCP/TLS) プロキシでは使えません</li>
-<li>重み付け (ポート 8080 のカナリア、pool-web 90% / pool-canary 10%) には、サブスクリプションで <code>Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy</code> の登録が必要です。登録していない状態で <code>WEIGHTED_CANARY=true ./deploy.sh</code> を実行すると、<code>SubscriptionNotRegisteredForFeature</code> でデプロイが失敗します。既定の <code>WEIGHTED_CANARY=false</code> では、登録は不要です</li>
+<li>重み付け (ポート 8080 のカナリア、pool-web 90% / pool-canary 10%) は、高度なルールで <code>WeightedDistribution</code> を指定して作ります</li>
 <li>上限: マップ 100 / ゲートウェイ、条件セット 10,000 / ゲートウェイ、ルール 100 / マップ、条件 5 / 条件セット、値 5 / 条件、値・正規表現 128 文字</li>
-<li>ARM API (2026-11-20 確認): 高度なルールの振り分け先は 1 プールのみ。2026-03-01 / 2026-05-01 の仕様と、2026-07-01 を含む ARM 検証で確認。複数プールの重み付けは Basic ルールで行う</li>
+<li>ARM API (2026-11-20 確認): 高度なルールでも複数プールを指定できる (<code>backendAddressPoolsAndSettings</code> と <code>poolSelectionAlgorithm</code>)。<code>loadDistributionPolicy</code> だけを指定すると <code>ApplicationGatewayAdvancedRoutingRuleMustReference</code> で拒否される。公開の REST API 仕様には複数プールの項目がない</li>
 <li>WAF ポリシーはゲートウェイまたはリスナー単位で関連付け。ルール単位の WAF ポリシーは非対応</li>
 <li>シミュレーターの判定はブラウザーの正規表現エンジンで近似しており、RE2 と完全には一致しません</li>
 <li><code>deploy.sh</code> はまだ実環境で実行していません。初回は手順ごとに結果を確認しながら実行してください</li></ul>

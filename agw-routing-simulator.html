@@ -662,7 +662,7 @@ function renderSim() {
   const out = $("simOut"); out.replaceChildren();
   const d = state.ev.d, r = state.sent;
   if (d.kind === "waf") { out.append(statusBlock(403, "Forbidden", "WAF がブロックしたため、バックエンドには届きません。")); return; }
-  if (d.kind === "weighted") { out.append(statusBlock("—", "", "ポート 8080 の重み付けのため、1 件では pool-web か pool-canary のどちらかに確率で決まります。100 件の割合は canary-check.sh で確認します。※ 実機の既定 (WEIGHTED_CANARY=false) では 8080 番の全件が pool-canary に送られます。この予測は 90:10 の重み付け (WEIGHTED_CANARY=true) の場合です。")); return; }
+  if (d.kind === "weighted") { out.append(statusBlock("—", "", "ポート 8080 の重み付けのため、1 件では pool-web か pool-canary のどちらかに確率で決まります。100 件の割合は canary-check.sh で確認します。")); return; }
   if (d.kind === "redirect") { const q = r.query.replace(/^\?/, ""); out.append(statusBlock(302, "Found", `Location: ${q ? `${d.url}?${q}` : d.url}`)); return; }
   const p = pool(d.pool);
   const hs = r.headers.filter((h) => h.name.trim()).map((h) => [h.name.trim().toLowerCase(), h.value]);
@@ -840,7 +840,7 @@ function distSample() {
   };
 }
 const DIST_PRESETS = [
-  ["カナリア: ポート 8080 全体 90:10 (WEIGHTED_CANARY=true)", () => ({ mode: "weighted", minHealthy: 60, concurrency: 4, pools: [
+  ["カナリア: ポート 8080 全体 90:10", () => ({ mode: "weighted", minHealthy: 60, concurrency: 4, pools: [
     { id: "pool-web", weight: 90, priority: 1, algo: "rr", servers: [sv("srv-1"), sv("srv-2")] },
     { id: "pool-canary", weight: 10, priority: 2, algo: "rr", servers: [sv("srv-3")] },
   ] })],
