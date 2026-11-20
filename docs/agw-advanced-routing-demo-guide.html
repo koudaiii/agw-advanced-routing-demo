@@ -183,7 +183,7 @@ EnvironmentFile=/etc/agw-demo/%i.env
 ExecStart=/usr/bin/node /opt/agw-demo/server.js
 Restart=always
 DynamicUser=yes</code></pre>
-<p class="note">VM にはパッケージ取得のためのパブリック IP を付けますが、NSG の受信規則は作成しません (<code>--nsg-rule NONE</code>)。インターネットからバックエンドへ直接は到達できず、App Gateway 経由のみになります。</p>
+<p class="note">バックエンド VM にはパブリック IP を付けません。外向き通信 (パッケージ取得など) は NAT Gateway 経由です。受信は NSG の既定ルールで遮断するため、インターネットからバックエンドへ直接は到達できず、App Gateway 経由のみになります。</p>
 </section>
 
 <section id="agw"><h2>4. Application Gateway の構築</h2>
