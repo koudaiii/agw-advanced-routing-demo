@@ -1,5 +1,5 @@
 // Azure Application Gateway (WAF_v2) Advanced Routing demo.
-// Mirrors the 6 rules of agw-routing-simulator.html / docs/agw-advanced-routing-demo-guide.html.
+// Mirrors the 5 advanced rules of agw-routing-simulator.html / docs/agw-advanced-routing-demo-guide.html.
 // Deployed by deploy.sh (az deployment group create). Advanced rules are a preview feature, and
 // they are only expressible through ARM API versions that include advancedRoutingMaps (2026-01-01+).
 

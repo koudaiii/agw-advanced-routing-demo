@@ -25,8 +25,8 @@ az provider show -n Microsoft.Network --query registrationState -o tsv   # Regis
 
 - Azure CLI 2.87.0 には `az network application-gateway advanced-routing-*` が **ありません**。そのためデプロイは CLI ではなく Bicep (`deploy/main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。`az bicep version` で Bicep が使えることを確認します。
 - SSH 鍵 (`~/.ssh/id_ed25519.pub`) がなければ `deploy.sh` が自動生成します。
-- 必要なパラメーターはありません。カナリアは送信元 IP や URI ではなく、ポート 8080 全体の重み付け (pool-web 90% / pool-canary 10%) で振り分けます。
-- 重み付けは Advanced load balancing の機能です。サブスクリプションで `Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy` が登録されている必要があります (未登録だと deploy が `SubscriptionNotRegisteredForFeature` で失敗します)。
+- 必要なパラメーターはありません。カナリアは送信元 IP や URI では絞らず、ポート 8080 の全件を振り分けます。既定 (`WEIGHTED_CANARY=false`) では全件を pool-canary に送ります。`WEIGHTED_CANARY=true` にすると pool-web 90% / pool-canary 10% の重み付けになります。
+- 重み付けは Advanced load balancing の機能です。`WEIGHTED_CANARY=true` にする場合だけ、サブスクリプションで `Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy` が登録されている必要があります (未登録だと deploy が `SubscriptionNotRegisteredForFeature` で失敗します)。既定の `false` では不要です。
 
 ## 2. デプロイ
 
@@ -62,15 +62,15 @@ cd deploy && FRONTEND=<表示された IP> ./test.sh
 | パートナー | 200 pool-partner | `X-Partner-Id` 一致 (GET で送る) |
 | API v2 | 200 pool-api-v2 | `X-Api-Version: 2.0` と `/api/orders` |
 | エンコード済みパス | 200 pool-api-v2 | `/api%2Forders` はデコードされて一致 |
-| カナリア (:8080 90:10) | 200 pool-web / pool-canary | ポート 8080 全体の重み付け。1 件では片方に決まる |
-| キャンペーン | 302 (`https://www.contoso.com/campaign?campaign=...`) | キャンペーン条件 (優先度 40) はカナリア (優先度 50) より先に評価される |
+| カナリア (:8080) | 200 pool-canary (既定) | 既定 `WEIGHTED_CANARY=false` は全件 pool-canary。`true` のときは pool-web 90% / pool-canary 10% の重み付け (1 件では片方に決まる) |
+| キャンペーン | 302 (`https://www.contoso.com/campaign?campaign=...`) | 高度なルールのキャンペーン条件 (優先度 40) で一致する |
 | モバイル | 200 pool-mobile | iPhone UA。カナリアはポート 8080 のみのため影響しない |
 | WAF ブロック (UA) | 403 | `curl -A agw-block-demo` の要求。ルーティングの前に WAF が遮断する (`BlockDemoUA`) |
 
 **100 回連続の確認** (`deploy/canary-check.sh`、ポート 8080):
 
 ```bash
-cd deploy && FRONTEND=<IP>:8080 ./canary-check.sh /app/home 100   # → pool-web 約 90 件、pool-canary 約 10 件
+cd deploy && FRONTEND=<IP>:8080 ./canary-check.sh /app/home 100   # → 既定: 100 件すべて pool-canary。WEIGHTED_CANARY=true: pool-web 約 90 件、pool-canary 約 10 件
 cd deploy && FRONTEND=<IP>      ./canary-check.sh /app/home 100   # → ポート 80 は高度なルール (重み付けなし)
 ```
 
@@ -81,7 +81,7 @@ cd deploy && FRONTEND=<IP>      ./canary-check.sh /app/home 100   # → ポー�
 ブラウザーで `agw-routing-simulator.html` を開き、ゲートウェイ URL に `http://<FRONTEND>` を入力すると、予測と実機の応答を並べて比較できます (`backend/server.js` は CORS 対応済み)。
 
 - 実機モードでは、予測の送信元 IP はプリセットの値ではなく、ゲートウェイが見ている実際の IP (`X-Forwarded-For`) を使います。
-- カナリア (8080 番ポートの 90:10 重み付け) はシミュレーターの「負荷分散」セクションの「カナリア: ポート 8080 全体 90:10」プリセットで予測します。ポート 80 の高度なルールは送信元 IP に依存しません。
+- カナリア (ポート 8080) はシミュレーターの「負荷分散」セクションの「カナリア: ポート 8080 全体 90:10」プリセットで予測します。このプリセットは 90:10 の重み付け (`WEIGHTED_CANARY=true`) を予測します。既定の実機 (`WEIGHTED_CANARY=false`) は全件 pool-canary なので、結果は一致しません。ポート 80 の高度なルールは送信元 IP に依存しません。
 
 推奨の順序:
 
@@ -124,9 +124,7 @@ az group delete -n rg-agw-advrouting-demo --yes --no-wait
 ## 既知の問題
 
 - **本文のない POST が 403 になる**: `/api/orders` への本文のない POST は、DRS 2.1 のマネージドルールに遮断されます。本文 (JSON) 付きの POST や GET / PUT は通ります。ワークショップのテストとシミュレーターは GET で送ります。原因のルール ID は未特定です。
-- **README の旧 CLI 手順**: 「rule1 を Advanced に切り替えるコマンド」の記述は古く、現在は Bicep が作成します。
-- **高度なルールは 1 プールのみ**: 現在の ARM API では、高度なルールに重み付けを指定できません (`ApplicationGatewayAdvancedRoutingRuleMustReference`)。そのためカナリアの重み付けは、ポート 8080 の Basic ルールで行っています。
-- **VM 1 に残る未使用の `pool-canary` (8084)**: VM 1 の customData を変えると既存 VM の更新が拒否されるため、`backend/pools.conf` の 8084 行は残しています。ルーティングには使われません。
+- **高度なルールは 1 プールのみ (検証結果)**: 公式ドキュメント (Advanced load balancing) では、高度なルールも複数プールに対応すると書かれています。しかし今回の ARM API (2026-03-01) では、高度なルールの振り分け先は `backendAddressPool` の 1 つだけで、`loadDistributionPolicy` (重み付け) は拒否されました (`ApplicationGatewayAdvancedRoutingRuleMustReference`)。そのためカナリアの重み付けは、ポート 8080 の Basic ルールで行っています。
 - **Log Analytics の列名**: `AGWFirewallLogs` の列は `action_s` ではなく、まずテーブルの実際の列を確認してから使ってください。
 
 ## 講義のポイント (ドキュメントとの対応)

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Deploys a demo of Azure Application Gateway Advanced Routing (preview) via deploy/main.bicep:
-#   - 1 Ubuntu VM running 6 backend "pools" (ports 8080-8085, see backend/pools.conf)
+#   - VM 1 (Ubuntu) running 5 backend pools (ports 8080-8083, 8085; backend/pools.conf)
+#     and VM 2 running pool-canary (port 8080; backend/pools-canary.conf)
 #   - Application Gateway WAF_v2 + WAF policy (custom rule blocks WAF_BLOCK_CIDR)
-#   - Advanced routing condition sets / map / rules (same 6 rules as the simulator app)
+#   - Advanced routing condition sets / map / rules (same 5 advanced rules as the simulator app)
 # Usage:
 #   ./deploy.sh
 # Requires: az login (the target subscription must be the active one), Bicep (bundled with az).
