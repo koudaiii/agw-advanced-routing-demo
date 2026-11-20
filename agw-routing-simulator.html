@@ -158,11 +158,8 @@ ol.rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
       <button type="submit" class="primary" id="sendBtn">要求を送信</button>
       <div class="stack" id="testBox" style="border-top:1px solid var(--line-soft);padding-top:12px">
         <h3 style="margin:0">実機へのテスト要求 (件数分)</h3>
-        <p class="note">ゲートウェイ URL に件数分の要求を送り、どのプールに届いたかを数えます。</p>
-        <div class="row">
-          <div style="inline-size:110px"><label for="testPort">ポート</label><input id="testPort" type="number" min="1" max="65535" value="8090" class="mono"></div>
-          <div style="inline-size:110px"><label for="testN">件数</label><input id="testN" type="number" min="1" max="1000" value="100" class="mono"></div>
-        </div>
+        <p class="note">ゲートウェイ URL に、上の要求 (プリセットのポート) を件数分送り、どのプールに届いたかを数えます。</p>
+        <div style="inline-size:110px"><label for="testN">件数</label><input id="testN" type="number" min="1" max="1000" value="100" class="mono"></div>
         <button type="button" id="testBtn" class="primary small">テスト要求を送る</button>
         <span class="note" id="testState"></span>
         <div class="err" style="border-left:3px solid var(--line-soft);padding-left:10px">
@@ -1102,7 +1099,7 @@ function renderDistResult() {
 async function runTestRequests() {
   const out = $("testResult"), state_ = $("testState");
   if (!isLive()) { state_.textContent = "ゲートウェイ URL を入力すると実機に送れます"; out.replaceChildren(); return; }
-  const port = Number($("testPort").value) || 8090;
+  const port = Number(state.request.port) || 80;
   const n = Number($("testN").value) || 100;
   const u = new URL(normBase(state.backendUrl));
   u.port = String(port);
