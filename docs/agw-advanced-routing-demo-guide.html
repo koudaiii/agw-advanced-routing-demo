@@ -76,37 +76,80 @@ svg .l{text-anchor:start}
 <section id="arch"><h2>1. 全体構成</h2>
 
 <figure class="diagram">
-<svg viewBox="0 0 900 330" role="img" aria-labelledby="dg-t dg-d">
+<svg viewBox="0 0 960 410" role="img" aria-labelledby="dg-t dg-d">
 <title id="dg-t">デモ環境の全体構成</title>
-<desc id="dg-d">シミュレーター アプリ (説明・判定・curl 生成) と、Application Gateway WAF_v2、Advanced routing map、バックエンド VM 1 (5 プール)、カナリア VM 2 の関係</desc>
+<desc id="dg-d">シミュレーター、デモ端末、Public IP (リスナー :80 / :8080 / :8090)、WAF、ポートごとのルーティングマップ (advancedRoutingMap1 / canaryMap / priorityMap)、VM 1 (pool-web、pool-partner、pool-tenant、pool-api-v2、pool-mobile、pool-standby) と VM 2 (pool-canary、pool-primary) の関係</desc>
 <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="ink"/></marker></defs>
-<rect x="10" y="20" width="200" height="120" rx="8" class="box"/>
-<text x="110" y="48" class="h">シミュレーター</text><text x="110" y="68" class="s">(フロントエンド / App Builder)</text>
-<text x="110" y="92" class="s">ルール判定・経路図</text><text x="110" y="110" class="s">応答の模擬表示</text><text x="110" y="128" class="s">curl コマンド生成</text>
-<rect x="10" y="190" width="200" height="90" rx="8" class="box"/>
-<text x="110" y="220" class="h">デモ端末</text><text x="110" y="242" class="s">curl / ブラウザー</text><text x="110" y="260" class="s">(送信元 IP)</text>
-<path d="M110 140 V185" class="ln dash" marker-end="url(#ar)"/><text x="118" y="168" class="s l">curl をコピー</text>
-<rect x="270" y="150" width="140" height="110" rx="8" class="box"/>
-<text x="340" y="180" class="h">Public IP</text><text x="340" y="200" class="s">Basic リスナー :80 / :8080</text><text x="340" y="220" class="s">rule1 (AdvancedRouting)</text>
-<path d="M210 235 H265" class="ln" marker-end="url(#ar)"/>
-<rect x="440" y="150" width="120" height="110" rx="8" class="box"/>
-<text x="500" y="185" class="h">WAF</text><text x="500" y="205" class="s">BlockDemoIp</text><text x="500" y="225" class="s">(ルーティング前)</text>
-<path d="M410 205 H435" class="ln" marker-end="url(#ar)"/>
-<rect x="590" y="150" width="130" height="110" rx="8" class="box"/>
-<text x="655" y="180" class="h">Routing map</text><text x="655" y="200" class="s">ルール 5 件 (:80)</text><text x="655" y="220" class="s">優先度の昇順</text><text x="655" y="240" class="s">既定: pool-web</text>
-<path d="M560 205 H585" class="ln" marker-end="url(#ar)"/>
-<rect x="750" y="20" width="140" height="300" rx="8" class="box"/>
-<text x="820" y="45" class="h">バックエンド VM</text>
-<text x="820" y="80" class="m">pool-web :8080</text><text x="820" y="110" class="m">pool-partner :8081</text><text x="820" y="140" class="m">pool-tenant :8082</text>
-<text x="820" y="170" class="m">pool-api-v2 :8083</text><text x="820" y="200" class="m">VM 2: pool-canary :8080</text><text x="820" y="230" class="m">pool-mobile :8085</text>
-<text x="820" y="270" class="s">server.js × 5 (VM 1)</text><text x="820" y="290" class="s">systemd</text>
-<path d="M720 205 H745" class="ln" marker-end="url(#ar)"/>
-<path d="M655 260 V305 H560" class="ln dash" marker-end="url(#ar)"/><text x="600" y="298" class="s">302 (campaign)</text>
-<rect x="270" y="20" width="290" height="100" rx="8" class="box"/>
-<text x="415" y="45" class="h">同じルール定義</text><text x="415" y="68" class="s">シミュレーターの JSON 表示</text><text x="415" y="88" class="s">= deploy.sh の condition set / rule</text>
-<path d="M210 70 H265" class="ln dash"/><path d="M560 70 H655 V145" class="ln dash" marker-end="url(#ar)"/>
+<rect x="10" y="20" width="190" height="110" rx="8" class="box"/>
+<text x="105" y="46" class="h">シミュレーター</text>
+<text x="105" y="66">(フロントエンド / App Builder)</text>
+<text x="105" y="88">ルール判定・経路図</text>
+<text x="105" y="106">テスト要求 (件数分を実機へ)</text>
+<rect x="10" y="180" width="190" height="80" rx="8" class="box"/>
+<text x="105" y="206" class="h">デモ端末</text>
+<text x="105" y="226">curl / ブラウザー</text>
+<text x="105" y="244">(送信元 IP)</text>
+<path d="M105 130 V175" class="ln dash" marker-end="url(#ar)" stroke-dasharray="6 5"/>
+<text x="113" y="158" class="l">curl をコピー</text>
+<rect x="250" y="20" width="160" height="240" rx="8" class="box"/>
+<text x="330" y="44" class="h">Public IP</text>
+<text x="330" y="64">Application Gateway</text>
+<text x="330" y="92">リスナー :80 (Basic)</text>
+<text x="330" y="110">リスナー :8080 (Basic)</text>
+<text x="330" y="128">リスナー :8090 (Basic)</text>
+<text x="330" y="162" class="h">Advanced ルール</text>
+<text x="330" y="182">rule1 → :80</text>
+<text x="330" y="200">rule-canary → :8080</text>
+<text x="330" y="218">rule-priority → :8090</text>
+<path d="M200 210 H245" class="ln" marker-end="url(#ar)"/>
+<rect x="450" y="70" width="120" height="110" rx="8" class="box"/>
+<text x="510" y="96" class="h">WAF</text>
+<text x="510" y="116">ポリシー有効</text>
+<text x="510" y="134">BlockDemoIp</text>
+<text x="510" y="152">BlockDemoUA</text>
+<text x="510" y="170">(ルーティング前)</text>
+<path d="M410 125 H445" class="ln" marker-end="url(#ar)"/>
+<rect x="600" y="10" width="150" height="70" rx="8" class="box"/>
+<text x="675" y="30" class="h">Routing map :80</text>
+<text x="675" y="50">advancedRoutingMap1</text>
+<text x="675" y="68">既定: pool-web</text>
+<rect x="600" y="100" width="150" height="70" rx="8" class="box"/>
+<text x="675" y="120" class="h">canaryMap :8080</text>
+<text x="675" y="140">canary-split 90 : 10</text>
+<text x="675" y="158">既定: pool-canary</text>
+<rect x="600" y="190" width="150" height="70" rx="8" class="box"/>
+<text x="675" y="210" class="h">priorityMap :8090</text>
+<text x="675" y="230">priority-split</text>
+<text x="675" y="248">Primary 1 / Standby 2</text>
+<path d="M570 125 L600 45" class="ln" marker-end="url(#ar)"/>
+<path d="M570 125 H600" class="ln" marker-end="url(#ar)"/>
+<path d="M570 125 L600 225" class="ln" marker-end="url(#ar)"/>
+<rect x="800" y="10" width="150" height="250" rx="8" class="box" style="fill:none;stroke-dasharray:6 4"/>
+<text x="875" y="30" class="h">VM 1</text>
+<text x="875" y="46">192.168.1.10</text>
+<text x="875" y="70" class="m">pool-web :8080</text>
+<text x="875" y="92" class="m">pool-partner :8081</text>
+<text x="875" y="114" class="m">pool-tenant :8082</text>
+<text x="875" y="136" class="m">pool-api-v2 :8083</text>
+<text x="875" y="158" class="m">pool-mobile :8085</text>
+<text x="875" y="180" class="m">pool-standby :8080</text>
+<text x="875" y="198">← :8090 Standby</text>
+<rect x="800" y="280" width="150" height="120" rx="8" class="box" style="fill:none;stroke-dasharray:6 4"/>
+<text x="875" y="300" class="h">VM 2</text>
+<text x="875" y="316">192.168.1.11</text>
+<text x="875" y="342" class="m">pool-canary :8080</text>
+<text x="875" y="364" class="m">pool-primary :8080</text>
+<text x="875" y="382">← :8090 Primary</text>
+<path d="M750 45 C775 45,775 120,800 120" class="ln" marker-end="url(#ar)"/>
+<path d="M750 125 C775 125,775 150,800 170" class="ln" marker-end="url(#ar)"/>
+<path d="M750 125 C775 125,775 320,800 320" class="ln" marker-end="url(#ar)"/>
+<path d="M750 225 C775 225,775 340,800 340" class="ln" marker-end="url(#ar)"/>
+<path d="M750 225 C775 225,775 190,800 190" class="ln" marker-end="url(#ar)"/>
+<text x="10" y="300" class="l">実線: 通信。点線: 設定・操作の対応関係。</text>
+<text x="10" y="318" class="l">VM 2 の pool-canary を止めると、8090 番は Standby (VM 1) に切り替わる。</text>
+<text x="10" y="336" class="l">8080 番は、pool-web (VM 1) 90% と pool-canary (VM 2) 10%。</text>
 </svg>
-<figcaption>図 1. 構成。実線は実際の通信、点線は設定・操作の対応関係。</figcaption>
+<figcaption>図 1. 構成。VM 1 と VM 2 は枠で分けています。実線は実際の通信、点線は設定・操作の対応関係。</figcaption>
 </figure>
 <table><thead><tr><th scope="col">要素</th><th scope="col">役割</th><th scope="col">実体</th></tr></thead><tbody>
 <tr><td>シミュレーター</td><td>ルールの評価順・AND/OR・WAF の位置を図で説明し、同じ要求を実機に送る curl を生成する</td><td>App Builder アプリ (ブラウザー内で判定)</td></tr>
