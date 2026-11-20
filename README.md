@@ -59,6 +59,7 @@ FRONTEND=<表示されたフロントエンド IP>:8080 ./canary-check.sh /app/h
   - 停止と復旧 (手動): `az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"` で VM 2 を止めると、切り替わるまで約 2〜3 分かかります。`systemctl start agw-pool@pool-canary` で戻すと、また `pool-primary` に送られます。
   - シミュレーターの「テスト要求」は、選んでいる要求のポートに件数分送り、どのプールに届いたかを数えます。Primary / Standby の名前で表示します。
 - 重み付けは Advanced load balancing の機能です。8080 番のカナリアは、高度なルールで `WeightedDistribution` を使います。
+- A/B テスト (ポート 80、#27): `/ab` に `X-Variant: B` を付けた要求は `pool-canary` (変種 B) に送ります。それ以外の `/ab` は既定の `pool-web` (変種 A) です。確認: `curl -H "X-Variant: B" http://<FRONTEND-IP>/ab`。
   ```text
   client --:8080--> listener-canary --> rule-canary (Advanced)
                                               |

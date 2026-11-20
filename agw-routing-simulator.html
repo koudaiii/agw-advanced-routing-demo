@@ -281,6 +281,7 @@ function sampleConfig() {
       { name: "マルチテナント", priority: 20, conditions: [{ type: "Header", name: "X-Tenant-Id", pattern: "^customer-[0-9]+$" }, { type: "Path", pattern: "^/app(/.*)?$" }], target: { pool: "pool-tenant" } },
       { name: "API バージョニング", priority: 30, conditions: [{ type: "Header", name: "X-Api-Version", values: ["2", "2.0"] }, { type: "Path", pattern: "^/api/orders(/.*)?$" }], target: { pool: "pool-api-v2" } },
       { name: "キャンペーン LP", priority: 40, conditions: [{ type: "QueryString", name: "campaign", values: ["spring", "summer"] }], target: { redirect: "https://www.contoso.com/campaign" } },
+      { name: "A/B テスト (変種 B)", priority: 45, conditions: [{ type: "Path", pattern: "^/ab(/.*)?$" }, { type: "Header", name: "X-Variant", values: ["B"] }], target: { pool: "pool-canary" } },
       { name: "モバイル振り分け", priority: 60, conditions: [{ type: "Header", name: "User-Agent", pattern: "(iPhone|Android)" }], target: { pool: "pool-mobile" } },
     ],
   };
@@ -293,6 +294,8 @@ const PRESETS = [
   ["API v2", () => req("GET", "/api/orders/1001", "", "192.0.2.41", [["X-Api-Version", "2.0"]])],
   ["エンコード済みパス", () => req("GET", "/api%2Forders", "", "192.0.2.41", [["X-Api-Version", "2"]])],
   ["キャンペーン", () => req("GET", "/landing", "campaign=summer&utm=mail", "192.0.2.41", [["User-Agent", DESKTOP_UA]])],
+  ["A/B (変種 A)", () => req("GET", "/ab", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]])],
+  ["A/B (変種 B)", () => req("GET", "/ab", "", "192.0.2.41", [["User-Agent", DESKTOP_UA], ["X-Variant", "B"]])],
   ["モバイル", () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X)"]]), uaSensitive: true })],
   ["カナリア (ポート 8080)", () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]]), port: 8080 })],
   ["優先度 (ポート 8090)", () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]]), port: 8090 })],

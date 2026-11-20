@@ -65,6 +65,8 @@ cd deploy && FRONTEND=<表示された IP> ./test.sh
 | カナリア (:8080 90:10) | 200 pool-web / pool-canary | 8080 番の全体を pool-web 90% / pool-canary 10% で振り分け (1 件では片方に決まる) |
 | キャンペーン | 302 (`https://www.contoso.com/campaign?campaign=...`) | 高度なルールのキャンペーン条件 (優先度 40) で一致する |
 | モバイル | 200 pool-mobile | iPhone UA。カナリアはポート 8080 のみのため影響しない |
+| A/B 変種 A | 200 pool-web | `/ab` (変種ヘッダーなし)。既定の振り分け先 |
+| A/B 変種 B | 200 pool-canary | `/ab` + `X-Variant: B`。ルール `ab-variant-b` (優先度 45) |
 | WAF ブロック (UA) | 403 | `curl -A agw-block-demo` の要求。ルーティングの前に WAF が遮断する (`BlockDemoUA`) |
 
 **100 回連続の確認** (`deploy/canary-check.sh`、ポート 8080):
@@ -201,6 +203,25 @@ az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --c
 - VM 2 の pool-canary を止めないと、Primary に送られ続けるため、Standby への切り替えは見えません。
 - シミュレーターの「テスト要求」は、選んでいる要求のポートに件数分送ります。優先度 (8090) のプリセットを選んでから押すと、Primary / Standby の件数を数えられます。押すと「キャンセル」に変わり、送信を止められます。結果は 50 件ずつ表示します。
 
+
+## A/B テスト (ヘッダーで変種を決める)
+
+ポート 80 の高度なルール `ab-variant-b` (優先度 45) で、`/ab` への要求を変種に振り分けます。条件セット `cs-ab-variant-b` は、パス `^/ab(/.*)?$` と、ヘッダー `X-Variant` = `B` の両方に一致したときだけ一致します。
+
+| 要求 | 期待 |
+|---|---|
+| `GET /ab` (ヘッダーなし) | pool-web (変種 A、既定) |
+| `GET /ab` + `X-Variant: A` | pool-web (変種 A、既定) |
+| `GET /ab` + `X-Variant: B` | pool-canary (変種 B) |
+| `GET /app/home` + `X-Variant: B` | pool-web (パスが違うため影響なし) |
+
+```bash
+curl -s -D - -o /dev/null -H "X-Variant: B" http://<FRONTEND-IP>/ab | grep -i x-backend-pool
+```
+
+- シミュレーターの「A/B (変種 A / B)」プリセットで、同じ予測を確認できます。
+- 変種の割り振りはクライアントが決めるため、本番の A/B テストではなく、デモ用の仕様です。
+- ランダムに 50:50 で割り振る方式 (`/ab` を `WeightedDistribution` で振り分ける) は、このデモでは作っていません。同じ機能で作れますが、同じ利用者が同じ変種に入るとは限りません。
 
 ## 設計メモ: 外向き通信 (NAT Gateway)
 
