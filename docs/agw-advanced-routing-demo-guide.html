@@ -193,9 +193,9 @@ DynamicUser=yes</code></pre>
 
 <h3>4.1 作成されるリソース</h3>
 <table><thead><tr><th scope="col">リソース</th><th scope="col">内容</th></tr></thead><tbody>
-<tr><td>VNet / サブネット</td><td><code>appgw</code> 10.20.0.0/24 (Application Gateway 専用)、<code>backend</code> 10.20.1.0/24 (NSG 付き)</td></tr>
-<tr><td>バックエンド VM 1</td><td>固定 IP 10.20.1.10。Node.js プロセス × 5 (ポート 8080–8083、8085)。cloud-init で <code>server.js</code> を配置</td></tr>
-<tr><td>カナリア VM 2</td><td>固定 IP 10.20.1.11。Node.js プロセス × 1 (<code>pool-canary</code>、ポート 8080)</td></tr>
+<tr><td>VNet / サブネット</td><td><code>appgw</code> 192.168.0.0/24 (Application Gateway 専用)、<code>backend</code> 192.168.1.0/24 (NSG 付き)</td></tr>
+<tr><td>バックエンド VM 1</td><td>固定 IP 192.168.1.10。Node.js プロセス × 5 (ポート 8080–8083、8085)。cloud-init で <code>server.js</code> を配置</td></tr>
+<tr><td>カナリア VM 2</td><td>固定 IP 192.168.1.11。Node.js プロセス × 1 (<code>pool-canary</code>、ポート 8080)</td></tr>
 <tr><td>WAF ポリシー</td><td>Prevention、DRS 2.1。カスタムルール <code>BlockDemoIp</code> (送信元 IP)、<code>BlockDemoUA</code> (User-Agent に <code>agw-block-demo</code> を含む要求を遮断)</td></tr>
 <tr><td>NAT Gateway</td><td>backend サブネットに関連付け (StandardV2、専用の StandardV2 public IP)。バックエンド VM の外向き通信 (apt など) に使う。バックエンド VM には public IP を付けず、サブネットはプライベート (既定の外向き IP なし)</td></tr>
 <tr><td>Application Gateway (WAF_v2)</td><td>リスナー <code>listener-http</code> (:80) と <code>listener-canary</code> (:8080)。ルール <code>rule1</code> (Advanced、:80)、<code>rule-canary</code> (Basic、:8080)</td></tr>
@@ -228,7 +228,7 @@ WAF ブロック (UA)  HTTP 403</code></pre>
 <li>シミュレーターでシナリオを選び [要求を送信] → 経路図・ルールごとの一致/不一致・応答 (模擬) を説明</li>
 <li>「実機で同じ要求を送る (curl)」をコピーし、<code>&lt;FRONTEND-IP&gt;</code> を実際の IP に置き換えて実行</li>
 <li>実機の応答ヘッダー <code>x-backend-pool</code>、またはブラウザーで開いたページの色・プール名が、シミュレーターの「応答」と一致することを見せる</li></ol>
-<p>シミュレーターのルールと <code>deploy.sh</code> のルールは同じ定義です。ルールを変える場合は、シミュレーターの [JSON] 表示と <code>az network application-gateway advanced-routing-map show</code> の結果を見比べて両方をそろえます。</p>
+<p>シミュレーターのルールと <code>deploy.sh</code> のルールは同じ定義です。ルールを変える場合は、シミュレーターの [JSON] 表示と <code>deploy/main.bicep</code> の定義を見比べて両方をそろえます。Azure CLI 2.87.0 には advanced-routing のコマンドがないため、実機側はポータルの [ルール] 画面で確認します。</p>
 
 <h3>5.2 発展: シミュレーターから実機へ直接送信する場合の要件</h3>
 <p>単体 HTML 版 <a href="../agw-routing-simulator.html"><code>agw-routing-simulator.html</code></a> は、画面上部の「ゲートウェイ URL」が空ならオフラインでシミュレーションし、URL を入れると実機に要求を送って「予測」と「実機の応答」を並べて表示します (予測と一致 / 不一致も表示)。ファイルをローカルで開けば (file://) http のゲートウェイにも送れます。ブラウザーの制約は次のとおりです。</p>
@@ -242,17 +242,18 @@ WAF ブロック (UA)  HTTP 403</code></pre>
 <tr><td>アプリからの外部通信</td><td>公開アプリの実行環境が外部 URL への通信を許可するか未確認</td><td>実装前に疎通テストが必要</td></tr>
 </tbody></table>
 <p>server.js には次の CORS 対応を組み込み済みです (環境変数 <code>ALLOW_ORIGIN</code>、既定は <code>*</code>。空文字で無効化)。</p>
-<pre><code>const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN || &quot;&quot;;   // シミュレーターのオリジン
+<pre><code>const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN === undefined ? &quot;*&quot; : process.env.ALLOW_ORIGIN;
 function cors(res) {
   if (!ALLOW_ORIGIN) return;
   res.setHeader(&quot;access-control-allow-origin&quot;, ALLOW_ORIGIN);
-  res.setHeader(&quot;access-control-allow-headers&quot;, &quot;x-tenant-id, x-partner-id, x-api-version, x-device&quot;);
   res.setHeader(&quot;access-control-allow-methods&quot;, &quot;GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS&quot;);
+  res.setHeader(&quot;access-control-allow-headers&quot;, &quot;*&quot;);
   res.setHeader(&quot;access-control-expose-headers&quot;, &quot;x-backend-pool&quot;);
+  res.setHeader(&quot;access-control-max-age&quot;, &quot;0&quot;);
 }
 // createServer の先頭で:
 cors(res);
-if (req.method === &quot;OPTIONS&quot;) { res.writeHead(204); return res.end(); }</code></pre>
+if (req.method === &quot;OPTIONS&quot; &amp;&amp; req.headers[&quot;access-control-request-method&quot;]) { res.writeHead(204); return res.end(); }</code></pre>
 </section>
 
 <section id="demo"><h2>6. デモの進め方 (例: 15 分)</h2>
@@ -288,7 +289,8 @@ if (req.method === &quot;OPTIONS&quot;) { res.writeHead(204); return res.end(); 
 <section id="notes"><h2>8. 制約・注意事項と後片付け</h2><ul>
 <li>Advanced rules はプレビュー機能です。マルチサイト リスナーと L4 (TCP/TLS) プロキシでは使えません</li>
 <li>重み付け (ポート 8080 のカナリア、pool-web 90% / pool-canary 10%) には、サブスクリプションで <code>Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy</code> の登録が必要です。登録していない状態で <code>WEIGHTED_CANARY=true ./deploy.sh</code> を実行すると、<code>SubscriptionNotRegisteredForFeature</code> でデプロイが失敗します。既定の <code>WEIGHTED_CANARY=false</code> では、登録は不要です</li>
-<li>上限: マップ 100 / ゲートウェイ、ルール 100 / マップ、条件 5 / 条件セット、値 5 / 条件、値・正規表現 128 文字</li>
+<li>上限: マップ 100 / ゲートウェイ、条件セット 10,000 / ゲートウェイ、ルール 100 / マップ、条件 5 / 条件セット、値 5 / 条件、値・正規表現 128 文字</li>
+<li>ARM API (2026-11-20 確認): 高度なルールの振り分け先は 1 プールのみ。2026-03-01 / 2026-05-01 の仕様と、2026-07-01 を含む ARM 検証で確認。複数プールの重み付けは Basic ルールで行う</li>
 <li>WAF ポリシーはゲートウェイまたはリスナー単位で関連付け。ルール単位の WAF ポリシーは非対応</li>
 <li>シミュレーターの判定はブラウザーの正規表現エンジンで近似しており、RE2 と完全には一致しません</li>
 <li><code>deploy.sh</code> はまだ実環境で実行していません。初回は手順ごとに結果を確認しながら実行してください</li></ul>

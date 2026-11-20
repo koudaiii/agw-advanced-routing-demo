@@ -48,13 +48,14 @@ FRONTEND=<表示されたフロントエンド IP> ./test.sh
 FRONTEND=<表示されたフロントエンド IP>:8080 ./canary-check.sh /app/home 100   # ポート 8080 に 100 回連続で送り、プール別の件数を表示
 ```
 - カナリア展開: ポート 8080 のリスナーで、新バージョン (pool-canary) への振り分けを行います。`WEIGHTED_CANARY=false` (既定) では 8080 番の全件を pool-canary に送ります。`WEIGHTED_CANARY=true` では、ポート 8080 全体を pool-web 90% / pool-canary 10% に重み付けします。URI では絞りません。ポート 80 は高度なルール (A/B やヘッダーの振り分け) のままです。
-- なぜカナリア用の VM (VM2) が必要か: 重み付け (`loadDistributionPolicy`) は 1 つの Basic ルールに付き、ルール内の全プールが同じバックエンド HTTP 設定 (同じポート) を使います。ARM の振り分けターゲットにはプールごとのポート指定がありません。pool-web は VM1 の 8080 番で動くため、同じポートで別の応答を返す pool-canary を置くには、別の IP アドレスが必要です。そこで新バージョン (pool-canary) を VM2 (10.20.1.11) の 8080 番で動かします。以前の 8084 番では、ポートが一致せず重み付けの対象にできませんでした。VM1 を作り直さずに済ませるなら、VM1 に 2 つ目の IP を付けて同じ方法で動かす代替案もあります (VM1 の初期化データの変更は既存 VM で拒否されるため、再作成が必要になります)。
+- なぜカナリア用の VM (VM2) が必要か: 重み付け (`loadDistributionPolicy`) は 1 つの Basic ルールに付き、ルール内の全プールが同じバックエンド HTTP 設定 (同じポート) を使います。ARM の振り分けターゲットにはプールごとのポート指定がありません。pool-web は VM1 の 8080 番で動くため、同じポートで別の応答を返す pool-canary を置くには、別の IP アドレスが必要です。そこで新バージョン (pool-canary) を VM2 (192.168.1.11) の 8080 番で動かします。以前の 8084 番では、ポートが一致せず重み付けの対象にできませんでした。VM1 を作り直さずに済ませるなら、VM1 に 2 つ目の IP を付けて同じ方法で動かす代替案もあります (VM1 の初期化データの変更は既存 VM で拒否されるため、再作成が必要になります)。
 - 重み付けは Advanced load balancing の機能です。`WEIGHTED_CANARY=true` にはサブスクリプションで `Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy` の登録が必要です。
   ```bash
   WEIGHTED_CANARY=true ./deploy.sh    # 重み付け 90:10 に切り替え
   WEIGHTED_CANARY=false ./deploy.sh   # 8080 番の全件を pool-canary に戻す
   ```
 - デプロイは Bicep (`main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。Azure CLI 2.87.0 には advanced-routing 用のコマンド (`az network application-gateway advanced-routing-map` など) がないため、CLI では作成できません。
+- ARM API の確認 (2026-11-20): 現在の template は 2026-03-01 / 2026-05-01 / 2026-07-01 のすべてで検証に成功します。高度なルールの振り分け先は `backendAddressPool` の 1 つだけです。`loadDistributionPolicy` を指定すると、3 バージョンすべてで `ApplicationGatewayAdvancedRoutingRuleMustReference` になります。Bicep 0.49.2 でも BCP037 で指摘されます (型情報あり)。
 - 完了まで 15〜20 分程度かかります (Application Gateway の作成と更新に時間がかかるため)。
 ブラウザーで `http://<フロントエンド IP>/app/home` を開くと、応答したプールのページが表示されます。ヘッダーを付ける場合は curl か、ブラウザー拡張 (ModHeader など) を使います。
 

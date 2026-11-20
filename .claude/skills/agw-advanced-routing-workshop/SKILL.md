@@ -23,10 +23,10 @@ az account show --query "{sub:name, id:id, user:user.name}" -o table   # 対象�
 az provider show -n Microsoft.Network --query registrationState -o tsv   # Registered であること
 ```
 
-- Azure CLI 2.87.0 には `az network application-gateway advanced-routing-*` が **ありません**。そのためデプロイは CLI ではなく Bicep (`deploy/main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。`az bicep version` で Bicep が使えることを確認します。
+- Azure CLI 2.87.0 には `az network application-gateway advanced-routing-*` が **ありません**。そのためデプロイは CLI ではなく Bicep (`deploy/main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。`az bicep version` で Bicep が使えることを確認します。API バージョンは 2026-03-01 のままです。ARM 検証では 2026-05-01 と 2026-07-01 も成功しましたが、高度なルールの新しい機能は確認できませんでした。
 - SSH 鍵 (`~/.ssh/id_ed25519.pub`) がなければ `deploy.sh` が自動生成します。
-- 必要なパラメーターはありません。カナリアは送信元 IP や URI ではなく、ポート 8080 全体の重み付け (pool-web 90% / pool-canary 10%) で振り分けます。
-- 重み付けは Advanced load balancing の機能です。サブスクリプションで `Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy` が登録されている必要があります (未登録だと deploy が `SubscriptionNotRegisteredForFeature` で失敗します)。
+- 必要なパラメーターはありません。カナリアは送信元 IP や URI では絞らず、ポート 8080 の全件を振り分けます。既定 (`WEIGHTED_CANARY=false`) では全件を pool-canary に送ります。`WEIGHTED_CANARY=true` にすると pool-web 90% / pool-canary 10% の重み付けになります。
+- 重み付けは Advanced load balancing の機能です。`WEIGHTED_CANARY=true` にする場合だけ、サブスクリプションで `Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy` が登録されている必要があります (未登録だと deploy が `SubscriptionNotRegisteredForFeature` で失敗します)。既定の `false` では不要です。
 
 ## 2. デプロイ
 
@@ -39,7 +39,7 @@ cd deploy
 
 - `make-cloud-init.sh` で 2 つの初期化ファイルを生成 (`backend/server.js` を埋め込み): `cloud-init.yaml` (バックエンド VM 1) と `cloud-init-canary.yaml` (カナリア VM 2、`backend/pools-canary.conf`)
 - リソースグループ `rg-agw-advrouting-demo` を作成
-- `main.bicep` をデプロイ: VNet (`appgw` 10.20.0.0/24 / `backend` 10.20.1.0/24)、バックエンド NSG、バックエンド VM 1 (Ubuntu 24.04、固定 IP 10.20.1.10、Node.js プロセス 5 つ = ポート 8080–8083、8085)、カナリア VM 2 (固定 IP 10.20.1.11、`pool-canary` をポート 8080)、WAF_v2 ポリシー (Prevention、DRS 2.1、カスタムルール `BlockDemoIp` と `BlockDemoUA`)、Application Gateway、Advanced routing map (`advancedRoutingMap1`、条件セット 5 つ、ルール 5 つ)、`rule1` (Advanced、ポート 80)、ポート 8080 のリスナー `listener-canary` と Basic ルール `rule-canary` (既定 `WEIGHTED_CANARY=false` では 8080 番の全件を pool-canary に送る。`WEIGHTED_CANARY=true` では `loadDistributionPolicy` で pool-web 90 / pool-canary 10)
+- `main.bicep` をデプロイ: VNet (`appgw` 192.168.0.0/24 / `backend` 192.168.1.0/24)、バックエンド NSG、バックエンド VM 1 (Ubuntu 24.04、固定 IP 192.168.1.10、Node.js プロセス 5 つ = ポート 8080–8083、8085)、カナリア VM 2 (固定 IP 192.168.1.11、`pool-canary` をポート 8080)、WAF_v2 ポリシー (Prevention、DRS 2.1、カスタムルール `BlockDemoIp` と `BlockDemoUA`)、Application Gateway、Advanced routing map (`advancedRoutingMap1`、条件セット 5 つ、ルール 5 つ)、`rule1` (Advanced、ポート 80)、ポート 8080 のリスナー `listener-canary` と Basic ルール `rule-canary` (既定 `WEIGHTED_CANARY=false` では 8080 番の全件を pool-canary に送る。`WEIGHTED_CANARY=true` では `loadDistributionPolicy` で pool-web 90 / pool-canary 10)
 
 ゲートウェイのバックエンドが Healthy になるまで数分かかることがあります。確認:
 
@@ -62,15 +62,15 @@ cd deploy && FRONTEND=<表示された IP> ./test.sh
 | パートナー | 200 pool-partner | `X-Partner-Id` 一致 (GET で送る) |
 | API v2 | 200 pool-api-v2 | `X-Api-Version: 2.0` と `/api/orders` |
 | エンコード済みパス | 200 pool-api-v2 | `/api%2Forders` はデコードされて一致 |
-| カナリア (:8080 90:10) | 200 pool-web / pool-canary | ポート 8080 全体の重み付け。1 件では片方に決まる |
-| キャンペーン | 302 (`https://www.contoso.com/campaign?campaign=...`) | キャンペーン条件 (優先度 40) はカナリア (優先度 50) より先に評価される |
+| カナリア (:8080) | 200 pool-canary (既定) | 既定 `WEIGHTED_CANARY=false` は全件 pool-canary。`true` のときは pool-web 90% / pool-canary 10% の重み付け (1 件では片方に決まる) |
+| キャンペーン | 302 (`https://www.contoso.com/campaign?campaign=...`) | 高度なルールのキャンペーン条件 (優先度 40) で一致する |
 | モバイル | 200 pool-mobile | iPhone UA。カナリアはポート 8080 のみのため影響しない |
 | WAF ブロック (UA) | 403 | `curl -A agw-block-demo` の要求。ルーティングの前に WAF が遮断する (`BlockDemoUA`) |
 
 **100 回連続の確認** (`deploy/canary-check.sh`、ポート 8080):
 
 ```bash
-cd deploy && FRONTEND=<IP>:8080 ./canary-check.sh /app/home 100   # → pool-web 約 90 件、pool-canary 約 10 件
+cd deploy && FRONTEND=<IP>:8080 ./canary-check.sh /app/home 100   # → 既定: 100 件すべて pool-canary。WEIGHTED_CANARY=true: pool-web 約 90 件、pool-canary 約 10 件
 cd deploy && FRONTEND=<IP>      ./canary-check.sh /app/home 100   # → ポート 80 は高度なルール (重み付けなし)
 ```
 
@@ -81,7 +81,7 @@ cd deploy && FRONTEND=<IP>      ./canary-check.sh /app/home 100   # → ポー�
 ブラウザーで `agw-routing-simulator.html` を開き、ゲートウェイ URL に `http://<FRONTEND>` を入力すると、予測と実機の応答を並べて比較できます (`backend/server.js` は CORS 対応済み)。
 
 - 実機モードでは、予測の送信元 IP はプリセットの値ではなく、ゲートウェイが見ている実際の IP (`X-Forwarded-For`) を使います。
-- カナリア (8080 番ポートの 90:10 重み付け) はシミュレーターの「負荷分散」セクションの「カナリア: ポート 8080 全体 90:10」プリセットで予測します。ポート 80 の高度なルールは送信元 IP に依存しません。
+- カナリア (ポート 8080) はシミュレーターの「負荷分散」セクションの「カナリア: ポート 8080 全体 90:10」プリセットで予測します。このプリセットは 90:10 の重み付け (`WEIGHTED_CANARY=true`) を予測します。既定の実機 (`WEIGHTED_CANARY=false`) は全件 pool-canary なので、結果は一致しません。ポート 80 の高度なルールは送信元 IP に依存しません。
 
 推奨の順序:
 
@@ -124,9 +124,7 @@ az group delete -n rg-agw-advrouting-demo --yes --no-wait
 ## 既知の問題
 
 - **本文のない POST が 403 になる**: `/api/orders` への本文のない POST は、DRS 2.1 のマネージドルールに遮断されます。本文 (JSON) 付きの POST や GET / PUT は通ります。ワークショップのテストとシミュレーターは GET で送ります。原因のルール ID は未特定です。
-- **README の旧 CLI 手順**: 「rule1 を Advanced に切り替えるコマンド」の記述は古く、現在は Bicep が作成します。
-- **高度なルールは 1 プールのみ**: 現在の ARM API では、高度なルールに重み付けを指定できません (`ApplicationGatewayAdvancedRoutingRuleMustReference`)。そのためカナリアの重み付けは、ポート 8080 の Basic ルールで行っています。
-- **VM 1 に残る未使用の `pool-canary` (8084)**: VM 1 の customData を変えると既存 VM の更新が拒否されるため、`backend/pools.conf` の 8084 行は残しています。ルーティングには使われません。
+- **高度なルールは 1 プールのみ (ARM API の事実、2026-11-20 確認)**: 公開の REST API 仕様 (Azure/azure-rest-api-specs) では、2026-03-01 と 2026-05-01 とも、高度なルールの振り分け先は `backendAddressPool` の 1 つだけで、`loadDistributionPolicy` のプロパティはありません。`az deployment group validate` では、2026-03-01 / 2026-05-01 / 2026-07-01 のすべてで、`backendAddressPool` を省いて `loadDistributionPolicy` を指定すると `ApplicationGatewayAdvancedRoutingRuleMustReference` で失敗しました。同じ検証で、現在の template は 3 バージョンすべてで成功しました。Bicep 0.49.2 (`az bicep upgrade` 後) は `applicationGateways@2026-03-01` の型情報を持ち、`loadDistributionPolicy` を BCP037 (高度なルールでは不許可) として指摘します。公式の Advanced load balancing のページは「高度なルールも複数プールに対応」と書いていますが、この API の挙動とは一致しません。2026-07-01 の仕様は公開されていないため、仕様の面では確認できていません。そのためカナリアの重み付けは、ポート 8080 の Basic ルール (`rule-canary`) で行っています。
 - **Log Analytics の列名**: `AGWFirewallLogs` の列は `action_s` ではなく、まずテーブルの実際の列を確認してから使ってください。
 
 ## 講義のポイント (ドキュメントとの対応)
@@ -144,7 +142,7 @@ az group delete -n rg-agw-advrouting-demo --yes --no-wait
 ## 設計メモ: なぜカナリア用の VM2 が必要か
 
 - 重み付け (`loadDistributionPolicy`) は 1 つの Basic ルールに付き、ルール内の全プールが **同じバックエンド HTTP 設定 (同じポート)** を使います。ARM の振り分けターゲットには、プールごとのポート指定がありません。
-- pool-web は VM1 の 8080 番で動いています。同じポートで別の応答を返す pool-canary を置くには、**別の IP アドレス** が必要です。そのため新バージョン (pool-canary) は VM2 (10.20.1.11) の 8080 番で動かします。
+- pool-web は VM1 の 8080 番で動いています。同じポートで別の応答を返す pool-canary を置くには、**別の IP アドレス** が必要です。そのため新バージョン (pool-canary) は VM2 (192.168.1.11) の 8080 番で動かします。
 - 以前の構成 (VM1 の 8084 番) では、ポートが一致せず重み付けの対象にできませんでした。
 - 代替案: VM1 に 2 つ目の IP を付け、同じ方法で動かせば VM が 1 台減ります。ただし VM1 の初期化データ (customData) の変更は既存 VM で拒否されるため、VM1 の再作成が必要になります。
 
