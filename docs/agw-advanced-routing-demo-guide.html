@@ -198,27 +198,48 @@ pool-mobile|8085|モバイル|#7e22ce</code></pre>
 </tbody></table>
 
 <h3>3.4 サーバー本体 (<code>backend/server.js</code>) の要点</h3>
-<pre><code>const POOL_NAME = process.env.POOL_NAME || &quot;pool-web&quot;;
+<p><code>backend/server.js</code> の抜粋です (環境変数の読み取り、CORS、リクエストの処理)。</p>
+<pre><code>const POOL_NAME = process.env.POOL_NAME || "pool-web";
 const POOL_LABEL = process.env.POOL_LABEL || POOL_NAME;
-const POOL_COLOR = /^#[0-9a-fA-F]{6}$/.test(process.env.POOL_COLOR || &quot;&quot;) ? process.env.POOL_COLOR : &quot;#334155&quot;;
+const POOL_COLOR = /^#[0-9a-fA-F]{6}$/.test(process.env.POOL_COLOR || "") ? process.env.POOL_COLOR : "#334155";
 const PORT = Number(process.env.PORT || 8080);
 const HOST = os.hostname();
 // CORS so the standalone simulator (agw-routing-simulator.html) can call the gateway directly.
-// Default &quot;*&quot; (demo backend, no credentials). Set ALLOW_ORIGIN=&quot;&quot; to disable, or to one origin.
-const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN === undefined ? &quot;*&quot; : process.env.ALLOW_ORIGIN;
+// Default "*" (demo backend, no credentials). Set ALLOW_ORIGIN="" to disable, or to one origin.
+const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN === undefined ? "*" : process.env.ALLOW_ORIGIN;
 
 function cors(res) {
   if (!ALLOW_ORIGIN) return;
-  res.setHeader(&quot;access-control-allow-origin&quot;, ALLOW_ORIGIN);
-  res.setHeader(&quot;access-control-allow-methods&quot;, &quot;GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS&quot;);
-  res.setHeader(&quot;access-control-allow-headers&quot;, &quot;*&quot;);</code></pre>
-<pre><code>http.createServer((req, res) =&gt; {
-  if (req.url === &quot;/healthz&quot;) { res.writeHead(200); return res.end(&quot;ok&quot;); }
-  const s = snapshot(req);                       // pool, method, path, query, headers ...
-  res.setHeader(&quot;x-backend-pool&quot;, POOL_NAME);    // curl / test.sh で判定に使う
-  res.setHeader(&quot;cache-control&quot;, &quot;no-store&quot;);
-  // ?format=json なら JSON、それ以外は HTML ページ
-}).listen(PORT);</code></pre>
+  res.setHeader("access-control-allow-origin", ALLOW_ORIGIN);
+  res.setHeader("access-control-allow-methods", "GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS");
+  res.setHeader("access-control-allow-headers", "*");
+  res.setHeader("access-control-expose-headers", "x-backend-pool");
+  res.setHeader("access-control-max-age", "0"); // preflight is routed too; do not cache it
+}
+// ... (中略: ヘッダー名の定義、page() の HTML 生成) ...
+http
+  .createServer((req, res) =&gt; {
+    cors(res);
+    if (req.method === "OPTIONS" &amp;&amp; req.headers["access-control-request-method"]) {
+      res.setHeader("x-backend-pool", POOL_NAME);
+      res.writeHead(204);
+      return res.end();
+    }
+    if (req.url === "/healthz") {
+      res.writeHead(200, { "content-type": "text/plain" });
+      return res.end("ok");
+    }
+    const s = snapshot(req);
+    const wantsJson = s.query.format === "json" || /application\/json/.test(req.headers.accept || "");
+    res.setHeader("x-backend-pool", POOL_NAME);
+    res.setHeader("cache-control", "no-store");
+    if (wantsJson) {
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      return res.end(JSON.stringify(s, null, 2));
+    }
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.end(page(s));
+  })</code></pre>
 <p>ローカル確認:</p>
 <pre><code>POOL_NAME=pool-tenant POOL_LABEL=&quot;テナント専用&quot; POOL_COLOR=&quot;#0f766e&quot; PORT=8082 node backend/server.js
 curl -i -H &quot;X-Tenant-Id: customer-1024&quot; http://localhost:8082/app/dashboard</code></pre>
