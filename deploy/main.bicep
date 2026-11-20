@@ -549,15 +549,14 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
-        // Port 8080 only: a client that sends "X-Canary: new" always gets the new version (pool-canary).
-        name: 'cs-canary-force'
+        // Port 8080 only: matches every request (all paths), so the canary split applies to the whole port.
+        name: 'cs-canary-split'
         properties: {
           routingConditions: [
             {
-              conditionType: 'Header'
-              propertyName: 'X-Canary'
+              conditionType: 'Path'
               propertyValueMatcher: {
-                pattern: '^new$'
+                pattern: '^/'
               }
             }
           ]
@@ -651,39 +650,39 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
-        // Port 8080 (whole port): default action splits 90% pool-web / 10% pool-canary.
+        // Port 8080 (whole port): the rule splits 90% pool-web / 10% pool-canary; the default is pool-canary.
         name: canaryMapName
         properties: {
           advancedRoutingRules: [
             {
-              name: 'force-new'
+              name: 'canary-split'
               properties: {
                 priority: 10
                 advancedRoutingConditionSet: {
-                  id: '${gwId}/advancedRoutingConditionSets/cs-canary-force'
+                  id: '${gwId}/advancedRoutingConditionSets/cs-canary-split'
                 }
-                backendAddressPool: {
-                  id: '${gwId}/backendAddressPools/pool-canary'
-                }
-                backendHttpSettings: {
-                  id: '${gwId}/backendHttpSettingsCollection/hs-pool-web'
-                }
+                backendAddressPoolsAndSettings: [
+                  {
+                    backendAddressPool: { id: '${gwId}/backendAddressPools/pool-web' }
+                    backendHttpSettings: { id: '${gwId}/backendHttpSettingsCollection/hs-pool-web' }
+                    weight: 90
+                  }
+                  {
+                    backendAddressPool: { id: '${gwId}/backendAddressPools/pool-canary' }
+                    backendHttpSettings: { id: '${gwId}/backendHttpSettingsCollection/hs-pool-web' }
+                    weight: 10
+                  }
+                ]
+                poolSelectionAlgorithm: 'WeightedDistribution'
               }
             }
           ]
-          defaultBackendAddressPoolsAndSettings: [
-            {
-              backendAddressPool: { id: '${gwId}/backendAddressPools/pool-web' }
-              backendHttpSettings: { id: '${gwId}/backendHttpSettingsCollection/hs-pool-web' }
-              weight: 90
-            }
-            {
-              backendAddressPool: { id: '${gwId}/backendAddressPools/pool-canary' }
-              backendHttpSettings: { id: '${gwId}/backendHttpSettingsCollection/hs-pool-web' }
-              weight: 10
-            }
-          ]
-          defaultPoolSelectionAlgorithm: 'WeightedDistribution'
+          defaultBackendAddressPool: {
+            id: '${gwId}/backendAddressPools/pool-canary'
+          }
+          defaultBackendHttpSettings: {
+            id: '${gwId}/backendHttpSettingsCollection/hs-pool-web'
+          }
         }
       }
     ]
@@ -702,7 +701,7 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
-        // Advanced rule on port 8080; all requests on this port use the canaryMap (90:10 default action).
+        // Advanced rule on port 8080; all requests on this port use canaryMap (canary-split rule: 90:10).
         name: 'rule-canary'
         properties: {
           ruleType: 'AdvancedRouting'
