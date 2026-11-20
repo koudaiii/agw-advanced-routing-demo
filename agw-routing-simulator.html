@@ -629,7 +629,9 @@ function renderDiagram() {
   const on = !!ev, blocked = d && d.kind === "waf";
   const active = d && (d.kind === "pool" || d.kind === "default") ? d.pool : null;
   const weighted = !!(d && (d.kind === "weighted" || d.kind === "priority"));
-  const hitSet = weighted ? new Set(["pool-web", "pool-canary"]) : new Set(active ? [active] : []);
+  const priority = !!(d && d.kind === "priority");
+  // 優先度ベース: Primary (pool-canary、VM 2) が正常なら命中。停止していれば Standby (pool-web、VM 1)
+  const hitSet = priority ? new Set(["pool-canary"]) : weighted ? new Set(["pool-web", "pool-canary"]) : new Set(active ? [active] : []);
   const st = (x) => (x ? "var(--primary)" : "var(--line)");
   // 経路の左側（クライアント → リスナー → WAF → マップ）は、命中した最初の行き先のプールの色で描く
   const routeColor = routeColorOf(d);
@@ -637,7 +639,9 @@ function renderDiagram() {
     { x: 8, l: "クライアント", sub: isLive() ? "このブラウザー" : "", on },
     { x: 148, l: "Basic リスナー", sub: d && d.kind === "priority" ? ":8090 (優先度)" : weighted ? ":8080 (カナリア)" : ":80", on },
     { x: 288, l: "WAF", sub: blocked ? "403 で遮断" : cfg.waf.enabled ? "ポリシー有効" : "無効", on: on && !blocked, bad: blocked },
-    weighted
+    priority
+      ? { x: 428, l: "優先度ルール", sub: "Primary 1 / Standby 2", on: on && !blocked }
+      : weighted
       ? { x: 428, l: "重み付けルール", sub: "web 90 : canary 10", on: on && !blocked }
       : { x: 428, l: "Advanced Routing Map", sub: `ルール ${cfg.rules.length} 件`, on: on && !blocked },
   ];
@@ -654,7 +658,8 @@ function renderDiagram() {
     svg.append(s("path", { d: `M548 ${mid} C 600 ${mid}, 600 ${y}, 650 ${y}`, fill: "none", stroke: hit && p ? p.color : st(hit), "stroke-width": hit ? 3 : 1, "stroke-dasharray": t.id === "__redirect" ? "5 4" : "none" }));
     svg.append(s("rect", { x: 650, y: y - 17, width: 202, height: 34, rx: 6, fill: hit ? (p ? p.color : "var(--primary)") : "var(--card)", stroke: hit ? (p ? p.color : "var(--primary)") : "var(--line)", "stroke-width": hit ? 2 : 1 }));
     svg.append(s("text", { x: 660, y: y - 2, "font-size": 11.5, "font-weight": 700, fill: hit ? "#ffffff" : "var(--fg)" }, t.t));
-    svg.append(s("text", { x: 660, y: y + 11, "font-size": 10, fill: hit ? "#ffffff" : "var(--fg)" }, t.sub));
+    const prioSub = priority ? { "pool-canary": "Primary (8090・優先度 1)", "pool-web": "Standby (8090・優先度 2)" }[t.id] : null;
+    svg.append(s("text", { x: 660, y: y + 11, "font-size": 10, fill: hit ? "#ffffff" : "var(--fg)" }, prioSub || t.sub));
   });
   $("summary").textContent = summary;
 }
