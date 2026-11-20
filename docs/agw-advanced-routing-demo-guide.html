@@ -71,42 +71,85 @@ svg .l{text-anchor:start}
 <nav aria-label="目次"><h2>目次</h2><ol>
 <li><a href="#arch">全体構成</a></li><li><a href="#prereq">前提条件</a></li><li><a href="#backend">バックエンドの作り方</a></li>
 <li><a href="#agw">Application Gateway の構築</a></li><li><a href="#front">シミュレーターをフロントエンドにする</a></li>
-<li><a href="#demo">デモの進め方</a></li><li><a href="#trouble">トラブルシューティング</a></li><li><a href="#notes">制約・注意事項と後片付け</a></li></ol></nav>
+<li><a href="#demo">デモの進め方</a></li><li><a href="#trouble">トラブルシューティング</a></li><li><a href="#notes">制約・注意事項</a></li><li><a href="#cleanup">後片付け</a></li></ol></nav>
 
 <section id="arch"><h2>1. 全体構成</h2>
 
 <figure class="diagram">
-<svg viewBox="0 0 900 330" role="img" aria-labelledby="dg-t dg-d">
+<svg viewBox="0 0 960 410" role="img" aria-labelledby="dg-t dg-d">
 <title id="dg-t">デモ環境の全体構成</title>
-<desc id="dg-d">シミュレーター アプリ (説明・判定・curl 生成) と、Application Gateway WAF_v2、Advanced routing map、バックエンド VM 1 (5 プール)、カナリア VM 2 の関係</desc>
+<desc id="dg-d">シミュレーター、デモ端末、Public IP (リスナー :80 / :8080 / :8090)、WAF、ポートごとのルーティングマップ (advancedRoutingMap1 / canaryMap / priorityMap)、VM 1 (pool-web、pool-partner、pool-tenant、pool-api-v2、pool-mobile、pool-standby) と VM 2 (pool-canary、pool-primary) の関係</desc>
 <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="ink"/></marker></defs>
-<rect x="10" y="20" width="200" height="120" rx="8" class="box"/>
-<text x="110" y="48" class="h">シミュレーター</text><text x="110" y="68" class="s">(フロントエンド / App Builder)</text>
-<text x="110" y="92" class="s">ルール判定・経路図</text><text x="110" y="110" class="s">応答の模擬表示</text><text x="110" y="128" class="s">curl コマンド生成</text>
-<rect x="10" y="190" width="200" height="90" rx="8" class="box"/>
-<text x="110" y="220" class="h">デモ端末</text><text x="110" y="242" class="s">curl / ブラウザー</text><text x="110" y="260" class="s">(送信元 IP)</text>
-<path d="M110 140 V185" class="ln dash" marker-end="url(#ar)"/><text x="118" y="168" class="s l">curl をコピー</text>
-<rect x="270" y="150" width="140" height="110" rx="8" class="box"/>
-<text x="340" y="180" class="h">Public IP</text><text x="340" y="200" class="s">Basic リスナー :80 / :8080</text><text x="340" y="220" class="s">rule1 (AdvancedRouting)</text>
-<path d="M210 235 H265" class="ln" marker-end="url(#ar)"/>
-<rect x="440" y="150" width="120" height="110" rx="8" class="box"/>
-<text x="500" y="185" class="h">WAF</text><text x="500" y="205" class="s">BlockDemoIp</text><text x="500" y="225" class="s">(ルーティング前)</text>
-<path d="M410 205 H435" class="ln" marker-end="url(#ar)"/>
-<rect x="590" y="150" width="130" height="110" rx="8" class="box"/>
-<text x="655" y="180" class="h">Routing map</text><text x="655" y="200" class="s">ルール 5 件 (:80)</text><text x="655" y="220" class="s">優先度の昇順</text><text x="655" y="240" class="s">既定: pool-web</text>
-<path d="M560 205 H585" class="ln" marker-end="url(#ar)"/>
-<rect x="750" y="20" width="140" height="300" rx="8" class="box"/>
-<text x="820" y="45" class="h">バックエンド VM</text>
-<text x="820" y="80" class="m">pool-web :8080</text><text x="820" y="110" class="m">pool-partner :8081</text><text x="820" y="140" class="m">pool-tenant :8082</text>
-<text x="820" y="170" class="m">pool-api-v2 :8083</text><text x="820" y="200" class="m">VM 2: pool-canary :8080</text><text x="820" y="230" class="m">pool-mobile :8085</text>
-<text x="820" y="270" class="s">server.js × 5 (VM 1)</text><text x="820" y="290" class="s">systemd</text>
-<path d="M720 205 H745" class="ln" marker-end="url(#ar)"/>
-<path d="M655 260 V305 H560" class="ln dash" marker-end="url(#ar)"/><text x="600" y="298" class="s">302 (campaign)</text>
-<rect x="270" y="20" width="290" height="100" rx="8" class="box"/>
-<text x="415" y="45" class="h">同じルール定義</text><text x="415" y="68" class="s">シミュレーターの JSON 表示</text><text x="415" y="88" class="s">= deploy.sh の condition set / rule</text>
-<path d="M210 70 H265" class="ln dash"/><path d="M560 70 H655 V145" class="ln dash" marker-end="url(#ar)"/>
+<rect x="10" y="20" width="190" height="110" rx="8" class="box"/>
+<text x="105" y="46" class="h">シミュレーター</text>
+<text x="105" y="66">(フロントエンド / App Builder)</text>
+<text x="105" y="88">ルール判定・経路図</text>
+<text x="105" y="106">テスト要求 (件数分を実機へ)</text>
+<rect x="10" y="180" width="190" height="80" rx="8" class="box"/>
+<text x="105" y="206" class="h">デモ端末</text>
+<text x="105" y="226">curl / ブラウザー</text>
+<text x="105" y="244">(送信元 IP)</text>
+<path d="M105 130 V175" class="ln dash" marker-end="url(#ar)" stroke-dasharray="6 5"/>
+<text x="113" y="158" class="l">curl をコピー</text>
+<rect x="250" y="20" width="160" height="240" rx="8" class="box"/>
+<text x="330" y="44" class="h">Public IP</text>
+<text x="330" y="64">Application Gateway</text>
+<text x="330" y="92">リスナー :80 (Basic)</text>
+<text x="330" y="110">リスナー :8080 (Basic)</text>
+<text x="330" y="128">リスナー :8090 (Basic)</text>
+<text x="330" y="162" class="h">Advanced ルール</text>
+<text x="330" y="182">rule1 → :80</text>
+<text x="330" y="200">rule-canary → :8080</text>
+<text x="330" y="218">rule-priority → :8090</text>
+<path d="M200 210 H245" class="ln" marker-end="url(#ar)"/>
+<rect x="450" y="70" width="120" height="110" rx="8" class="box"/>
+<text x="510" y="96" class="h">WAF</text>
+<text x="510" y="116">ポリシー有効</text>
+<text x="510" y="134">BlockDemoIp</text>
+<text x="510" y="152">BlockDemoUA</text>
+<text x="510" y="170">(ルーティング前)</text>
+<path d="M410 125 H445" class="ln" marker-end="url(#ar)"/>
+<rect x="600" y="10" width="150" height="70" rx="8" class="box"/>
+<text x="675" y="30" class="h">Routing map :80</text>
+<text x="675" y="50">advancedRoutingMap1</text>
+<text x="675" y="68">既定: pool-web</text>
+<rect x="600" y="100" width="150" height="70" rx="8" class="box"/>
+<text x="675" y="120" class="h">canaryMap :8080</text>
+<text x="675" y="140">canary-split 90 : 10</text>
+<text x="675" y="158">既定: pool-canary</text>
+<rect x="600" y="190" width="150" height="70" rx="8" class="box"/>
+<text x="675" y="210" class="h">priorityMap :8090</text>
+<text x="675" y="230">priority-split</text>
+<text x="675" y="248">Primary 1 / Standby 2</text>
+<path d="M570 125 L600 45" class="ln" marker-end="url(#ar)"/>
+<path d="M570 125 H600" class="ln" marker-end="url(#ar)"/>
+<path d="M570 125 L600 225" class="ln" marker-end="url(#ar)"/>
+<rect x="800" y="10" width="150" height="250" rx="8" class="box" style="fill:none;stroke-dasharray:6 4"/>
+<text x="875" y="30" class="h">VM 1</text>
+<text x="875" y="46">192.168.1.10</text>
+<text x="875" y="70" class="m">pool-web :8080</text>
+<text x="875" y="92" class="m">pool-partner :8081</text>
+<text x="875" y="114" class="m">pool-tenant :8082</text>
+<text x="875" y="136" class="m">pool-api-v2 :8083</text>
+<text x="875" y="158" class="m">pool-mobile :8085</text>
+<text x="875" y="180" class="m">pool-standby :8080</text>
+<text x="875" y="198">← :8090 Standby</text>
+<rect x="800" y="280" width="150" height="120" rx="8" class="box" style="fill:none;stroke-dasharray:6 4"/>
+<text x="875" y="300" class="h">VM 2</text>
+<text x="875" y="316">192.168.1.11</text>
+<text x="875" y="342" class="m">pool-canary :8080</text>
+<text x="875" y="364" class="m">pool-primary :8080</text>
+<text x="875" y="382">← :8090 Primary</text>
+<path d="M750 45 C775 45,775 120,800 120" class="ln" marker-end="url(#ar)"/>
+<path d="M750 125 C775 125,775 150,800 170" class="ln" marker-end="url(#ar)"/>
+<path d="M750 125 C775 125,775 320,800 320" class="ln" marker-end="url(#ar)"/>
+<path d="M750 225 C775 225,775 340,800 340" class="ln" marker-end="url(#ar)"/>
+<path d="M750 225 C775 225,775 190,800 190" class="ln" marker-end="url(#ar)"/>
+<text x="10" y="300" class="l">実線: 通信。点線: 設定・操作の対応関係。</text>
+<text x="10" y="318" class="l">VM 2 の pool-canary を止めると、8090 番は Standby (VM 1) に切り替わる。</text>
+<text x="10" y="336" class="l">8080 番は、pool-web (VM 1) 90% と pool-canary (VM 2) 10%。</text>
 </svg>
-<figcaption>図 1. 構成。実線は実際の通信、点線は設定・操作の対応関係。</figcaption>
+<figcaption>図 1. 構成。VM 1 と VM 2 は枠で分けています。実線は実際の通信、点線は設定・操作の対応関係。</figcaption>
 </figure>
 <table><thead><tr><th scope="col">要素</th><th scope="col">役割</th><th scope="col">実体</th></tr></thead><tbody>
 <tr><td>シミュレーター</td><td>ルールの評価順・AND/OR・WAF の位置を図で説明し、同じ要求を実機に送る curl を生成する</td><td>App Builder アプリ (ブラウザー内で判定)</td></tr>
@@ -120,7 +163,7 @@ svg .l{text-anchor:start}
 <li>Azure サブスクリプションと、リソース グループを作成できる権限</li>
 <li>Azure CLI (<code>az login</code> 済み)。高度なルールは CLI (2.87.0 時点) では作れないため、ガイドのデプロイは Bicep で行う (Bicep は <code>az</code> に同梱)</li>
 <li>bash 環境 (Azure Cloud Shell で可)。SSH 鍵 (<code>~/.ssh/id_ed25519.pub</code>) がなければ <code>deploy.sh</code> が自動作成</li>
-<li>WAF_v2 の Application Gateway は稼働時間で課金されます。デモ後は<a href="#notes">後片付け</a>を実施してください</li></ul>
+<li>WAF_v2 の Application Gateway は稼働時間で課金されます。デモ後は<a href="#cleanup">後片付け</a>を実施してください</li></ul>
 </section>
 
 <section id="backend"><h2>3. バックエンドの作り方</h2>
@@ -146,29 +189,57 @@ pool-tenant|8082|テナント専用|#0f766e
 pool-api-v2|8083|Orders API v2|#1d4ed8
 pool-mobile|8085|モバイル|#7e22ce</code></pre>
 <p>シミュレーターのプール一覧と同じ名前・色にそろえているため、シミュレーターの「応答」パネルと実機のページが同じ見た目になります。</p>
+<p><code>pools.conf</code> は、VM 上で動く Node.js プロセス (待ち受けるポート) の定義です。ポート 8090 は、Application Gateway のリスナーのポートで、バックエンドのプロセスは 8090 番を待ち受けません。優先度ベース (8090) は、次のゲートウェイのプールを使い、それぞれ既存のプロセス (8080 番) を指します。</p>
+<table><thead><tr><th scope="col">ゲートウェイのプール</th><th scope="col">指す先 (VM とプロセス)</th><th scope="col">使われる場面</th></tr></thead><tbody>
+<tr><td><code>pool-primary</code></td><td>VM 2 (192.168.1.11) の <code>pool-canary</code> プロセス (:8080)</td><td>:8090 の優先度 1 (Primary)</td></tr>
+<tr><td><code>pool-standby</code></td><td>VM 1 (192.168.1.10) の <code>pool-web</code> プロセス (:8080)</td><td>:8090 の優先度 2 (Standby)、既定</td></tr>
+<tr><td><code>pool-web</code></td><td>VM 1 の <code>pool-web</code> プロセス (:8080)</td><td>:80 の既定、:8080 のカナリア 90%</td></tr>
+<tr><td><code>pool-canary</code></td><td>VM 2 の <code>pool-canary</code> プロセス (:8080)</td><td>:8080 のカナリア 10%、:80 の変種 B (<code>X-Variant: B</code>)</td></tr>
+</tbody></table>
 
 <h3>3.4 サーバー本体 (<code>backend/server.js</code>) の要点</h3>
-<pre><code>const POOL_NAME = process.env.POOL_NAME || &quot;pool-web&quot;;
+<p><code>backend/server.js</code> の抜粋です (環境変数の読み取り、CORS、リクエストの処理)。</p>
+<pre><code>const POOL_NAME = process.env.POOL_NAME || "pool-web";
 const POOL_LABEL = process.env.POOL_LABEL || POOL_NAME;
-const POOL_COLOR = /^#[0-9a-fA-F]{6}$/.test(process.env.POOL_COLOR || &quot;&quot;) ? process.env.POOL_COLOR : &quot;#334155&quot;;
+const POOL_COLOR = /^#[0-9a-fA-F]{6}$/.test(process.env.POOL_COLOR || "") ? process.env.POOL_COLOR : "#334155";
 const PORT = Number(process.env.PORT || 8080);
 const HOST = os.hostname();
 // CORS so the standalone simulator (agw-routing-simulator.html) can call the gateway directly.
-// Default &quot;*&quot; (demo backend, no credentials). Set ALLOW_ORIGIN=&quot;&quot; to disable, or to one origin.
-const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN === undefined ? &quot;*&quot; : process.env.ALLOW_ORIGIN;
+// Default "*" (demo backend, no credentials). Set ALLOW_ORIGIN="" to disable, or to one origin.
+const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN === undefined ? "*" : process.env.ALLOW_ORIGIN;
 
 function cors(res) {
   if (!ALLOW_ORIGIN) return;
-  res.setHeader(&quot;access-control-allow-origin&quot;, ALLOW_ORIGIN);
-  res.setHeader(&quot;access-control-allow-methods&quot;, &quot;GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS&quot;);
-  res.setHeader(&quot;access-control-allow-headers&quot;, &quot;*&quot;);</code></pre>
-<pre><code>http.createServer((req, res) =&gt; {
-  if (req.url === &quot;/healthz&quot;) { res.writeHead(200); return res.end(&quot;ok&quot;); }
-  const s = snapshot(req);                       // pool, method, path, query, headers ...
-  res.setHeader(&quot;x-backend-pool&quot;, POOL_NAME);    // curl / test.sh で判定に使う
-  res.setHeader(&quot;cache-control&quot;, &quot;no-store&quot;);
-  // ?format=json なら JSON、それ以外は HTML ページ
-}).listen(PORT);</code></pre>
+  res.setHeader("access-control-allow-origin", ALLOW_ORIGIN);
+  res.setHeader("access-control-allow-methods", "GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS");
+  res.setHeader("access-control-allow-headers", "*");
+  res.setHeader("access-control-expose-headers", "x-backend-pool");
+  res.setHeader("access-control-max-age", "0"); // preflight is routed too; do not cache it
+}
+// ... (中略: ヘッダー名の定義、page() の HTML 生成) ...
+http
+  .createServer((req, res) =&gt; {
+    cors(res);
+    if (req.method === "OPTIONS" &amp;&amp; req.headers["access-control-request-method"]) {
+      res.setHeader("x-backend-pool", POOL_NAME);
+      res.writeHead(204);
+      return res.end();
+    }
+    if (req.url === "/healthz") {
+      res.writeHead(200, { "content-type": "text/plain" });
+      return res.end("ok");
+    }
+    const s = snapshot(req);
+    const wantsJson = s.query.format === "json" || /application\/json/.test(req.headers.accept || "");
+    res.setHeader("x-backend-pool", POOL_NAME);
+    res.setHeader("cache-control", "no-store");
+    if (wantsJson) {
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      return res.end(JSON.stringify(s, null, 2));
+    }
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.end(page(s));
+  })</code></pre>
 <p>ローカル確認:</p>
 <pre><code>POOL_NAME=pool-tenant POOL_LABEL=&quot;テナント専用&quot; POOL_COLOR=&quot;#0f766e&quot; PORT=8082 node backend/server.js
 curl -i -H &quot;X-Tenant-Id: customer-1024&quot; http://localhost:8082/app/dashboard</code></pre>
@@ -198,7 +269,7 @@ DynamicUser=yes</code></pre>
 <tr><td>カナリア VM 2</td><td>固定 IP 192.168.1.11。Node.js プロセス × 1 (<code>pool-canary</code>、ポート 8080)</td></tr>
 <tr><td>WAF ポリシー</td><td>Prevention、DRS 2.1。カスタムルール <code>BlockDemoIp</code> (送信元 IP)、<code>BlockDemoUA</code> (User-Agent に <code>agw-block-demo</code> を含む要求を遮断)</td></tr>
 <tr><td>NAT Gateway</td><td>backend サブネットに関連付け (StandardV2、専用の StandardV2 public IP)。バックエンド VM の外向き通信 (apt など) に使う。バックエンド VM には public IP を付けず、サブネットはプライベート (既定の外向き IP なし)</td></tr>
-<tr><td>Application Gateway (WAF_v2)</td><td>リスナー <code>listener-http</code> (:80) と <code>listener-canary</code> (:8080)。ルール <code>rule1</code> (Advanced、:80)、<code>rule-canary</code> (Advanced、:8080、マップ <code>canaryMap</code>)</td></tr>
+<tr><td>Application Gateway (WAF_v2)</td><td>リスナー <code>listener-http</code> (:80)、<code>listener-canary</code> (:8080)、<code>listener-priority</code> (:8090)。ルール <code>rule1</code> (Advanced、:80)、<code>rule-canary</code> (Advanced、:8080、マップ <code>canaryMap</code>)、<code>rule-priority</code> (Advanced、:8090、マップ <code>priorityMap</code>)</td></tr>
 <tr><td>プローブ・プール・バックエンド設定</td><td>プローブ <code>healthz</code>。プール 6 つ (<code>pool-web</code>、<code>pool-partner</code>、<code>pool-tenant</code>、<code>pool-api-v2</code>、<code>pool-canary</code>、<code>pool-mobile</code>) と、それぞれのバックエンド設定 <code>hs-&lt;pool&gt;</code></td></tr>
 <tr><td>リダイレクト</td><td><code>redirect-campaign</code>: 302、<code>https://www.contoso.com/campaign</code> へ。クエリ文字列を引き継ぐ</td></tr>
 <tr><td>条件セット</td><td><code>cs-partner</code>、<code>cs-tenant</code>、<code>cs-apiv2</code>、<code>cs-campaign</code>、<code>cs-mobile</code> の 5 つ</td></tr>
@@ -224,6 +295,21 @@ DynamicUser=yes</code></pre>
              既存バージョン                新バージョン</code></pre>
 <figcaption>図 3. ポート 8080 のカナリアの流れ。</figcaption>
 </figure>
+<figure class="diagram"><pre><code>client --:8090--&gt; listener-priority --&gt; rule-priority (Advanced)
+                                    |
+                                    v   マップ priorityMap
+                          rule: priority-split  (パス ^/ = 全リクエスト)
+                                    |   PriorityAware (最小正常割合 60%)
+                      +-------------+-------------+
+                      |                           |
+                priority 1 (Primary)        priority 2 (Standby)
+                      |                           |
+                      v                           v
+             pool-primary (VM2 :8080)    pool-standby (VM1 :8080)
+             = VM 2 の pool-canary        = VM 1 の pool-web
+             正常ならここへ              Primary が条件を満たさないとき</code></pre>
+<figcaption>図 4. ポート 8090 の優先度ベースの流れ (VM 2 が止まると Standby に切り替わる)。</figcaption>
+</figure>
 
 <p class="note">Advanced routing rule は Basic リスナーにのみ関連付けできます (マルチサイト リスナーは非対応)。<code>rule1</code> と <code>rule-canary</code> は最初から Advanced で作られるため、後から切り替える手順はありません。</p>
 
@@ -242,6 +328,20 @@ API v2             HTTP 200  pool-api-v2
 モバイル           HTTP 200  pool-mobile
 WAF ブロック (UA)  HTTP 403</code></pre>
 <p class="note">上は <code>test.sh</code> の出力の例です。カナリアの行は、8080 番の振り分け (90:10) の 1 回分なので、pool-web と pool-canary のどちらにもなります。</p>
+<h4>優先度ベース (ポート 8090) の確認</h4>
+<p>8090 番は、VM 2 の <code>pool-canary</code> (Primary) を優先し、止まると VM 1 の <code>pool-web</code> (Standby) に切り替わります。<code>canary-check.sh</code> は応答ヘッダーの <code>x-backend-pool</code> (VM 上のプロセス名) を数えるため、Primary は <code>pool-canary</code>、Standby は <code>pool-web</code> と表示されます。</p>
+<pre><code>FRONTEND=&lt;フロントエンド IP&gt;:8090 ./canary-check.sh /app/home 100   # 正常時
+# VM 2 の pool-canary を停止し、2〜3 分待つ
+az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"
+FRONTEND=&lt;フロントエンド IP&gt;:8090 ./canary-check.sh /app/home 100   # 停止後
+# VM 2 を起動し、2〜3 分待つ
+az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-canary"
+FRONTEND=&lt;フロントエンド IP&gt;:8090 ./canary-check.sh /app/home 100   # 復旧後</code></pre>
+<p>期待結果 (例):</p>
+<pre><code>正常時   100 件すべて pool-canary (Primary = VM 2)
+停止後   100 件すべて pool-web    (Standby = VM 1)
+復旧後   100 件すべて pool-canary (Primary = VM 2)</code></pre>
+<p class="note">停止後の切り替えには約 2〜3 分かかります。直後に確認すると、まだ pool-canary が返ることがあります。</p>
 <h3>4.3 ポータルでヘッダーベースのルールを手動で作る (チュートリアルの手順)</h3>
 <p>Microsoft Learn の <a href="https://learn.microsoft.com/ja-jp/azure/application-gateway/configure-advanced-routing-rule">チュートリアル: Azure ポータルで Application Gateway の Advanced Rules を使ってヘッダーベースのルーティングを設定する</a> の手順です。このデモは <code>deploy.sh</code> が作るため、通常は不要です。ポータルの操作を確かめるときに使います。</p>
 <p class="note">ポータルの「アプリケーション ゲートウェイの作成」では Advanced ルールを設定できません。基本ルールで作成した後に、基本ルールを Advanced に変更します。</p>
@@ -336,14 +436,17 @@ if (req.method === &quot;OPTIONS&quot; &amp;&amp; req.headers[&quot;access-contr
 </tbody></table>
 </section>
 
-<section id="notes"><h2>8. 制約・注意事項と後片付け</h2><ul>
+<section id="notes"><h2>8. 制約・注意事項</h2><ul>
 <li>Advanced rules はプレビュー機能です。マルチサイト リスナーと L4 (TCP/TLS) プロキシでは使えません</li>
 <li>重み付け (ポート 8080 のカナリア、pool-web 90% / pool-canary 10%) は、高度なルールで <code>WeightedDistribution</code> を指定して作ります</li>
 <li>上限: マップ 100 / ゲートウェイ、条件セット 10,000 / ゲートウェイ、ルール 100 / マップ、条件 5 / 条件セット、値 5 / 条件、値・正規表現 128 文字</li>
-<li>ARM API (2026-11-20 確認): 高度なルールでも複数プールを指定できる (<code>backendAddressPoolsAndSettings</code> と <code>poolSelectionAlgorithm</code>)。<code>loadDistributionPolicy</code> だけを指定すると <code>ApplicationGatewayAdvancedRoutingRuleMustReference</code> で拒否される。公開の REST API 仕様には複数プールの項目がない</li>
 <li>WAF ポリシーはゲートウェイまたはリスナー単位で関連付け。ルール単位の WAF ポリシーは非対応</li>
 <li>シミュレーターの判定はブラウザーの正規表現エンジンで近似しており、RE2 と完全には一致しません</li>
 <li><code>deploy.sh</code> はまだ実環境で実行していません。初回は手順ごとに結果を確認しながら実行してください</li></ul>
+</section>
+
+<section id="cleanup"><h2>9. 後片付け</h2>
+<p>デモ後は、リソース グループごと削除してください。ゲートウェイ (WAF_v2) とバックエンド VM は稼働時間で課金されます。リソース グループを削除すると、作成したリソースはすべて消えます。</p>
 <pre><code>az group delete -n rg-agw-advrouting-demo --yes --no-wait</code></pre>
 </section>
 </main></body></html>
