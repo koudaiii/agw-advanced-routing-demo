@@ -1098,7 +1098,7 @@ function renderDistResult() {
 // Test requests (live): send N requests to the gateway port and count the pool that answered (x-backend-pool).
 async function runTestRequests() {
   const out = $("testResult"), state_ = $("testState");
-  if (!isLive()) { state_.textContent = "ゲートウェイ URL を入力すると実機に送れます"; out.replaceChildren(); return; }
+  if (!isLive()) { state_.textContent = "送信できません"; out.replaceChildren(el("p", { class: "err", text: "ゲートウェイ URL が空です。上の「ゲートウェイ URL」に入力すると、実機に送れます。" })); return; }
   const port = Number(state.request.port) || 80;
   const n = Number($("testN").value) || 100;
   const u = new URL(normBase(state.backendUrl));
@@ -1108,6 +1108,7 @@ async function runTestRequests() {
   let errors = 0;
   const btn = $("testBtn");
   btn.disabled = true;
+  out.replaceChildren(el("p", { class: "note", text: `${url} に ${n} 件送信中…` }));
   try {
     for (let done = 0; done < n; ) {
       const batch = Math.min(10, n - done);
