@@ -289,6 +289,7 @@ if (req.method === &quot;OPTIONS&quot; &amp;&amp; req.headers[&quot;access-contr
 <li>Advanced rules はプレビュー機能です。マルチサイト リスナーと L4 (TCP/TLS) プロキシでは使えません</li>
 <li>重み付け (ポート 8080 のカナリア、pool-web 90% / pool-canary 10%) には、サブスクリプションで <code>Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy</code> の登録が必要です。登録していない状態で <code>WEIGHTED_CANARY=true ./deploy.sh</code> を実行すると、<code>SubscriptionNotRegisteredForFeature</code> でデプロイが失敗します。既定の <code>WEIGHTED_CANARY=false</code> では、登録は不要です</li>
 <li>上限: マップ 100 / ゲートウェイ、条件セット 10,000 / ゲートウェイ、ルール 100 / マップ、条件 5 / 条件セット、値 5 / 条件、値・正規表現 128 文字</li>
+<li>ARM API (2026-11-20 確認): 高度なルールの振り分け先は 1 プールのみ。2026-03-01 / 2026-05-01 の仕様と、2026-07-01 を含む ARM 検証で確認。複数プールの重み付けは Basic ルールで行う</li>
 <li>WAF ポリシーはゲートウェイまたはリスナー単位で関連付け。ルール単位の WAF ポリシーは非対応</li>
 <li>シミュレーターの判定はブラウザーの正規表現エンジンで近似しており、RE2 と完全には一致しません</li>
 <li><code>deploy.sh</code> はまだ実環境で実行していません。初回は手順ごとに結果を確認しながら実行してください</li></ul>

@@ -23,7 +23,7 @@ az account show --query "{sub:name, id:id, user:user.name}" -o table   # 対象�
 az provider show -n Microsoft.Network --query registrationState -o tsv   # Registered であること
 ```
 
-- Azure CLI 2.87.0 には `az network application-gateway advanced-routing-*` が **ありません**。そのためデプロイは CLI ではなく Bicep (`deploy/main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。`az bicep version` で Bicep が使えることを確認します。
+- Azure CLI 2.87.0 には `az network application-gateway advanced-routing-*` が **ありません**。そのためデプロイは CLI ではなく Bicep (`deploy/main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。`az bicep version` で Bicep が使えることを確認します。API バージョンは 2026-03-01 のままです。ARM 検証では 2026-05-01 と 2026-07-01 も成功しましたが、高度なルールの新しい機能は確認できませんでした。
 - SSH 鍵 (`~/.ssh/id_ed25519.pub`) がなければ `deploy.sh` が自動生成します。
 - 必要なパラメーターはありません。カナリアは送信元 IP や URI では絞らず、ポート 8080 の全件を振り分けます。既定 (`WEIGHTED_CANARY=false`) では全件を pool-canary に送ります。`WEIGHTED_CANARY=true` にすると pool-web 90% / pool-canary 10% の重み付けになります。
 - 重み付けは Advanced load balancing の機能です。`WEIGHTED_CANARY=true` にする場合だけ、サブスクリプションで `Microsoft.Network/AllowApplicationGatewayLoadDistributionPolicy` が登録されている必要があります (未登録だと deploy が `SubscriptionNotRegisteredForFeature` で失敗します)。既定の `false` では不要です。
@@ -124,7 +124,7 @@ az group delete -n rg-agw-advrouting-demo --yes --no-wait
 ## 既知の問題
 
 - **本文のない POST が 403 になる**: `/api/orders` への本文のない POST は、DRS 2.1 のマネージドルールに遮断されます。本文 (JSON) 付きの POST や GET / PUT は通ります。ワークショップのテストとシミュレーターは GET で送ります。原因のルール ID は未特定です。
-- **高度なルールは 1 プールのみ (検証結果)**: 公式ドキュメント (Advanced load balancing) では、高度なルールも複数プールに対応すると書かれています。しかし今回の ARM API (2026-03-01) では、高度なルールの振り分け先は `backendAddressPool` の 1 つだけで、`loadDistributionPolicy` (重み付け) は拒否されました (`ApplicationGatewayAdvancedRoutingRuleMustReference`)。そのためカナリアの重み付けは、ポート 8080 の Basic ルールで行っています。
+- **高度なルールは 1 プールのみ (ARM API の事実、2026-11-20 確認)**: 公開の REST API 仕様 (Azure/azure-rest-api-specs) では、2026-03-01 と 2026-05-01 とも、高度なルールの振り分け先は `backendAddressPool` の 1 つだけで、`loadDistributionPolicy` のプロパティはありません。`az deployment group validate` では、2026-03-01 / 2026-05-01 / 2026-07-01 のすべてで、`backendAddressPool` を省いて `loadDistributionPolicy` を指定すると `ApplicationGatewayAdvancedRoutingRuleMustReference` で失敗しました。同じ検証で、現在の template は 3 バージョンすべてで成功しました。公式の Advanced load balancing のページは「高度なルールも複数プールに対応」と書いていますが、この API の挙動とは一致しません。2026-07-01 の仕様は公開されていないため、仕様の面では確認できていません。そのためカナリアの重み付けは、ポート 8080 の Basic ルール (`rule-canary`) で行っています。
 - **Log Analytics の列名**: `AGWFirewallLogs` の列は `action_s` ではなく、まずテーブルの実際の列を確認してから使ってください。
 
 ## 講義のポイント (ドキュメントとの対応)
