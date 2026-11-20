@@ -298,6 +298,7 @@ const PRESETS = [
   ["キャンペーン", () => req("GET", "/landing", "campaign=summer&utm=mail", "192.0.2.41", [["User-Agent", DESKTOP_UA]])],
   ["モバイル", () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X)"]]), uaSensitive: true })],
   ["カナリア (ポート 8080)", () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]]), port: 8080 })],
+  ["優先度 (ポート 8090)", () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]]), port: 8090 })],
   ["WAF ブロック", () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", "agw-block-demo"]]), uaSensitive: true })],
 ];
 
@@ -410,6 +411,7 @@ function evaluate(cfg, r) {
     if (hitUA) return { path, results: order.map(({ i }) => ({ i, status: "skip", conds: [] })), d: { kind: "waf", cidr: `User-Agent: ${hitUA}` } };
   }
   if (r.port === 8080) return { path, results: order.map(({ i }) => ({ i, status: "skip", conds: [] })), d: { kind: "weighted", port: 8080 } };
+  if (r.port === 8090) return { path, results: order.map(({ i }) => ({ i, status: "skip", conds: [] })), d: { kind: "priority", port: 8090 } };
   let d = null;
   const results = order.map(({ r: rule, i }) => {
     if (d) return { i, status: "skip", conds: [] };
@@ -424,6 +426,7 @@ const pool = (id) => POOLS.find((p) => p.id === id) || { id, label: id, port: 0,
 function describe(d, cfg) {
   if (d.kind === "waf") return `WAF がブロック (${d.cidr}) — ルーティング評価なし`;
   if (d.kind === "weighted") return `ポート ${d.port} は重み付け (既定 pool-web 90% / pool-canary 10%)。1 件の経路は確率で決まります`;
+  if (d.kind === "priority") return `ポート ${d.port} は優先度ベース。Primary (VM 2) が最小正常割合 60% 以上なら Primary、そうでなければ Standby (VM 1) に送ります`;
   if (d.kind === "pool") return `「${cfg.rules[d.i].name}」に一致 → ${pool(d.pool).label} (${d.pool})`;
   if (d.kind === "redirect") return `「${cfg.rules[d.i].name}」に一致 → ${d.url} へリダイレクト`;
   return `一致ルールなし → 既定プール ${pool(d.pool).label} (${d.pool})`;
@@ -459,7 +462,7 @@ const state = {
 function routeColorOf(d) {
   if (!d) return "var(--primary)";
   if (d.kind === "waf") return "#a4493a";
-  if (d.kind === "weighted") return POOLS[0].color;
+  if (d.kind === "weighted" || d.kind === "priority") return POOLS[0].color;
   if (d.kind === "pool" || d.kind === "default") { const p = POOLS.find((x) => x.id === d.pool); return p ? p.color : "var(--primary)"; }
   return "var(--primary)";
 }
@@ -598,7 +601,7 @@ async function send() {
   state.history = state.history.slice(0, 8);
   renderHistory();
 }
-function tones(d) { return d.kind === "waf" ? ["b-err", "WAF"] : d.kind === "weighted" ? ["b-info", "90:10"] : d.kind === "redirect" ? ["b-info", "302"] : d.kind === "default" ? ["b-warn", "既定"] : ["b-ok", "一致"]; }
+function tones(d) { return d.kind === "waf" ? ["b-err", "WAF"] : d.kind === "weighted" ? ["b-info", "90:10"] : d.kind === "priority" ? ["b-info", "優先度"] : d.kind === "redirect" ? ["b-info", "302"] : d.kind === "default" ? ["b-warn", "既定"] : ["b-ok", "一致"]; }
 function liveSummary(l) {
   if (!l) return "";
   if (l.kind === "pending") return "送信中";
@@ -609,7 +612,7 @@ function liveSummary(l) {
 }
 function verdict() {
   const l = state.live, d = state.ev && state.ev.d;
-  if (!l || !d || l.kind === "pending" || l.kind === "opaque" || d.kind === "weighted") return null;
+  if (!l || !d || l.kind === "pending" || l.kind === "opaque" || d.kind === "weighted" || d.kind === "priority") return null;
   let same;
   if (d.kind === "waf") same = l.kind === "error" || (l.kind === "response" && l.status === 403);
   else if (d.kind === "redirect") same = l.kind === "redirect" || (l.kind === "response" && l.status >= 300 && l.status < 400);
@@ -628,14 +631,14 @@ function renderDiagram() {
   svg.append(s("title", { id: "dgT" }, "要求のルーティング経路図"), s("desc", { id: "dgD" }, summary));
   const on = !!ev, blocked = d && d.kind === "waf";
   const active = d && (d.kind === "pool" || d.kind === "default") ? d.pool : null;
-  const weighted = !!(d && d.kind === "weighted");
+  const weighted = !!(d && (d.kind === "weighted" || d.kind === "priority"));
   const hitSet = weighted ? new Set(["pool-web", "pool-canary"]) : new Set(active ? [active] : []);
   const st = (x) => (x ? "var(--primary)" : "var(--line)");
   // 経路の左側（クライアント → リスナー → WAF → マップ）は、命中した最初の行き先のプールの色で描く
   const routeColor = routeColorOf(d);
   const stages = [
     { x: 8, l: "クライアント", sub: isLive() ? "このブラウザー" : "", on },
-    { x: 148, l: "Basic リスナー", sub: weighted ? ":8080 (カナリア)" : ":80", on },
+    { x: 148, l: "Basic リスナー", sub: d && d.kind === "priority" ? ":8090 (優先度)" : weighted ? ":8080 (カナリア)" : ":80", on },
     { x: 288, l: "WAF", sub: blocked ? "403 で遮断" : cfg.waf.enabled ? "ポリシー有効" : "無効", on: on && !blocked, bad: blocked },
     weighted
       ? { x: 428, l: "重み付けルール", sub: "web 90 : canary 10", on: on && !blocked }
@@ -681,6 +684,7 @@ function renderSim() {
   const d = state.ev.d, r = state.sent;
   if (d.kind === "waf") { out.append(statusBlock(403, "Forbidden", "WAF がブロックしたため、バックエンドには届きません。")); return; }
   if (d.kind === "weighted") { out.append(statusBlock("—", "", "ポート 8080 の重み付けのため、1 件では pool-web か pool-canary のどちらかに確率で決まります。100 件の割合は canary-check.sh で確認します。")); return; }
+  if (d.kind === "priority") { out.append(statusBlock("—", "", "ポート 8090 は優先度ベース。Primary (VM 2) が正常なら Primary、停止していれば Standby (VM 1) に届きます。テスト要求で件数を送って確認します。")); return; }
   if (d.kind === "redirect") { const q = r.query.replace(/^\?/, ""); out.append(statusBlock(302, "Found", `Location: ${q ? `${d.url}?${q}` : d.url}`)); return; }
   const p = pool(d.pool);
   const hs = r.headers.filter((h) => h.name.trim()).map((h) => [h.name.trim().toLowerCase(), h.value]);
