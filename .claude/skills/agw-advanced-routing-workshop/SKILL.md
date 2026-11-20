@@ -124,7 +124,7 @@ az group delete -n rg-agw-advrouting-demo --yes --no-wait
 ## 既知の問題
 
 - **本文のない POST が 403 になる**: `/api/orders` への本文のない POST は、DRS 2.1 のマネージドルールに遮断されます。本文 (JSON) 付きの POST や GET / PUT は通ります。ワークショップのテストとシミュレーターは GET で送ります。原因のルール ID は未特定です。
-- **高度なルールは 1 プールのみ (ARM API の事実、2026-11-20 確認)**: 公開の REST API 仕様 (Azure/azure-rest-api-specs) では、2026-03-01 と 2026-05-01 とも、高度なルールの振り分け先は `backendAddressPool` の 1 つだけで、`loadDistributionPolicy` のプロパティはありません。`az deployment group validate` では、2026-03-01 / 2026-05-01 / 2026-07-01 のすべてで、`backendAddressPool` を省いて `loadDistributionPolicy` を指定すると `ApplicationGatewayAdvancedRoutingRuleMustReference` で失敗しました。同じ検証で、現在の template は 3 バージョンすべてで成功しました。公式の Advanced load balancing のページは「高度なルールも複数プールに対応」と書いていますが、この API の挙動とは一致しません。2026-07-01 の仕様は公開されていないため、仕様の面では確認できていません。そのためカナリアの重み付けは、ポート 8080 の Basic ルール (`rule-canary`) で行っています。
+- **高度なルールは 1 プールのみ (ARM API の事実、2026-11-20 確認)**: 公開の REST API 仕様 (Azure/azure-rest-api-specs) では、2026-03-01 と 2026-05-01 とも、高度なルールの振り分け先は `backendAddressPool` の 1 つだけで、`loadDistributionPolicy` のプロパティはありません。`az deployment group validate` では、2026-03-01 / 2026-05-01 / 2026-07-01 のすべてで、`backendAddressPool` を省いて `loadDistributionPolicy` を指定すると `ApplicationGatewayAdvancedRoutingRuleMustReference` で失敗しました。同じ検証で、現在の template は 3 バージョンすべてで成功しました。Bicep 0.49.2 (`az bicep upgrade` 後) は `applicationGateways@2026-03-01` の型情報を持ち、`loadDistributionPolicy` を BCP037 (高度なルールでは不許可) として指摘します。公式の Advanced load balancing のページは「高度なルールも複数プールに対応」と書いていますが、この API の挙動とは一致しません。2026-07-01 の仕様は公開されていないため、仕様の面では確認できていません。そのためカナリアの重み付けは、ポート 8080 の Basic ルール (`rule-canary`) で行っています。
 - **Log Analytics の列名**: `AGWFirewallLogs` の列は `action_s` ではなく、まずテーブルの実際の列を確認してから使ってください。
 
 ## 講義のポイント (ドキュメントとの対応)

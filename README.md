@@ -55,7 +55,7 @@ FRONTEND=<表示されたフロントエンド IP>:8080 ./canary-check.sh /app/h
   WEIGHTED_CANARY=false ./deploy.sh   # 8080 番の全件を pool-canary に戻す
   ```
 - デプロイは Bicep (`main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。Azure CLI 2.87.0 には advanced-routing 用のコマンド (`az network application-gateway advanced-routing-map` など) がないため、CLI では作成できません。
-- ARM API の確認 (2026-11-20): 現在の template は 2026-03-01 / 2026-05-01 / 2026-07-01 のすべてで検証に成功します。高度なルールの振り分け先は `backendAddressPool` の 1 つだけです。`loadDistributionPolicy` を指定すると、3 バージョンすべてで `ApplicationGatewayAdvancedRoutingRuleMustReference` になります。
+- ARM API の確認 (2026-11-20): 現在の template は 2026-03-01 / 2026-05-01 / 2026-07-01 のすべてで検証に成功します。高度なルールの振り分け先は `backendAddressPool` の 1 つだけです。`loadDistributionPolicy` を指定すると、3 バージョンすべてで `ApplicationGatewayAdvancedRoutingRuleMustReference` になります。Bicep 0.49.2 でも BCP037 で指摘されます (型情報あり)。
 - 完了まで 15〜20 分程度かかります (Application Gateway の作成と更新に時間がかかるため)。
 ブラウザーで `http://<フロントエンド IP>/app/home` を開くと、応答したプールのページが表示されます。ヘッダーを付ける場合は curl か、ブラウザー拡張 (ModHeader など) を使います。
 
