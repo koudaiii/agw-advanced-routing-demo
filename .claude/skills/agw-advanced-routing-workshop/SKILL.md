@@ -1,6 +1,6 @@
 ---
 name: agw-advanced-routing-workshop
-description: Run the Azure Application Gateway Advanced Routing workshop in this repo end to end — prerequisites, Bicep deploy, scenario verification with test.sh, live demos (header/path/IP/method/query/UA rules, WAF-before-routing, redirect, weighted canary, priority-based failover, A/B test, multi-pool distribution simulation), expected results, known issues, and cleanup. Use when the user asks to run, present, rehearse, or troubleshoot this Application Gateway advanced rules demo or workshop.
+description: Run the Azure Application Gateway Advanced Routing workshop in this repo end to end — prerequisites, Bicep deploy, scenario verification with test.sh, live demos (header/path/IP/method/query/UA rules, WAF-before-routing, redirect, weighted canary, priority-based failover, feature flag, multi-pool distribution simulation), expected results, known issues, and cleanup. Use when the user asks to run, present, rehearse, or troubleshoot this Application Gateway advanced rules demo or workshop.
 ---
 
 # Application Gateway Advanced Routing workshop
@@ -13,7 +13,7 @@ This repository demonstrates [Advanced rules (preview)](https://learn.microsoft.
 2. Deploy (Bicep, about 15–20 minutes)
 3. Verify (`test.sh`)
 4. Live demo (rules, WAF, redirect)
-5. Canary, priority-based selection, and A/B test (ports 8080, 8090, 8100)
+5. Canary, priority-based selection, and feature flag (ports 8080, 8090, 8100)
 6. Load distribution simulation (simulator only)
 7. Clean up
 
@@ -54,7 +54,7 @@ On success the last lines include `Done. Frontend: http://<IP>/`. `deploy.sh` do
 | 80 | `listener-http` | `rule1` | `advancedRoutingMap1` | Five rules (partner 10, tenant 20, api-v2 30, campaign 40, mobile 60), default `pool-web` |
 | 8080 | `listener-canary` | `rule-canary` | `canaryMap` | Rule `canary-split` (every path): `pool-web` 90 / `pool-canary` 10, `WeightedDistribution`. Default `pool-canary` |
 | 8090 | `listener-priority` | `rule-priority` | `priorityMap` | Rule `priority-split` (every path): `pool-primary` (priority 1) then `pool-standby` (priority 2), `PriorityAware`, minimum healthy 60%. Default `pool-standby` |
-| 8100 | `listener-ab` | `rule-ab` | `abMap` | Rule `ab-variant-b` (`X-Variant: B`) → `pool-B`. Default `pool-A` |
+| 8100 | `listener-flag` | `rule-flag` | `flagMap` | Rule `flag-on` (`X-Feature: new`) → `pool-flag-on`. Default `pool-flag-off` |
 
 The backends can take a few minutes to become healthy. Check:
 
@@ -79,12 +79,12 @@ cd deploy && FRONTEND=<IP printed by deploy.sh> ./test.sh
 | Encoded path | 200 pool-api-v2 | `/api%2Forders` is decoded, then matched |
 | Canary (:8080 90:10) | 200 pool-web or pool-canary | All of port 8080 is split 90% / 10%. One request lands on one of them |
 | Campaign | 302 (`https://www.contoso.com/campaign?campaign=...`) | The campaign condition (priority 40) matches |
-| A/B variant A | 200 pool-web (`pool-A`) | Port 8100, no variant B header. Default of `abMap` |
-| A/B variant B | 200 pool-canary (`pool-B`) | Port 8100 with `X-Variant: B`. Rule `ab-variant-b` (priority 10) |
+| Feature flag off | 200 pool-web (`pool-flag-off`) | Port 8100, no `X-Feature: new` header. Default of `flagMap` |
+| Feature flag on | 200 pool-canary (`pool-flag-on`) | Port 8100 with `X-Feature: new`. Rule `flag-on` (priority 10) |
 | Mobile | 200 pool-mobile | iPhone User-Agent |
 | WAF block (UA) | 403 | `curl -A agw-block-demo`. WAF blocks it before routing (`BlockDemoUA`) |
 
-`x-backend-pool` is the name of the process that answered. The gateway pools `pool-primary` and `pool-B` point at the `pool-canary` process on VM 2; `pool-standby` and `pool-A` point at the `pool-web` process on VM 1.
+`x-backend-pool` is the name of the process that answered. The gateway pools `pool-primary` and `pool-flag-on` point at the `pool-canary` process on VM 2; `pool-standby` and `pool-flag-off` point at the `pool-web` process on VM 1.
 
 ## 4. Live demo
 
@@ -112,7 +112,7 @@ curl -i http://<FRONTEND>/app/home                        # → 200 (for compari
 
 The simulator predicts the same result with the "WAF block" preset. `BlockDemoIp` (198.51.100.0/24, by source IP) is also in the template; source IPs differ per environment, so the demo uses the User-Agent rule.
 
-## 5. Canary, priority-based selection, and A/B test
+## 5. Canary, priority-based selection, and feature flag
 
 ### Canary (port 8080)
 
@@ -158,27 +158,26 @@ az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --c
 ```
 
 - Without stopping `pool-canary` on VM 2, every request keeps going to the primary and the failover cannot be seen.
-- Stopping `pool-canary` also affects port 8080 (the canary's 10%) and variant B on port 8100. Restore it after the test.
+- Stopping `pool-canary` also affects port 8080 (the canary's 10%) and the flag-on pool on port 8100. Restore it after the test.
 - The simulator's "Test requests" button sends the chosen number of requests to the port of the selected request. Select the "Priority (port 8090)" preset first to count Primary / Standby. While sending, the button becomes "Cancel". Results are shown under "Real response", 50 at a time. A request with no response within 10 seconds is counted as failed.
 
-### A/B test (port 8100)
+### Feature flag (port 8100)
 
-The rule `ab-variant-b` (priority 10) sends requests with the header `X-Variant: B` to `pool-B` (VM 2 port 8080). Everything else goes to the map default `pool-A` (VM 1 port 8080).
+The client turns the flag on with a header. The rule `flag-on` (priority 10) sends requests with the header `X-Feature: new` to `pool-flag-on` (VM 2 port 8080). Everything else goes to the map default `pool-flag-off` (VM 1 port 8080).
 
 | Request | Expected |
 |---|---|
-| `:8100/` (no header) | pool-web (`pool-A`, variant A, default) |
-| `:8100/` + `X-Variant: A` | pool-web (`pool-A`, variant A, default) |
-| `:8100/` + `X-Variant: B` | pool-canary (`pool-B`, variant B) |
-| `:80/ab` + `X-Variant: B` | pool-web (port 80 has no A/B rule) |
+| `:8100/` (no header) | pool-web (`pool-flag-off`, flag off, default) |
+| `:8100/` + `X-Feature: other` | pool-web (`pool-flag-off`, flag off, default) |
+| `:8100/` + `X-Feature: new` | pool-canary (`pool-flag-on`, flag on) |
+| `:80/` + `X-Feature: new` | pool-web (port 80 has no feature flag rule) |
 
 ```bash
-curl -s -D - -o /dev/null -H "X-Variant: B" http://<FRONTEND-IP>:8100/ | grep -i x-backend-pool
+curl -s -D - -o /dev/null -H "X-Feature: new" http://<FRONTEND-IP>:8100/ | grep -i x-backend-pool
 ```
 
-- The simulator's "A/B (variant A)" and "A/B (variant B)" presets predict the same.
-- The client picks its own variant, so this is a demo, not a production A/B test.
-- A random 50:50 split (`WeightedDistribution` on port 8100) is not built. The same feature could do it, but one user would not stay in one variant. Issue #27 tracks this.
+- The simulator's "Feature flag (off)" and "Feature flag (on)" presets predict the same.
+- This is not an A/B test: the client chooses, and there is no random split. A statistical A/B test (random split with sticky assignment) is tracked in issue #27.
 
 ## 6. Load distribution simulation (simulator)
 
@@ -230,7 +229,7 @@ The gateway (WAF_v2) and the VMs are billed while they run. Always delete them a
 | Regular expressions (RE2) and path normalization | advanced-rules: Path, pattern matching | "Encoded path" |
 | Weighted distribution (canary 90:10) | advanced-load-balancing: Weighted distribution | Port 8080, `canaryMap`, `canary-check.sh` |
 | Priority-based selection and minimum healthy percentage | advanced-load-balancing: Priority-based selection | Port 8090, `priorityMap`, stop and start VM 2 |
-| Header-based A/B test | advanced-rules: Use cases | Port 8100, `abMap` |
+| Header-based feature flag | advanced-rules: Use cases | Port 8100, `flagMap` |
 | Server selection (RR, WRR, Least Connections) | advanced-load-balancing: Server selection | "Load distribution" section of the simulator |
 
 ## Design note: outbound traffic (NAT gateway)

@@ -280,8 +280,8 @@ const POOLS = [
   { id: "pool-api-v2", label: "Orders API v2", port: 8083, color: "#1d4ed8" },
   { id: "pool-canary", label: L("カナリア (新バージョン)", "Canary (new version)"), port: 8080, color: "#a16207" },
   { id: "pool-mobile", label: L("モバイル", "Mobile"), port: 8085, color: "#7e22ce" },
-  { id: "pool-A", label: L("A/B 変種 A (VM 1)", "A/B variant A (VM 1)"), port: 8080, color: "#0369a1" },
-  { id: "pool-B", label: L("A/B 変種 B (VM 2)", "A/B variant B (VM 2)"), port: 8080, color: "#be185d" },
+  { id: "pool-flag-off", label: L("機能フラグ オフ (VM 1)", "Feature flag off (VM 1)"), port: 8080, color: "#0369a1" },
+  { id: "pool-flag-on", label: L("機能フラグ オン (VM 2)", "Feature flag on (VM 2)"), port: 8080, color: "#be185d" },
 ];
 const TYPES = ["Header", "QueryString", "ClientIP", "Method", "Path"];
 const METHODS = ["GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "PATCH"];
@@ -299,7 +299,7 @@ function sampleConfig() {
       { name: L("マルチテナント", "Multi-tenant"), priority: 20, conditions: [{ type: "Header", name: "X-Tenant-Id", pattern: "^customer-[0-9]+$" }, { type: "Path", pattern: "^/app(/.*)?$" }], target: { pool: "pool-tenant" } },
       { name: L("API バージョニング", "API versioning"), priority: 30, conditions: [{ type: "Header", name: "X-Api-Version", values: ["2", "2.0"] }, { type: "Path", pattern: "^/api/orders(/.*)?$" }], target: { pool: "pool-api-v2" } },
       { name: L("キャンペーン LP", "Campaign landing page"), priority: 40, conditions: [{ type: "QueryString", name: "campaign", values: ["spring", "summer"] }], target: { redirect: "https://www.contoso.com/campaign" } },
-      { map: 8100, name: L("A/B テスト (変種 B)", "A/B test (variant B)"), priority: 10, conditions: [{ type: "Header", name: "X-Variant", values: ["B"] }], target: { pool: "pool-B" } },
+      { map: 8100, name: L("機能フラグ (オン)", "Feature flag (on)"), priority: 10, conditions: [{ type: "Header", name: "X-Feature", values: ["new"] }], target: { pool: "pool-flag-on" } },
       { name: L("モバイル振り分け", "Mobile routing"), priority: 60, conditions: [{ type: "Header", name: "User-Agent", pattern: "(iPhone|Android)" }], target: { pool: "pool-mobile" } },
     ],
   };
@@ -312,8 +312,8 @@ const PRESETS = [
   ["API v2", () => req("GET", "/api/orders/1001", "", "192.0.2.41", [["X-Api-Version", "2.0"]])],
   [L("エンコード済みパス", "Encoded path"), () => req("GET", "/api%2Forders", "", "192.0.2.41", [["X-Api-Version", "2"]])],
   [L("キャンペーン", "Campaign"), () => req("GET", "/landing", "campaign=summer&utm=mail", "192.0.2.41", [["User-Agent", DESKTOP_UA]])],
-  [L("A/B (変種 A)", "A/B (variant A)"), () => ({ ...req("GET", "/", "", "192.0.2.41", []), port: 8100 })],
-  [L("A/B (変種 B)", "A/B (variant B)"), () => ({ ...req("GET", "/", "", "192.0.2.41", [["X-Variant", "B"]]), port: 8100 })],
+  [L("機能フラグ (オフ)", "Feature flag (off)"), () => ({ ...req("GET", "/", "", "192.0.2.41", []), port: 8100 })],
+  [L("機能フラグ (オン)", "Feature flag (on)"), () => ({ ...req("GET", "/", "", "192.0.2.41", [["X-Feature", "new"]]), port: 8100 })],
   [L("モバイル", "Mobile"), () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X)"]]), uaSensitive: true })],
   [L("カナリア (ポート 8080)", "Canary (port 8080)"), () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]]), port: 8080 })],
   [L("優先度 (ポート 8090)", "Priority (port 8090)"), () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]]), port: 8090 })],
@@ -360,7 +360,7 @@ function validateConfig(c) {
   const prios = new Set();
   c.rules.forEach((r, i) => {
     const at = `rules[${i}]${r && r.name ? ` (${r.name})` : ""}`;
-    if (r && r.map !== undefined && r.map !== 80 && r.map !== 8100) e.push(L(`${at}: map は 80 (既定) か 8100 (A/B) です`, `${at}: map must be 80 (default) or 8100 (A/B)`));
+    if (r && r.map !== undefined && r.map !== 80 && r.map !== 8100) e.push(L(`${at}: map は 80 (既定) か 8100 (機能フラグ) です`, `${at}: map must be 80 (default) or 8100 (feature flag)`));
     if (!r || typeof r.name !== "string" || !r.name.trim()) e.push(L(`${at}: name が必要です`, `${at}: name is required`));
     if (!Number.isInteger(r && r.priority) || r.priority < 1) e.push(L(`${at}: priority は 1 以上の整数です`, `${at}: priority must be an integer of 1 or more`));
     else if (prios.has(r.priority)) e.push(L(`${at}: priority ${r.priority} が重複しています`, `${at}: priority ${r.priority} is used twice`)); else prios.add(r.priority);
@@ -420,7 +420,7 @@ function matches(c, v) {
 }
 const sorted = (rules) => rules.map((r, i) => ({ r, i })).sort((a, b) => a.r.priority - b.r.priority);
 const ruleMap = (rule) => (rule.map === 8100 ? 8100 : 80);
-const AB_DEFAULT_POOL = "pool-A";
+const FLAG_DEFAULT_POOL = "pool-flag-off";
 function evaluate(cfg, r) {
   const path = decodePath(r.path);
   const order = sorted(cfg.rules);
@@ -442,16 +442,16 @@ function evaluate(cfg, r) {
     if (ok) d = rule.target.pool ? { kind: "pool", i, pool: rule.target.pool, port: mapPort } : { kind: "redirect", i, url: rule.target.redirect, port: mapPort };
     return { i, status: ok ? "ok" : "no", conds };
   });
-  return { path, results, d: d || { kind: "default", pool: mapPort === 8100 ? AB_DEFAULT_POOL : cfg.defaultPool, port: mapPort } };
+  return { path, results, d: d || { kind: "default", pool: mapPort === 8100 ? FLAG_DEFAULT_POOL : cfg.defaultPool, port: mapPort } };
 }
 const pool = (id) => POOLS.find((p) => p.id === id) || { id, label: id, port: 0, color: PRIORITY_COLOR[id] || "#334155" };
 // Priority-based (8090): Primary = VM 2 (process pool-canary), Standby = VM 1 (process pool-web)
 const PRIORITY_COLOR = { "pool-primary": "#b45309", "pool-standby": "#475569" };
 const PRIORITY_NAME_ON_8090 = { "pool-canary": "pool-primary", "pool-web": "pool-standby" };
-const AB_NAME_ON_8100 = { "pool-web": "pool-A", "pool-canary": "pool-B" };
+const FLAG_NAME_ON_8100 = { "pool-web": "pool-flag-off", "pool-canary": "pool-flag-on" };
 function gatewayPoolName(processPool, port, path) {
   if (Number(port) === 8090 && PRIORITY_NAME_ON_8090[processPool]) return PRIORITY_NAME_ON_8090[processPool];
-  if (Number(port) === 8100 && AB_NAME_ON_8100[processPool]) return AB_NAME_ON_8100[processPool];
+  if (Number(port) === 8100 && FLAG_NAME_ON_8100[processPool]) return FLAG_NAME_ON_8100[processPool];
   return processPool;
 }
 function describe(d, cfg) {
@@ -669,10 +669,10 @@ function renderDiagram() {
     const p = POOLS.find((x) => x.id === id);
     return { id: p.id, t: p.id + (p.id === cfg.defaultPool ? L(" (既定)", " (default)") : ""), sub: `:${p.port} ${p.label}` };
   };
-  // One frame per VM: VM 2 = pool-primary, pool-canary, pool-B; VM 1 = pool-standby and the other pools
+  // One frame per VM: VM 2 = pool-primary, pool-canary, pool-flag-on; VM 1 = pool-standby and the other pools
   const vmGroups = [
-    { label: "VM 2 (192.168.1.11)", rows: ["pool-primary", "pool-canary", "pool-B"].map(rowOf) },
-    { label: "VM 1 (192.168.1.10)", rows: ["pool-standby", "pool-web", "pool-A", "pool-partner", "pool-tenant", "pool-api-v2", "pool-mobile"].map(rowOf) },
+    { label: "VM 2 (192.168.1.11)", rows: ["pool-primary", "pool-canary", "pool-flag-on"].map(rowOf) },
+    { label: "VM 1 (192.168.1.10)", rows: ["pool-standby", "pool-web", "pool-flag-off", "pool-partner", "pool-tenant", "pool-api-v2", "pool-mobile"].map(rowOf) },
   ];
   const rowH = 42, groupGap = 14, frameHead = 26;
   const frames = [];
@@ -716,7 +716,7 @@ function renderDiagram() {
     { port: 80, y: mid - 105, l: "Routing map :80", sub: "advancedRoutingMap1" },
     { port: 8080, y: mid - 35, l: "canaryMap :8080", sub: "canary-split 90 : 10" },
     { port: 8090, y: mid + 35, l: "priorityMap :8090", sub: "Primary 1 / Standby 2" },
-    { port: 8100, y: mid + 105, l: "abMap :8100", sub: L("変種 B → pool-B", "variant B → pool-B") },
+    { port: 8100, y: mid + 105, l: "flagMap :8100", sub: L("オン → pool-flag-on", "on → pool-flag-on") },
   ];
   const activeY = (mapDefs.find((m) => m.port === activePort) || mapDefs[0]).y;
   mapDefs.forEach((m) => {
@@ -739,7 +739,7 @@ function renderDiagram() {
       if (own.some((r) => r.target && r.target.redirect)) ids.push("__redirect");
       return ids;
     }
-    if (port === 8100) return ["pool-B", "pool-A"];
+    if (port === 8100) return ["pool-flag-on", "pool-flag-off"];
     if (port === 8080) return ["pool-web", "pool-canary"];
     return ["pool-primary", "pool-standby"];
   };
@@ -1328,11 +1328,13 @@ state.dist = saved && saved.dist && validateDist(saved.dist).length === 0 ? save
 // Settings saved before the User-Agent rule existed have no blockedUA: give them the sample value.
 if (!Array.isArray(state.config.waf.blockedUA)) state.config.waf.blockedUA = ["agw-block-demo"];
 // Sample rule names are data. A configuration saved in the other language keeps that language's names: show them in the current one.
-const RULE_NAMES = [["パートナー連携", "Partner integration"], ["マルチテナント", "Multi-tenant"], ["API バージョニング", "API versioning"], ["キャンペーン LP", "Campaign landing page"], ["A/B テスト (変種 B)", "A/B test (variant B)"], ["モバイル振り分け", "Mobile routing"]];
+const RULE_NAMES = [["パートナー連携", "Partner integration"], ["マルチテナント", "Multi-tenant"], ["API バージョニング", "API versioning"], ["キャンペーン LP", "Campaign landing page"], ["機能フラグ (オン)", "Feature flag (on)"], ["モバイル振り分け", "Mobile routing"]];
 state.config.rules.forEach((r) => { const pair = RULE_NAMES.find((x) => x.includes(r.name)); if (pair) r.name = L(pair[0], pair[1]); });
-// Settings saved before the A/B test had its own map (8100): replace the old A/B rules with the sample ones.
-if (!state.config.rules.some((r) => r.map === 8100)) {
-  state.config.rules = state.config.rules.filter((r) => !/^A\/B (テスト|test)/.test(r.name)).concat(sampleConfig().rules.filter((r) => r.map === 8100));
+// Settings saved while port 8100 was the "A/B test" (header X-Variant), or from before it had its own map:
+// replace those rules with the feature flag sample rule.
+const isOldAbRule = (r) => /^A\/B (テスト|test)/.test(r.name) || (r.map === 8100 && (r.conditions || []).some((c) => c.name === "X-Variant"));
+if (!state.config.rules.some((r) => r.map === 8100 && !isOldAbRule(r))) {
+  state.config.rules = state.config.rules.filter((r) => !isOldAbRule(r)).concat(sampleConfig().rules.filter((r) => r.map === 8100));
   state.config.rules.sort((a, b) => a.priority - b.priority);
 }
 DIST_PRESETS.forEach(([label, build]) => {

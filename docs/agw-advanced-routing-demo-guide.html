@@ -85,7 +85,7 @@ svg .l{text-anchor:start}
 <figure class="diagram">
 <svg viewBox="0 0 960 460" role="img" aria-labelledby="dg-t dg-d">
 <title id="dg-t">Overall architecture of the demo environment</title>
-<desc id="dg-d">Simulator, demo client, public IP (listeners :80 / :8080 / :8090 / :8100), WAF, one routing map per port (advancedRoutingMap1 / canaryMap / priorityMap / abMap), VM 1 (pool-web, pool-partner, pool-tenant, pool-api-v2, pool-mobile, pool-standby, pool-A) and VM 2 (pool-canary, pool-primary, pool-B)</desc>
+<desc id="dg-d">Simulator, demo client, public IP (listeners :80 / :8080 / :8090 / :8100), WAF, one routing map per port (advancedRoutingMap1 / canaryMap / priorityMap / flagMap), VM 1 (pool-web, pool-partner, pool-tenant, pool-api-v2, pool-mobile, pool-standby, pool-flag-off) and VM 2 (pool-canary, pool-primary, pool-flag-on)</desc>
 <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="ink"/></marker></defs>
 <rect x="10" y="20" width="190" height="110" rx="8" class="box"/>
 <text x="105" y="46" class="h">Simulator</text>
@@ -109,7 +109,7 @@ svg .l{text-anchor:start}
 <text x="330" y="190">rule1 → :80</text>
 <text x="330" y="208">rule-canary → :8080</text>
 <text x="330" y="226">rule-priority → :8090</text>
-<text x="330" y="244">rule-ab → :8100</text>
+<text x="330" y="244">rule-flag → :8100</text>
 <path d="M200 210 H245" class="ln" marker-end="url(#ar)"/>
 <rect x="450" y="70" width="120" height="110" rx="8" class="box"/>
 <text x="510" y="96" class="h">WAF</text>
@@ -131,9 +131,9 @@ svg .l{text-anchor:start}
 <text x="675" y="230">priority-split</text>
 <text x="675" y="248">Primary 1 / Standby 2</text>
 <rect x="600" y="280" width="150" height="70" rx="8" class="box"/>
-<text x="675" y="300" class="h">abMap :8100</text>
-<text x="675" y="320">ab-variant-b (X-Variant: B)</text>
-<text x="675" y="338">default: pool-A</text>
+<text x="675" y="300" class="h">flagMap :8100</text>
+<text x="675" y="320">flag-on (X-Feature: new)</text>
+<text x="675" y="338">default: pool-flag-off</text>
 <path d="M570 125 L600 45" class="ln" marker-end="url(#ar)"/>
 <path d="M570 125 H600" class="ln" marker-end="url(#ar)"/>
 <path d="M570 125 L600 225" class="ln" marker-end="url(#ar)"/>
@@ -148,16 +148,16 @@ svg .l{text-anchor:start}
 <text x="875" y="158" class="m">pool-mobile :8085</text>
 <text x="875" y="180" class="m">pool-standby :8080</text>
 <text x="875" y="198">← :8090 Standby</text>
-<text x="875" y="220" class="m">pool-A :8080</text>
-<text x="875" y="238">← :8100 variant A</text>
+<text x="875" y="220" class="m">pool-flag-off :8080</text>
+<text x="875" y="238">← :8100 flag off</text>
 <rect x="800" y="280" width="150" height="170" rx="8" class="box" style="fill:none;stroke-dasharray:6 4"/>
 <text x="875" y="300" class="h">VM 2</text>
 <text x="875" y="316">192.168.1.11</text>
 <text x="875" y="342" class="m">pool-canary :8080</text>
 <text x="875" y="364" class="m">pool-primary :8080</text>
 <text x="875" y="382">← :8090 Primary</text>
-<text x="875" y="404" class="m">pool-B :8080</text>
-<text x="875" y="422">← :8100 variant B</text>
+<text x="875" y="404" class="m">pool-flag-on :8080</text>
+<text x="875" y="422">← :8100 flag on</text>
 <path d="M750 45 C775 45,775 120,800 120" class="ln" marker-end="url(#ar)"/>
 <path d="M750 135 C775 135,775 70,800 70" class="ln" marker-end="url(#ar)"/>
 <path d="M750 135 C775 135,775 342,800 342" class="ln" marker-end="url(#ar)"/>
@@ -168,13 +168,13 @@ svg .l{text-anchor:start}
 <text x="10" y="300" class="l">Solid line: traffic. Dashed line: what the operator does.</text>
 <text x="10" y="318" class="l">Stop pool-canary on VM 2 and port 8090 switches to Standby (VM 1).</text>
 <text x="10" y="336" class="l">Port 8080: pool-web (VM 1) 90% and pool-canary (VM 2) 10%.</text>
-<text x="10" y="354" class="l">Port 8100 (A/B): X-Variant: B → pool-B (VM 2), otherwise pool-A (VM 1).</text>
+<text x="10" y="354" class="l">Port 8100 (feature flag): X-Feature: new → pool-flag-on (VM 2), otherwise pool-flag-off (VM 1).</text>
 </svg>
 <figcaption>Figure 1. Architecture. VM 1 and VM 2 are drawn as separate frames. Solid lines are real traffic; dashed lines show what the operator does.</figcaption>
 </figure>
 <table><thead><tr><th scope="col">Part</th><th scope="col">Role</th><th scope="col">What it is</th></tr></thead><tbody>
 <tr><td>Simulator</td><td>Shows the evaluation order of the rules, AND/OR, and where WAF sits. Generates the curl command that sends the same request to the real gateway, or sends it directly</td><td>Standalone HTML (evaluates in the browser)</td></tr>
-<tr><td>Application Gateway</td><td>Port 80: listener → WAF → advanced routing map (<code>advancedRoutingMap1</code>) → backend pool or redirect. Port 8080: <code>rule-canary</code> → <code>canaryMap</code> (weighted, pool-web 90% / pool-canary 10%). Port 8090: <code>rule-priority</code> → <code>priorityMap</code> (priority-based). Port 8100: <code>rule-ab</code> → <code>abMap</code> (A/B test)</td><td>WAF_v2, capacity 1</td></tr>
+<tr><td>Application Gateway</td><td>Port 80: listener → WAF → advanced routing map (<code>advancedRoutingMap1</code>) → backend pool or redirect. Port 8080: <code>rule-canary</code> → <code>canaryMap</code> (weighted, pool-web 90% / pool-canary 10%). Port 8090: <code>rule-priority</code> → <code>priorityMap</code> (priority-based). Port 8100: <code>rule-flag</code> → <code>flagMap</code> (feature flag)</td><td>WAF_v2, capacity 1</td></tr>
 <tr><td>Backend</td><td>Shows which pool answered and the request headers it received</td><td>VM 1: five Node.js processes (ports 8080–8083, 8085). VM 2: canary (port 8080)</td></tr>
 </tbody></table>
 <p class="note">The five pools of VM 1 are different ports on the same VM. The canary (pool-canary) is on VM 2: it answers differently from pool-web (VM 1, port 8080) on the same port, so it needs its own IP address. Whether VM 2 could use a different port instead has not been tested.</p>
@@ -210,14 +210,14 @@ pool-tenant|8082|Tenant|#0f766e
 pool-api-v2|8083|Orders API v2|#1d4ed8
 pool-mobile|8085|Mobile|#7e22ce</code></pre>
 <p>The names and colors are the same as in the simulator's pool list, so the simulator's "Response" panel and the real page look alike.</p>
-<p><code>pools.conf</code> defines the Node.js processes on the VM and the ports they listen on. Ports 8090 and 8100 are listener ports of the Application Gateway; no backend process listens on them. Priority-based selection (8090) and the A/B test (8100) use the gateway pools below, which point at the existing processes on port 8080.</p>
+<p><code>pools.conf</code> defines the Node.js processes on the VM and the ports they listen on. Ports 8090 and 8100 are listener ports of the Application Gateway; no backend process listens on them. Priority-based selection (8090) and the feature flag (8100) use the gateway pools below, which point at the existing processes on port 8080.</p>
 <table><thead><tr><th scope="col">Gateway pool</th><th scope="col">Points at (VM and process)</th><th scope="col">Used for</th></tr></thead><tbody>
 <tr><td><code>pool-primary</code></td><td>The <code>pool-canary</code> process on VM 2 (192.168.1.11), port 8080</td><td>Priority 1 (Primary) on :8090</td></tr>
 <tr><td><code>pool-standby</code></td><td>The <code>pool-web</code> process on VM 1 (192.168.1.10), port 8080</td><td>Priority 2 (Standby) and default on :8090</td></tr>
 <tr><td><code>pool-web</code></td><td>The <code>pool-web</code> process on VM 1, port 8080</td><td>Default on :80, 90% of the canary on :8080</td></tr>
 <tr><td><code>pool-canary</code></td><td>The <code>pool-canary</code> process on VM 2, port 8080</td><td>10% of the canary on :8080</td></tr>
-<tr><td><code>pool-A</code></td><td>The <code>pool-web</code> process on VM 1, port 8080</td><td>Variant A (default) on :8100</td></tr>
-<tr><td><code>pool-B</code></td><td>The <code>pool-canary</code> process on VM 2, port 8080</td><td>Variant B (<code>X-Variant: B</code>) on :8100</td></tr>
+<tr><td><code>pool-flag-off</code></td><td>The <code>pool-web</code> process on VM 1, port 8080</td><td>Flag off (default) on :8100</td></tr>
+<tr><td><code>pool-flag-on</code></td><td>The <code>pool-canary</code> process on VM 2, port 8080</td><td>Flag on (<code>X-Feature: new</code>) on :8100</td></tr>
 </tbody></table>
 
 <h3>3.4 The server (<code>backend/server.js</code>)</h3>
@@ -292,14 +292,14 @@ DynamicUser=yes</code></pre>
 <tr><td>Canary VM 2</td><td>Static IP 192.168.1.11. One Node.js process (<code>pool-canary</code>, port 8080)</td></tr>
 <tr><td>WAF policy</td><td>Prevention, DRS 2.1. Custom rules <code>BlockDemoIp</code> (source IP) and <code>BlockDemoUA</code> (blocks requests whose User-Agent contains <code>agw-block-demo</code>)</td></tr>
 <tr><td>NAT gateway</td><td>Attached to the backend subnet (StandardV2, with its own StandardV2 public IP). Used for the VMs' outbound traffic (apt and so on). The VMs have no public IP and the subnet is private (no default outbound IP)</td></tr>
-<tr><td>Application Gateway (WAF_v2)</td><td>Listeners <code>listener-http</code> (:80), <code>listener-canary</code> (:8080), <code>listener-priority</code> (:8090), <code>listener-ab</code> (:8100). Rules <code>rule1</code> (Advanced, :80, map <code>advancedRoutingMap1</code>), <code>rule-canary</code> (Advanced, :8080, map <code>canaryMap</code>), <code>rule-priority</code> (Advanced, :8090, map <code>priorityMap</code>), <code>rule-ab</code> (Advanced, :8100, map <code>abMap</code>)</td></tr>
-<tr><td>Probe, pools, backend settings</td><td>Probe <code>healthz</code>. Six pools (<code>pool-web</code>, <code>pool-partner</code>, <code>pool-tenant</code>, <code>pool-api-v2</code>, <code>pool-canary</code>, <code>pool-mobile</code>), each with backend settings <code>hs-&lt;pool&gt;</code>. Plus <code>pool-primary</code> / <code>pool-standby</code> for priority-based selection and <code>pool-A</code> / <code>pool-B</code> for the A/B test (they point at the existing processes)</td></tr>
+<tr><td>Application Gateway (WAF_v2)</td><td>Listeners <code>listener-http</code> (:80), <code>listener-canary</code> (:8080), <code>listener-priority</code> (:8090), <code>listener-flag</code> (:8100). Rules <code>rule1</code> (Advanced, :80, map <code>advancedRoutingMap1</code>), <code>rule-canary</code> (Advanced, :8080, map <code>canaryMap</code>), <code>rule-priority</code> (Advanced, :8090, map <code>priorityMap</code>), <code>rule-flag</code> (Advanced, :8100, map <code>flagMap</code>)</td></tr>
+<tr><td>Probe, pools, backend settings</td><td>Probe <code>healthz</code>. Six pools (<code>pool-web</code>, <code>pool-partner</code>, <code>pool-tenant</code>, <code>pool-api-v2</code>, <code>pool-canary</code>, <code>pool-mobile</code>), each with backend settings <code>hs-&lt;pool&gt;</code>. Plus <code>pool-primary</code> / <code>pool-standby</code> for priority-based selection and <code>pool-flag-off</code> / <code>pool-flag-on</code> for the feature flag (they point at the existing processes)</td></tr>
 <tr><td>Redirect</td><td><code>redirect-campaign</code>: 302 to <code>https://www.contoso.com/campaign</code>. The query string is kept</td></tr>
-<tr><td>Condition sets</td><td>Port 80: <code>cs-partner</code>, <code>cs-tenant</code>, <code>cs-apiv2</code>, <code>cs-campaign</code>, <code>cs-mobile</code>. Port 8080: <code>cs-canary-split</code>. Port 8090: <code>cs-priority-all</code>. Port 8100: <code>cs-ab-variant-b</code></td></tr>
+<tr><td>Condition sets</td><td>Port 80: <code>cs-partner</code>, <code>cs-tenant</code>, <code>cs-apiv2</code>, <code>cs-campaign</code>, <code>cs-mobile</code>. Port 8080: <code>cs-canary-split</code>. Port 8090: <code>cs-priority-all</code>. Port 8100: <code>cs-flag-on</code></td></tr>
 <tr><td>Advanced routing map (port 80)</td><td><code>advancedRoutingMap1</code>. Default pool <code>pool-web</code>. Rules in priority order: partner (10), tenant (20), api-v2 (30), campaign (40), mobile (60)</td></tr>
 <tr><td>Canary (port 8080)</td><td>Map <code>canaryMap</code>, rule <code>canary-split</code> (path <code>^/</code>, every request): pool-web 90 : pool-canary 10 (<code>WeightedDistribution</code>). The map default is pool-canary</td></tr>
 <tr><td>Priority-based selection (port 8090)</td><td>Map <code>priorityMap</code>, rule <code>priority-split</code> (every path): <code>pool-primary</code> (VM 2, priority 1) → <code>pool-standby</code> (VM 1, priority 2), <code>PriorityAware</code>, minimum healthy percentage 60%. The default is <code>pool-standby</code></td></tr>
-<tr><td>A/B test (port 8100)</td><td>Map <code>abMap</code>, rule <code>ab-variant-b</code> (priority 10, header <code>X-Variant</code> = <code>B</code>) → <code>pool-B</code>. The default is <code>pool-A</code></td></tr>
+<tr><td>Feature flag (port 8100)</td><td>Map <code>flagMap</code>, rule <code>flag-on</code> (priority 10, header <code>X-Feature</code> = <code>new</code>) → <code>pool-flag-on</code>. The default is <code>pool-flag-off</code></td></tr>
 </tbody></table>
 <figure class="diagram">
 <img src="https://learn.microsoft.com/azure/application-gateway/media/advanced-load-distribution/pool-selection.png" alt="Diagram showing that the pools of the matched rule are chosen by weighted distribution or by priority-based selection" style="inline-size:100%;block-size:auto;border:1px solid var(--line-soft);border-radius:16px;background:var(--card)">
@@ -335,23 +335,23 @@ DynamicUser=yes</code></pre>
                                          does not qualify</code></pre>
 <figcaption>Figure 4. Priority-based selection on port 8090 (when VM 2 stops, traffic switches to Standby).</figcaption>
 </figure>
-<figure class="diagram"><pre><code>client --:8100--&gt; listener-ab --&gt; rule-ab (Advanced)
+<figure class="diagram"><pre><code>client --:8100--&gt; listener-flag --&gt; rule-flag (Advanced)
                                     |
-                                    v   map abMap
-                          rule: ab-variant-b (header X-Variant = B)
+                                    v   map flagMap
+                          rule: flag-on (header X-Feature = new)
                                     |
                  +------------------+------------------+
                  |                                     |
-        X-Variant: B (match)                 anything else (default = variant A)
+        X-Feature: new (match)               anything else (default = flag off)
                  |                                     |
                  v                                     v
-        pool-B (VM2 :8080)                  pool-A (VM1 :8080)
+        pool-flag-on (VM2 :8080)            pool-flag-off (VM1 :8080)
         = pool-canary on VM 2               = pool-web on VM 1
-        variant B                           variant A</code></pre>
-<figcaption>Figure 5. The A/B test on port 8100 (the header X-Variant picks the variant).</figcaption>
+        flag on                             flag off</code></pre>
+<figcaption>Figure 5. The feature flag on port 8100 (the header X-Feature turns it on).</figcaption>
 </figure>
 
-<p class="note">An advanced routing rule can be attached to a Basic listener only (multisite listeners are not supported). The four rules (<code>rule1</code>, <code>rule-canary</code>, <code>rule-priority</code>, <code>rule-ab</code>) are created as Advanced from the start, so there is no step that converts them later.</p>
+<p class="note">An advanced routing rule can be attached to a Basic listener only (multisite listeners are not supported). The four rules (<code>rule1</code>, <code>rule-canary</code>, <code>rule-priority</code>, <code>rule-flag</code>) are created as Advanced from the start, so there is no step that converts them later.</p>
 
 <h3>4.2 Verification</h3>
 <p>Use <code>deploy/test.sh</code> and <code>deploy/canary-check.sh</code>.</p>
@@ -364,8 +364,8 @@ API v2                 HTTP 200  pool-api-v2
 Encoded path           HTTP 200  pool-api-v2   ← /api%2Forders is decoded, then evaluated
 Canary (:8080 90:10)   HTTP 200  pool-web
 Campaign               HTTP 302  redirect -&gt; https://www.contoso.com/campaign?...
-A/B variant A          HTTP 200  pool-web      ← :8100 (pool-A)
-A/B variant B          HTTP 200  pool-canary   ← :8100 (pool-B)
+Feature flag off       HTTP 200  pool-web      ← :8100 (pool-flag-off)
+Feature flag on        HTTP 200  pool-canary   ← :8100 (pool-flag-on)
 Mobile                 HTTP 200  pool-mobile
 WAF block (UA)         HTTP 403</code></pre>
 <p class="note">This is sample output of <code>test.sh</code>. The Canary line is one request of the 90:10 split on port 8080, so it can be pool-web or pool-canary.</p>
@@ -382,16 +382,16 @@ FRONTEND=&lt;frontend IP&gt;:8090 ./canary-check.sh /app/home 100   # restored</
 <pre><code>normal     all 100 requests: pool-canary (Primary = VM 2)
 stopped    all 100 requests: pool-web    (Standby = VM 1)
 restored   all 100 requests: pool-canary (Primary = VM 2)</code></pre>
-<p class="note">The switch takes about 2–3 minutes after the stop. Right after it, pool-canary can still answer. While pool-canary is stopped, the canary on port 8080 and variant B on port 8100 are affected too, so start it again after the test.</p>
-<h4>A/B test (port 8100)</h4>
-<p>On port 8100, <code>abMap</code> sends requests with the header <code>X-Variant: B</code> to <code>pool-B</code> (variant B, VM 2 port 8080) and everything else to the default <code>pool-A</code> (variant A, VM 1 port 8080). <code>x-backend-pool</code> is the process name, so variant A shows as <code>pool-web</code> and variant B as <code>pool-canary</code>.</p>
+<p class="note">The switch takes about 2–3 minutes after the stop. Right after it, pool-canary can still answer. While pool-canary is stopped, the canary on port 8080 and the flag-on pool on port 8100 are affected too, so start it again after the test.</p>
+<h4>Feature flag (port 8100)</h4>
+<p>On port 8100, the client turns the flag on with a header. <code>flagMap</code> sends requests with the header <code>X-Feature: new</code> to <code>pool-flag-on</code> (VM 2 port 8080) and everything else to the default <code>pool-flag-off</code> (VM 1 port 8080). <code>x-backend-pool</code> is the process name, so flag off shows as <code>pool-web</code> and flag on as <code>pool-canary</code>.</p>
 <pre><code>curl -s -D - -o /dev/null http://&lt;frontend IP&gt;:8100/ | grep -i x-backend-pool
-curl -s -D - -o /dev/null -H "X-Variant: A" http://&lt;frontend IP&gt;:8100/ | grep -i x-backend-pool
-curl -s -D - -o /dev/null -H "X-Variant: B" http://&lt;frontend IP&gt;:8100/ | grep -i x-backend-pool</code></pre>
-<pre><code>no variant header  x-backend-pool: pool-web     (pool-A, variant A)
-X-Variant: A       x-backend-pool: pool-web     (pool-A, variant A)
-X-Variant: B       x-backend-pool: pool-canary  (pool-B, variant B)</code></pre>
-<p class="note">Port 80 has no A/B rule for <code>/ab</code>. Always use port 8100 for the A/B test.</p>
+curl -s -D - -o /dev/null -H "X-Feature: other" http://&lt;frontend IP&gt;:8100/ | grep -i x-backend-pool
+curl -s -D - -o /dev/null -H "X-Feature: new" http://&lt;frontend IP&gt;:8100/ | grep -i x-backend-pool</code></pre>
+<pre><code>no header         x-backend-pool: pool-web     (pool-flag-off, flag off)
+X-Feature: other  x-backend-pool: pool-web     (pool-flag-off, flag off)
+X-Feature: new    x-backend-pool: pool-canary  (pool-flag-on, flag on)</code></pre>
+<p class="note">Port 80 has no feature flag rule. Always use port 8100. This is not an A/B test: the client chooses, and there is no random split (a statistical A/B test is tracked in issue #27).</p>
 <h3>4.3 Creating a header-based rule by hand in the portal (the tutorial)</h3>
 <p>These are the steps of the Microsoft Learn <a href="https://learn.microsoft.com/en-us/azure/application-gateway/configure-advanced-routing-rule">Tutorial: Configure header-based routing with Application Gateway Advanced Rules in the Azure portal</a>. This demo does not need them, because <code>deploy.sh</code> creates everything. Use them to try the portal.</p>
 <p class="note">The portal's "Create application gateway" experience cannot configure an Advanced rule. Create the gateway with a Basic rule, then change the Basic rule to Advanced.</p>
@@ -466,7 +466,7 @@ if (req.method === "OPTIONS" &amp;&amp; req.headers["access-control-request-meth
 <tr><td>7</td><td>Routing by User-Agent</td><td>"Mobile" → pool-mobile (a browser cannot send User-Agent, so the real response is the default pool-web)</td><td><code>curl -i -A "Mozilla/5.0 (iPhone; ...)" http://&lt;IP&gt;/app/home</code> → pool-mobile</td></tr>
 <tr><td>8</td><td>Canary (port 8080)</td><td>"Canary (port 8080)" → the weighted prediction (90:10)</td><td><code>FRONTEND=&lt;IP&gt;:8080 ./canary-check.sh /app/home 100</code> → about 90 pool-web, 10 pool-canary (measured: 91 / 9)</td></tr>
 <tr><td>9</td><td>Priority-based selection (port 8090)</td><td>"Priority (port 8090)" → Primary (VM 2) while healthy, Standby (VM 1) when stopped</td><td><code>FRONTEND=&lt;IP&gt;:8090 ./canary-check.sh /app/home 100</code> → pool-canary (VM 2) normally. Stop <code>agw-pool@pool-canary</code> on VM 2 and after 2–3 minutes it is pool-web (VM 1). Start it again afterwards</td></tr>
-<tr><td>10</td><td>A/B test (variants A / B)</td><td>"A/B (variant A)" and "A/B (variant B)" → variant A is pool-A (pool-web on VM 1), variant B is pool-B (pool-canary on VM 2)</td><td><code>curl -H "X-Variant: B" http://&lt;IP&gt;:8100/</code> → pool-canary. No header or <code>X-Variant: A</code> → pool-web</td></tr>
+<tr><td>10</td><td>Feature flag (off / on)</td><td>"Feature flag (off)" and "Feature flag (on)" → off is pool-flag-off (pool-web on VM 1), on is pool-flag-on (pool-canary on VM 2)</td><td><code>curl -H "X-Feature: new" http://&lt;IP&gt;:8100/</code> → pool-canary. No header or another value → pool-web</td></tr>
 </tbody></table>
 <p class="note">The canary sends every request on port 8080 to pool-web 90% / pool-canary 10% (advanced rule <code>canary-split</code>). With few requests the counts drift from the expected values, so check with 100 or more.</p>
 </section>
