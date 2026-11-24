@@ -611,6 +611,8 @@ async function send() {
   if (isLive() && state.observedIp) r.clientIp = state.observedIp;
   state.sent = r; state.ev = evaluate(state.config, r); state.live = isLive() ? { kind: "pending" } : null;
   const line = `${r.method} ${r.port ? `:${r.port}` : ""}${r.path}${r.query ? `?${r.query}` : ""}`;
+  // A finished test run sits above the single response; remove it so the new response is what the column shows.
+  if (!testRun || testRun.finished) $("testResult").replaceChildren();
   renderAll();
   announce(L(`予測: ${describe(state.ev.d, state.config)}`, `Prediction: ${describe(state.ev.d, state.config)}`));
   let tone = tones(state.ev.d);
