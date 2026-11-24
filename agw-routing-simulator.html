@@ -159,7 +159,7 @@ ol.rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
       <button type="submit" class="primary" id="sendBtn" data-ja="要求を送信">Send request</button>
       <div class="stack" id="testBox" style="border-top:1px solid var(--line-soft);padding-top:12px">
         <h3 style="margin:0" data-ja="実機へのテスト要求 (件数分)">Test requests to the real gateway</h3>
-        <p class="note" data-ja="ゲートウェイ URL に、上の要求 (プリセットのポート) を件数分送り、どのプールに届いたかを数えます。">Sends the request above (the port of its preset) to the gateway URL the given number of times and counts which pool answered.</p>
+        <p class="note" data-ja="ゲートウェイ URL に、上の要求 (プリセットのポート) を件数分送り、どのプールに届いたかを数えます。結果は「実機の応答」に表示します。">Sends the request above (the port of its preset) to the gateway URL the given number of times and counts which pool answered. The results appear under &quot;Real response&quot;.</p>
         <div style="inline-size:110px"><label for="testN" data-ja="件数">Count</label><input id="testN" type="number" min="1" max="1000" value="100" class="mono"></div>
         <button type="button" id="testBtn" class="primary small" data-ja="テスト要求を送る">Send test requests</button>
         <span class="note" id="testState"></span>
@@ -170,7 +170,6 @@ ol.rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
           <p style="margin:6px 0 0" data-ja="復帰 (テスト後に戻す。復旧させると、また Primary (VM 2) に要求が送られます):">Restore (run it after the test; requests then go to Primary (VM 2) again):</p>
           <pre class="mono" style="white-space:pre-wrap">az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-canary"</pre>
         </div>
-        <div id="testResult" class="stack"></div>
       </div>
     </form>
     <section class="card" aria-labelledby="histH">
@@ -191,7 +190,7 @@ ol.rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
       <div class="row"><h2 id="respH" class="grow" style="margin:0" data-ja="応答">Response</h2><span id="matchBadge"></span></div>
       <div class="two">
         <div class="stack"><h3 id="simH" data-ja="予測 (シミュレーション)">Prediction (simulation)</h3><div id="simOut"></div></div>
-        <div class="stack"><h3 id="liveH" data-ja="実機の応答">Real response</h3><div id="liveOut"></div></div>
+        <div class="stack"><h3 id="liveH" data-ja="実機の応答">Real response</h3><div id="testResult" class="stack"></div><div id="liveOut"></div></div>
       </div>
       <div class="card">
         <div class="row"><p class="grow" style="margin:0;font-weight:600" data-ja="同じ要求を curl で送る">Send the same request with curl</p><button type="button" id="copyCurl" class="small" data-ja="コピー">Copy</button></div>
@@ -1217,7 +1216,7 @@ async function runTestRequests() {
     return;
   }
   const out = $("testResult"), state_ = $("testState");
-  if (!isLive()) { state_.textContent = L("送信できません", "Cannot send"); out.replaceChildren(el("p", { class: "err", text: L("ゲートウェイ URL が空です。上の「ゲートウェイ URL」に入力すると、実機に送れます。", "The gateway URL is empty. Enter it in \"Gateway URL\" at the top to send to the real gateway.") })); return; }
+  if (!isLive()) { state_.textContent = L("送信できません。ゲートウェイ URL が空です。上の「ゲートウェイ URL」に入力すると、実機に送れます。", "Cannot send: the gateway URL is empty. Enter it in \"Gateway URL\" at the top to send to the real gateway."); out.replaceChildren(); return; }
   const port = Number(state.request.port) || 80;
   const n = Number($("testN").value) || 100;
   const u = new URL(normBase(state.backendUrl));
@@ -1247,8 +1246,9 @@ async function runTestRequests() {
     }
   } finally { run.finished = true; setTestButton(false); }
   const sent = run.seq.filter(Boolean).length;
-  state_.textContent = run.cancelled ? L(`キャンセル (${sent} 件まで送信)`, `Cancelled (${sent} sent)`) : L("完了", "Done");
+  state_.textContent = run.cancelled ? L(`キャンセル (${sent} 件まで送信)`, `Cancelled (${sent} sent)`) : L("完了 (結果は「実機の応答」に表示)", "Done (results are under \"Real response\")");
   renderTestRun(run, 1);
+  $("liveH").scrollIntoView({ block: "start", behavior: "smooth" });
 }
 function renderTestRun(run, page) {
   const out = $("testResult");
@@ -1283,11 +1283,13 @@ function renderTestRun(run, page) {
     el("span", { class: "note", style: "display:inline-flex;align-items:center;gap:6px;margin-inline-end:14px" },
       el("span", { style: `display:inline-block;inline-size:12px;block-size:12px;border-radius:3px;background:${colorOf(pool)}` }),
       el("span", { text: L(`${pool}: ${c} 件 (${answered ? Math.round((c / answered) * 100) : 0}%)`, `${pool}: ${c} (${answered ? Math.round((c / answered) * 100) : 0}%)`) })));
-  out.replaceChildren(
+  // The results are shown at the top of the "Real response" column, above the response of the single request.
+  out.replaceChildren(el("div", { class: "card stack" },
+    el("p", { style: "margin:0;font-weight:600", text: L(`テスト要求の結果 (${run.n} 件)`, `Test request results (${run.n} requests)`) }),
     el("p", { class: "note", text: L(`${run.url} に ${run.n} 件 (送信 ${sent} 件、応答 ${answered} 件${failed ? `、失敗 ${failed} 件` : ""}${run.cancelled ? "、キャンセル" : ""})。`, `${run.n} requests to ${run.url} (sent ${sent}, answered ${answered}${failed ? `, failed ${failed}` : ""}${run.cancelled ? ", cancelled" : ""}).`) }),
     el("div", { style: "display:flex;flex-wrap:wrap;margin-block-start:6px" }, legend),
     pager,
-    el("div", { style: "display:flex;flex-wrap:wrap" }, ...cells));
+    el("div", { style: "display:flex;flex-wrap:wrap" }, ...cells)));
 }
 $("testBtn").addEventListener("click", runTestRequests);
 $("distMode").addEventListener("change", () => { state.dist.mode = $("distMode").value; distChanged(true); });
