@@ -206,10 +206,12 @@ Documentation sections: "Pool selection algorithm", "Server selection algorithm"
 ## 7. Clean up
 
 ```bash
-az group delete -n rg-agw-advrouting-demo --yes --no-wait
+cd deploy && ./cleanup.sh             # lists the resources, asks for the group name, then deletes the resource group
+cd deploy && ./cleanup.sh --dry-run   # lists the resources only
+cd deploy && ./cleanup.sh --yes       # deletes without the prompt (needed when there is no terminal)
 ```
 
-The gateway (WAF_v2) and the VMs are billed while they run. Always delete them after the workshop.
+`cleanup.sh` runs `az group delete -n rg-agw-advrouting-demo --yes --no-wait`, so the deletion finishes in the background after a few minutes (`az group exists -n rg-agw-advrouting-demo` returns `false` when it is done). The gateway (WAF_v2) and the VMs are billed while they run. Always delete them after the workshop.
 
 ## Known issues
 
@@ -246,6 +248,7 @@ The gateway (WAF_v2) and the VMs are billed while they run. Always delete them a
 - `deploy/make-cloud-init.sh`, `deploy/cloud-init.yaml`, `deploy/cloud-init-canary.yaml`: VM bootstrap (VM 1 / canary VM 2)
 - `deploy/test.sh`: scenario verification
 - `deploy/canary-check.sh`: sends 100 consecutive requests to one URI and prints the count per pool
+- `deploy/cleanup.sh`: deletes the resource group (`--dry-run` lists only, `--yes` skips the prompt)
 - `backend/server.js`, `backend/pools.conf`, `backend/pools-canary.conf`: backend and pool definitions
 - `agw-routing-simulator.html`: prediction versus real response, test requests, load distribution simulation (English / Japanese)
 - `docs/agw-advanced-routing-demo-guide.html` (English), `docs/agw-advanced-routing-demo-guide_ja.html` (Japanese): guide for participants
