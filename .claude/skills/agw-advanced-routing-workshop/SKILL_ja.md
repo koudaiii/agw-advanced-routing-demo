@@ -129,10 +129,12 @@ curl -i http://<FRONTEND>/app/home                        # → 200 (比較用)
 ## 6. 片付け
 
 ```bash
-az group delete -n rg-agw-advrouting-demo --yes --no-wait
+cd deploy && ./cleanup.sh             # リソースの一覧を表示し、グループ名の入力を求めてからリソースグループを削除
+cd deploy && ./cleanup.sh --dry-run   # 一覧表示だけ (削除なし)
+cd deploy && ./cleanup.sh --yes       # 確認なしで削除 (端末がないときはこれが必要)
 ```
 
-ゲートウェイ (WAF_v2) とバックエンド VM は課金されます。ワークショップ後は必ず削除してください。
+`cleanup.sh` は `az group delete -n rg-agw-advrouting-demo --yes --no-wait` を実行します。削除はバックグラウンドで数分かかります (`az group exists -n rg-agw-advrouting-demo` が `false` になれば完了)。ゲートウェイ (WAF_v2) とバックエンド VM は課金されます。ワークショップ後は必ず削除してください。
 
 ## 既知の問題
 
@@ -231,6 +233,7 @@ curl -s -D - -o /dev/null -H "X-Feature: new" http://<FRONTEND-IP>:8100/ | grep 
 - `deploy/make-cloud-init.sh`, `deploy/cloud-init.yaml`, `deploy/cloud-init-canary.yaml`: バックエンド VM の初期化 (VM 1 / カナリア VM 2)
 - `deploy/test.sh`: 疎通確認
 - `deploy/canary-check.sh`: 指定した URI に 100 回連続で送り、プール別の件数を表示 (カナリアは `FRONTEND=<IP>:8080`)
+- `deploy/cleanup.sh`: リソースグループを削除 (`--dry-run` は一覧表示だけ、`--yes` は確認を省く)
 - `backend/server.js`, `backend/pools.conf`, `backend/pools-canary.conf`: バックエンドとプール定義
 - `agw-routing-simulator.html`: 予測と実機の比較、負荷分散シミュレーション
 - `docs/agw-advanced-routing-demo-guide_ja.html` (日本語)、`docs/agw-advanced-routing-demo-guide.html` (英語): 参加者向けガイド
