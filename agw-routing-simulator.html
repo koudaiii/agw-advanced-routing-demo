@@ -37,6 +37,7 @@ h2{font:400 18px/1.35 var(--serif);letter-spacing:.01em;margin-block:0 8px}
 h3{font:400 15px/1.4 var(--serif);margin:0}
 .card{background:var(--card);border:1px solid var(--line-soft);border-radius:16px;padding:16px}
 .stack{display:flex;flex-direction:column;gap:12px}
+#testResult:empty{display:none} /* an empty flex item would still add one gap above the response */
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .grow{flex:1}
 .row > h2{min-inline-size:max-content}
