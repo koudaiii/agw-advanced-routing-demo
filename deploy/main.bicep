@@ -28,7 +28,7 @@ var gwPipName = '${gwName}-pip'
 var mapName = 'advancedRoutingMap1'
 var canaryMapName = 'canaryMap'
 var priorityMapName = 'priorityMap'
-var abMapName = 'abMap'
+var flagMapName = 'flagMap'
 // The new version (pool-canary) runs on its own VM, on port 8080 like pool-web. The weighted /canary split
 // needs both pools to share one backend HTTP setting, so they must use the same port.
 var vm2Ip = '192.168.1.11'
@@ -408,7 +408,7 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
-        // Port 8100: A/B test (#27). Variant B (X-Variant: B) -> pool-B; otherwise variant A -> pool-A.
+        // Port 8100: feature flag (#74). X-Feature: new -> pool-flag-on; otherwise -> pool-flag-off.
         name: 'port-8100'
         properties: {
           port: 8100
@@ -458,8 +458,8 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
-        // #27 A/B test: pool-A = variant A (VM 1, 8080), pool-B = variant B (VM 2, 8080).
-        name: 'pool-A'
+        // #74 feature flag: pool-flag-off = flag off (VM 1, 8080), pool-flag-on = flag on (VM 2, 8080).
+        name: 'pool-flag-off'
         properties: {
           backendAddresses: [
             {
@@ -469,7 +469,7 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
-        name: 'pool-B'
+        name: 'pool-flag-on'
         properties: {
           backendAddresses: [
             {
@@ -531,7 +531,7 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
-        name: 'listener-ab'
+        name: 'listener-flag'
         properties: {
           frontendIPConfiguration: {
             id: '${gwId}/frontendIPConfigurations/fe-ip'
@@ -632,15 +632,15 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
-        // A/B test (#27) on port 8100: the header X-Variant: B selects variant B (pool-B).
-        name: 'cs-ab-variant-b'
+        // Feature flag (#74) on port 8100: the header X-Feature: new turns the flag on (pool-flag-on).
+        name: 'cs-flag-on'
         properties: {
           routingConditions: [
             {
               conditionType: 'Header'
-              propertyName: 'X-Variant'
+              propertyName: 'X-Feature'
               propertyValues: [
-                'B'
+                'new'
               ]
             }
           ]
@@ -836,19 +836,19 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
-        // A/B test (#27) on port 8100: variant B -> pool-B; the default (variant A) -> pool-A.
-        name: abMapName
+        // Feature flag (#74) on port 8100: flag on -> pool-flag-on; the default (flag off) -> pool-flag-off.
+        name: flagMapName
         properties: {
           advancedRoutingRules: [
             {
-              name: 'ab-variant-b'
+              name: 'flag-on'
               properties: {
                 priority: 10
                 advancedRoutingConditionSet: {
-                  id: '${gwId}/advancedRoutingConditionSets/cs-ab-variant-b'
+                  id: '${gwId}/advancedRoutingConditionSets/cs-flag-on'
                 }
                 backendAddressPool: {
-                  id: '${gwId}/backendAddressPools/pool-B'
+                  id: '${gwId}/backendAddressPools/pool-flag-on'
                 }
                 backendHttpSettings: {
                   id: '${gwId}/backendHttpSettingsCollection/hs-pool-web'
@@ -857,7 +857,7 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
             }
           ]
           defaultBackendAddressPool: {
-            id: '${gwId}/backendAddressPools/pool-A'
+            id: '${gwId}/backendAddressPools/pool-flag-off'
           }
           defaultBackendHttpSettings: {
             id: '${gwId}/backendHttpSettingsCollection/hs-pool-web'
@@ -908,16 +908,16 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
-        // Port 8100: A/B test (see abMap).
-        name: 'rule-ab'
+        // Port 8100: feature flag (see flagMap).
+        name: 'rule-flag'
         properties: {
           ruleType: 'AdvancedRouting'
           priority: 400
           httpListener: {
-            id: '${gwId}/httpListeners/listener-ab'
+            id: '${gwId}/httpListeners/listener-flag'
           }
           advancedRoutingMap: {
-            id: '${gwId}/advancedRoutingMaps/${abMapName}'
+            id: '${gwId}/advancedRoutingMaps/${flagMapName}'
           }
         }
       }

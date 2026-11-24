@@ -42,7 +42,7 @@ The diagrams are from Microsoft Learn: [Advanced load balancing on Azure Applica
 | `backend/pools.conf` | Pool name, port, label, and color for VM 1. Five pools (ports 8080–8083, 8085) |
 | `backend/pools-canary.conf` | Pool definition for canary VM 2 (`pool-canary`, port 8080) |
 | `deploy/deploy.sh` | Creates the resource group and deploys `deploy/main.bicep`. Generates an SSH key if there is none |
-| `deploy/main.bicep` | VNet, backend VM 1 (five pools), canary VM 2 (`pool-canary`, 8080), NAT gateway, WAF policy, Application Gateway, and four listeners, each with an advanced rule and its own routing map: `rule1` / `advancedRoutingMap1` (port 80), `rule-canary` / `canaryMap` (port 8080), `rule-priority` / `priorityMap` (port 8090), `rule-ab` / `abMap` (port 8100) |
+| `deploy/main.bicep` | VNet, backend VM 1 (five pools), canary VM 2 (`pool-canary`, 8080), NAT gateway, WAF policy, Application Gateway, and four listeners, each with an advanced rule and its own routing map: `rule1` / `advancedRoutingMap1` (port 80), `rule-canary` / `canaryMap` (port 8080), `rule-priority` / `priorityMap` (port 8090), `rule-flag` / `flagMap` (port 8100) |
 | `deploy/make-cloud-init.sh` / `cloud-init.yaml` | Bootstrap data for backend VM 1 (embeds `backend/server.js`) |
 | `deploy/cloud-init-canary.yaml` | Bootstrap data for canary VM 2 (generated from `backend/pools-canary.conf`) |
 | `deploy/canary-check.sh` | Sends 100 consecutive requests to one URI and prints the count and share per pool from `x-backend-pool`. For the canary use `FRONTEND=<IP>:8080` |
@@ -69,7 +69,7 @@ Deployment uses Bicep (`main.bicep`, ARM API `Microsoft.Network/applicationGatew
 | 80 | `rule1` / `advancedRoutingMap1` | Condition-based routing: header, path, query string, and User-Agent rules, a redirect, and a default pool (`pool-web`) |
 | 8080 | `rule-canary` / `canaryMap` | Canary: weighted distribution, `pool-web` 90% / `pool-canary` 10% |
 | 8090 | `rule-priority` / `priorityMap` | Priority-based selection: `pool-primary` first, `pool-standby` when the primary is unhealthy |
-| 8100 | `rule-ab` / `abMap` | A/B test: `X-Variant: B` goes to `pool-B`, everything else to `pool-A` |
+| 8100 | `rule-flag` / `flagMap` | Feature flag: `X-Feature: new` goes to `pool-flag-on`, everything else to `pool-flag-off` |
 
 ### Canary (port 8080)
 
@@ -100,11 +100,13 @@ The rule `rule-priority` (Advanced, priority 300) uses the map `priorityMap`. In
 - Stop and restore by hand: `az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"` stops VM 2's process. The switch takes about 2–3 minutes. `systemctl start agw-pool@pool-canary` restores it, and requests go to `pool-primary` again.
 - The simulator's "Test requests" button sends the chosen number of requests to the port of the selected request and counts which pool answered, using the Primary / Standby names. The results appear under "Real response". A request with no response within 10 seconds is counted as failed.
 
-### A/B test (port 8100)
+### Feature flag (port 8100)
 
-Requests with `X-Variant: B` go to `pool-B` (variant B, VM 2 port 8080). Everything else goes to the default `pool-A` (variant A, VM 1 port 8080). Check: `curl -H "X-Variant: B" http://<FRONTEND-IP>:8100/`
+The client turns the flag on with a header. Requests with `X-Feature: new` go to `pool-flag-on` (VM 2 port 8080). Everything else goes to the default `pool-flag-off` (VM 1 port 8080). Check: `curl -H "X-Feature: new" http://<FRONTEND-IP>:8100/`
 
-`pool-primary`, `pool-standby`, `pool-A`, and `pool-B` are gateway pools that point at the existing processes, so the `x-backend-pool` header shows the process name: `pool-canary` for VM 2 and `pool-web` for VM 1.
+This is not an A/B test: the client chooses, and there is no random split. A statistical A/B test is tracked in issue #27.
+
+`pool-primary`, `pool-standby`, `pool-flag-off`, and `pool-flag-on` are gateway pools that point at the existing processes, so the `x-backend-pool` header shows the process name: `pool-canary` for VM 2 and `pool-web` for VM 1.
 
 ## Notes
 

@@ -41,7 +41,7 @@ https://learn.microsoft.com/ja-jp/azure/application-gateway/advanced-rules
 | `backend/pools.conf` | VM1 (バックエンド) のプール名・ポート・表示名・色。5 プール (ポート 8080–8083、8085) |
 | `backend/pools-canary.conf` | カナリア VM2 のプール定義 (`pool-canary`、ポート 8080) |
 | `deploy/deploy.sh` | リソースグループを作成し、`deploy/main.bicep` をデプロイ。SSH 鍵がなければ生成 |
-| `deploy/main.bicep` | VNet、バックエンド VM 1 (5 プール)、カナリア VM 2 (`pool-canary`、8080)、WAF ポリシー、App Gateway、NAT Gateway、4 つのリスナーと、それぞれの高度なルールとマップを作成: `rule1` / `advancedRoutingMap1` (ポート 80)、`rule-canary` / `canaryMap` (ポート 8080)、`rule-priority` / `priorityMap` (ポート 8090)、`rule-ab` / `abMap` (ポート 8100) |
+| `deploy/main.bicep` | VNet、バックエンド VM 1 (5 プール)、カナリア VM 2 (`pool-canary`、8080)、WAF ポリシー、App Gateway、NAT Gateway、4 つのリスナーと、それぞれの高度なルールとマップを作成: `rule1` / `advancedRoutingMap1` (ポート 80)、`rule-canary` / `canaryMap` (ポート 8080)、`rule-priority` / `priorityMap` (ポート 8090)、`rule-flag` / `flagMap` (ポート 8100) |
 | `deploy/make-cloud-init.sh` / `cloud-init.yaml` | バックエンド VM 1 の初期化データ (`backend/server.js` を埋め込み) |
 | `deploy/cloud-init-canary.yaml` | カナリア VM 2 の初期化データ (`backend/pools-canary.conf` から生成) |
 | `deploy/canary-check.sh` | 指定した URI に 100 回連続で送り、x-backend-pool でプール別の件数と割合を表示。カナリアは `FRONTEND=<IP>:8080` |
@@ -76,7 +76,7 @@ FRONTEND=<表示されたフロントエンド IP>:8080 ./canary-check.sh /app/h
                        pool-web (VM1 :8080)        pool-canary (VM2 :8080)
                        既存バージョン                新バージョン
   ```
-- A/B テスト (ポート 8100、#27、マップ `abMap`): `X-Variant: B` を付けた要求は `pool-B` (変種 B、VM 2 の 8080 番) に送ります。それ以外は既定の `pool-A` (変種 A、VM 1 の 8080 番) です。確認: `curl -H "X-Variant: B" http://<FRONTEND-IP>:8100/`。
+- 機能フラグ (Feature flag、ポート 8100、マップ `flagMap`): クライアントがヘッダーでフラグをオンにします。`X-Feature: new` を付けた要求は `pool-flag-on` (VM 2 の 8080 番) に送ります。それ以外は既定の `pool-flag-off` (VM 1 の 8080 番) です。確認: `curl -H "X-Feature: new" http://<FRONTEND-IP>:8100/`。クライアントが選ぶ方式で、ランダムには分けないため、A/B テストではありません。統計的な A/B テストは #27 で扱います。
 - デプロイは Bicep (`main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。Azure CLI 2.87.0 には advanced-routing 用のコマンド (`az network application-gateway advanced-routing-map` など) がないため、CLI では作成できません。
 - ARM API の確認 (2026-11-20): 現在の template は 2026-03-01 / 2026-05-01 / 2026-07-01 のすべてで検証に成功します。高度なルールは、単一プール (`backendAddressPool`) と複数プール (`backendAddressPoolsAndSettings` + `poolSelectionAlgorithm`) のどちらも指定できます。`loadDistributionPolicy` だけを指定すると、ARM は `ApplicationGatewayAdvancedRoutingRuleMustReference` で拒否します。Bicep 0.49.2 は `loadDistributionPolicy` を BCP037 で指摘します。
 - 完了まで 15〜20 分程度かかります (Application Gateway の作成と更新に時間がかかるため)。
