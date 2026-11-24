@@ -1,10 +1,17 @@
 <!doctype html>
-<html lang="ja" dir="ltr">
+<html lang="en" dir="ltr">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Application Gateway Advanced Routing デモ環境 構築ガイド</title>
+<script>
+// Language: ?lang=ja|en wins; otherwise Japanese only when the browser language is ja*. This file is the "en" version.
+(function(){var me="en",other="agw-advanced-routing-demo-guide_ja.html";
+var q=new URLSearchParams(location.search).get("lang"),chosen=q==="ja"||q==="en";
+var want=chosen?q:((navigator.language||"en").toLowerCase().indexOf("ja")===0?"ja":"en");
+if(want!==me)location.replace(other+(chosen?"?lang="+q:"")+location.hash)})();
+</script>
+<title>Application Gateway Advanced Routing demo environment — build guide</title>
 <style>
-/* Blog theme (Jekyll blog-theme の配色・書体を適用) */
+/* Blog theme (colors and typefaces of the Jekyll blog-theme) */
 :root{
   --bg:#faf8f3;--fg:#191919;--muted:rgba(25,25,25,.66);
   --line:rgba(25,25,25,.30);--line-soft:rgba(25,25,25,.16);
@@ -60,45 +67,45 @@ svg .l{text-anchor:start}
 </style></head>
 <body><main>
 <header>
-<p class="meta"><a href="https://github.com/koudaiii/agw-advanced-routing-demo">GitHub: koudaiii/agw-advanced-routing-demo</a></p>
-<p class="eyebrow">構築ガイド</p>
-<h1>Application Gateway Advanced Routing デモ環境</h1>
-<p class="lead">シミュレーター アプリをフロントエンド (説明と操作の画面) とし、実際の Application Gateway とバックエンドを組み合わせて、Advanced routing rules (プレビュー) を実機でデモするための手順です。</p>
-<p class="meta">関連: <a href="../agw-routing-simulator.html">シミュレーター</a></p>
-<p class="meta">対象ファイル: <code>agw-advanced-routing-demo/</code> ・ シミュレーター: App Gateway Routing Simulator ・ 作成日: 2026-11-18</p>
+<p class="meta"><a href="https://github.com/koudaiii/agw-advanced-routing-demo">GitHub: koudaiii/agw-advanced-routing-demo</a> · English | <a href="agw-advanced-routing-demo-guide_ja.html?lang=ja" lang="ja" hreflang="ja">日本語</a></p>
+<p class="eyebrow">Build guide</p>
+<h1>Application Gateway Advanced Routing demo environment</h1>
+<p class="lead">How to demonstrate Advanced routing rules (preview) on a real gateway: the simulator is the front end that explains and drives the demo, and a real Application Gateway with backends answers the requests.</p>
+<p class="meta">Related: <a href="../agw-routing-simulator.html?lang=en">Simulator</a></p>
+<p class="meta">Repository: <code>agw-advanced-routing-demo/</code> · Simulator: App Gateway Routing Simulator · Created: 2026-11-18</p>
 </header>
 
-<nav aria-label="目次"><h2>目次</h2><ol>
-<li><a href="#arch">全体構成</a></li><li><a href="#prereq">前提条件</a></li><li><a href="#backend">バックエンドの作り方</a></li>
-<li><a href="#agw">Application Gateway の構築</a></li><li><a href="#front">シミュレーターをフロントエンドにする</a></li>
-<li><a href="#demo">デモの進め方</a></li><li><a href="#trouble">トラブルシューティング</a></li><li><a href="#notes">制約・注意事項</a></li><li><a href="#cleanup">後片付け</a></li></ol></nav>
+<nav aria-label="Contents"><h2>Contents</h2><ol>
+<li><a href="#arch">Architecture</a></li><li><a href="#prereq">Prerequisites</a></li><li><a href="#backend">How the backend is built</a></li>
+<li><a href="#agw">Building the Application Gateway</a></li><li><a href="#front">Using the simulator as the front end</a></li>
+<li><a href="#demo">Running the demo</a></li><li><a href="#trouble">Troubleshooting</a></li><li><a href="#notes">Limits and notes</a></li><li><a href="#cleanup">Cleanup</a></li></ol></nav>
 
-<section id="arch"><h2>1. 全体構成</h2>
+<section id="arch"><h2>1. Architecture</h2>
 
 <figure class="diagram">
 <svg viewBox="0 0 960 460" role="img" aria-labelledby="dg-t dg-d">
-<title id="dg-t">デモ環境の全体構成</title>
-<desc id="dg-d">シミュレーター、デモ端末、Public IP (リスナー :80 / :8080 / :8090 / :8100)、WAF、ポートごとのルーティングマップ (advancedRoutingMap1 / canaryMap / priorityMap / abMap)、VM 1 (pool-web、pool-partner、pool-tenant、pool-api-v2、pool-mobile、pool-standby、pool-A) と VM 2 (pool-canary、pool-primary、pool-B) の関係</desc>
+<title id="dg-t">Overall architecture of the demo environment</title>
+<desc id="dg-d">Simulator, demo client, public IP (listeners :80 / :8080 / :8090 / :8100), WAF, one routing map per port (advancedRoutingMap1 / canaryMap / priorityMap / abMap), VM 1 (pool-web, pool-partner, pool-tenant, pool-api-v2, pool-mobile, pool-standby, pool-A) and VM 2 (pool-canary, pool-primary, pool-B)</desc>
 <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="ink"/></marker></defs>
 <rect x="10" y="20" width="190" height="110" rx="8" class="box"/>
-<text x="105" y="46" class="h">シミュレーター</text>
-<text x="105" y="66">(フロントエンド / App Builder)</text>
-<text x="105" y="88">ルール判定・経路図</text>
-<text x="105" y="106">テスト要求 (件数分を実機へ)</text>
+<text x="105" y="46" class="h">Simulator</text>
+<text x="105" y="66">(front end / standalone HTML)</text>
+<text x="105" y="88">Rule evaluation, route diagram</text>
+<text x="105" y="106">Test requests (to the real gateway)</text>
 <rect x="10" y="180" width="190" height="80" rx="8" class="box"/>
-<text x="105" y="206" class="h">デモ端末</text>
-<text x="105" y="226">curl / ブラウザー</text>
-<text x="105" y="244">(送信元 IP)</text>
+<text x="105" y="206" class="h">Demo client</text>
+<text x="105" y="226">curl / browser</text>
+<text x="105" y="244">(source IP)</text>
 <path d="M105 130 V175" class="ln dash" marker-end="url(#ar)" stroke-dasharray="6 5"/>
-<text x="113" y="158" class="l">curl をコピー</text>
+<text x="113" y="158" class="l">copy the curl command</text>
 <rect x="250" y="20" width="160" height="240" rx="8" class="box"/>
 <text x="330" y="44" class="h">Public IP</text>
 <text x="330" y="64">Application Gateway</text>
-<text x="330" y="92">リスナー :80 (Basic)</text>
-<text x="330" y="110">リスナー :8080 (Basic)</text>
-<text x="330" y="128">リスナー :8090 (Basic)</text>
-<text x="330" y="146">リスナー :8100 (Basic)</text>
-<text x="330" y="170" class="h">Advanced ルール</text>
+<text x="330" y="92">Listener :80 (Basic)</text>
+<text x="330" y="110">Listener :8080 (Basic)</text>
+<text x="330" y="128">Listener :8090 (Basic)</text>
+<text x="330" y="146">Listener :8100 (Basic)</text>
+<text x="330" y="170" class="h">Advanced rules</text>
 <text x="330" y="190">rule1 → :80</text>
 <text x="330" y="208">rule-canary → :8080</text>
 <text x="330" y="226">rule-priority → :8090</text>
@@ -106,19 +113,19 @@ svg .l{text-anchor:start}
 <path d="M200 210 H245" class="ln" marker-end="url(#ar)"/>
 <rect x="450" y="70" width="120" height="110" rx="8" class="box"/>
 <text x="510" y="96" class="h">WAF</text>
-<text x="510" y="116">ポリシー有効</text>
+<text x="510" y="116">Policy enabled</text>
 <text x="510" y="134">BlockDemoIp</text>
 <text x="510" y="152">BlockDemoUA</text>
-<text x="510" y="170">(ルーティング前)</text>
+<text x="510" y="170">(before routing)</text>
 <path d="M410 125 H445" class="ln" marker-end="url(#ar)"/>
 <rect x="600" y="10" width="150" height="70" rx="8" class="box"/>
 <text x="675" y="30" class="h">Routing map :80</text>
 <text x="675" y="50">advancedRoutingMap1</text>
-<text x="675" y="68">既定: pool-web</text>
+<text x="675" y="68">default: pool-web</text>
 <rect x="600" y="100" width="150" height="70" rx="8" class="box"/>
 <text x="675" y="120" class="h">canaryMap :8080</text>
 <text x="675" y="140">canary-split 90 : 10</text>
-<text x="675" y="158">既定: pool-canary</text>
+<text x="675" y="158">default: pool-canary</text>
 <rect x="600" y="190" width="150" height="70" rx="8" class="box"/>
 <text x="675" y="210" class="h">priorityMap :8090</text>
 <text x="675" y="230">priority-split</text>
@@ -126,7 +133,7 @@ svg .l{text-anchor:start}
 <rect x="600" y="280" width="150" height="70" rx="8" class="box"/>
 <text x="675" y="300" class="h">abMap :8100</text>
 <text x="675" y="320">ab-variant-b (X-Variant: B)</text>
-<text x="675" y="338">既定: pool-A</text>
+<text x="675" y="338">default: pool-A</text>
 <path d="M570 125 L600 45" class="ln" marker-end="url(#ar)"/>
 <path d="M570 125 H600" class="ln" marker-end="url(#ar)"/>
 <path d="M570 125 L600 225" class="ln" marker-end="url(#ar)"/>
@@ -142,7 +149,7 @@ svg .l{text-anchor:start}
 <text x="875" y="180" class="m">pool-standby :8080</text>
 <text x="875" y="198">← :8090 Standby</text>
 <text x="875" y="220" class="m">pool-A :8080</text>
-<text x="875" y="238">← :8100 変種 A</text>
+<text x="875" y="238">← :8100 variant A</text>
 <rect x="800" y="280" width="150" height="170" rx="8" class="box" style="fill:none;stroke-dasharray:6 4"/>
 <text x="875" y="300" class="h">VM 2</text>
 <text x="875" y="316">192.168.1.11</text>
@@ -150,7 +157,7 @@ svg .l{text-anchor:start}
 <text x="875" y="364" class="m">pool-primary :8080</text>
 <text x="875" y="382">← :8090 Primary</text>
 <text x="875" y="404" class="m">pool-B :8080</text>
-<text x="875" y="422">← :8100 変種 B</text>
+<text x="875" y="422">← :8100 variant B</text>
 <path d="M750 45 C775 45,775 120,800 120" class="ln" marker-end="url(#ar)"/>
 <path d="M750 135 C775 135,775 70,800 70" class="ln" marker-end="url(#ar)"/>
 <path d="M750 135 C775 135,775 342,800 342" class="ln" marker-end="url(#ar)"/>
@@ -158,61 +165,63 @@ svg .l{text-anchor:start}
 <path d="M750 225 C775 225,775 364,800 364" class="ln" marker-end="url(#ar)"/>
 <path d="M750 315 C775 315,775 220,800 220" class="ln" marker-end="url(#ar)"/>
 <path d="M750 315 C775 315,775 404,800 404" class="ln" marker-end="url(#ar)"/>
-<text x="10" y="300" class="l">実線: 通信。点線: 設定・操作の対応関係。</text>
-<text x="10" y="318" class="l">VM 2 の pool-canary を止めると、8090 番は Standby (VM 1) に切り替わる。</text>
-<text x="10" y="336" class="l">8080 番は、pool-web (VM 1) 90% と pool-canary (VM 2) 10%。</text>
-<text x="10" y="354" class="l">8100 番 (A/B): X-Variant: B → pool-B (VM 2)、それ以外 → pool-A (VM 1)。</text>
+<text x="10" y="300" class="l">Solid line: traffic. Dashed line: what the operator does.</text>
+<text x="10" y="318" class="l">Stop pool-canary on VM 2 and port 8090 switches to Standby (VM 1).</text>
+<text x="10" y="336" class="l">Port 8080: pool-web (VM 1) 90% and pool-canary (VM 2) 10%.</text>
+<text x="10" y="354" class="l">Port 8100 (A/B): X-Variant: B → pool-B (VM 2), otherwise pool-A (VM 1).</text>
 </svg>
-<figcaption>図 1. 構成。VM 1 と VM 2 は枠で分けています。実線は実際の通信、点線は設定・操作の対応関係。</figcaption>
+<figcaption>Figure 1. Architecture. VM 1 and VM 2 are drawn as separate frames. Solid lines are real traffic; dashed lines show what the operator does.</figcaption>
 </figure>
-<table><thead><tr><th scope="col">要素</th><th scope="col">役割</th><th scope="col">実体</th></tr></thead><tbody>
-<tr><td>シミュレーター</td><td>ルールの評価順・AND/OR・WAF の位置を図で説明し、同じ要求を実機に送る curl を生成する</td><td>App Builder アプリ (ブラウザー内で判定)</td></tr>
-<tr><td>Application Gateway</td><td>Advanced ルール (:80): リスナー → WAF → Advanced routing map (<code>advancedRoutingMap1</code>) → バックエンド プール / リダイレクト。ポート 8080 のリスナーは Advanced ルール <code>rule-canary</code> → マップ <code>canaryMap</code> で、pool-web 90% / pool-canary 10% に重み付けして振り分け</td><td>WAF_v2、容量 1</td></tr>
-<tr><td>バックエンド</td><td>どのプールが応答したか・受信ヘッダーを表示する</td><td>VM 1: Node.js プロセス × 5 (ポート 8080–8083、8085)。VM 2: カナリア (ポート 8080)</td></tr>
+<table><thead><tr><th scope="col">Part</th><th scope="col">Role</th><th scope="col">What it is</th></tr></thead><tbody>
+<tr><td>Simulator</td><td>Shows the evaluation order of the rules, AND/OR, and where WAF sits. Generates the curl command that sends the same request to the real gateway, or sends it directly</td><td>Standalone HTML (evaluates in the browser)</td></tr>
+<tr><td>Application Gateway</td><td>Port 80: listener → WAF → advanced routing map (<code>advancedRoutingMap1</code>) → backend pool or redirect. Port 8080: <code>rule-canary</code> → <code>canaryMap</code> (weighted, pool-web 90% / pool-canary 10%). Port 8090: <code>rule-priority</code> → <code>priorityMap</code> (priority-based). Port 8100: <code>rule-ab</code> → <code>abMap</code> (A/B test)</td><td>WAF_v2, capacity 1</td></tr>
+<tr><td>Backend</td><td>Shows which pool answered and the request headers it received</td><td>VM 1: five Node.js processes (ports 8080–8083, 8085). VM 2: canary (port 8080)</td></tr>
 </tbody></table>
-<p class="note">VM 1 の 5 プールは、同じ VM の別ポートを指します。カナリア (pool-canary) は VM 2 に分けています。pool-web (VM 1 の 8080 番) と同じポートで別の応答を返すため、IP アドレスを分けています。VM 2 を別ポートにできるかは未検証です。</p>
+<p class="note">The five pools of VM 1 are different ports on the same VM. The canary (pool-canary) is on VM 2: it answers differently from pool-web (VM 1, port 8080) on the same port, so it needs its own IP address. Whether VM 2 could use a different port instead has not been tested.</p>
 </section>
 
-<section id="prereq"><h2>2. 前提条件</h2><ul>
-<li>Azure サブスクリプションと、リソース グループを作成できる権限</li>
-<li>Azure CLI (<code>az login</code> 済み)。高度なルールは CLI (2.87.0 時点) では作れないため、ガイドのデプロイは Bicep で行う (Bicep は <code>az</code> に同梱)</li>
-<li>bash 環境 (Azure Cloud Shell で可)。SSH 鍵 (<code>~/.ssh/id_ed25519.pub</code>) がなければ <code>deploy.sh</code> が自動作成</li>
-<li>WAF_v2 の Application Gateway は稼働時間で課金されます。デモ後は<a href="#cleanup">後片付け</a>を実施してください</li></ul>
+<section id="prereq"><h2>2. Prerequisites</h2><ul>
+<li>An Azure subscription and permission to create a resource group</li>
+<li>Azure CLI (signed in with <code>az login</code>). The CLI (2.87.0) cannot create advanced rules, so this guide deploys with Bicep (Bicep comes with <code>az</code>)</li>
+<li>A bash environment (Azure Cloud Shell works). <code>deploy.sh</code> creates an SSH key (<code>~/.ssh/id_ed25519.pub</code>) when there is none</li>
+<li>A WAF_v2 Application Gateway is billed while it runs. Do the <a href="#cleanup">cleanup</a> after the demo</li></ul>
 </section>
 
-<section id="backend"><h2>3. バックエンドの作り方</h2>
-<h3>3.1 設計方針</h3><ul>
-<li><strong>どのプールが応答したかが一目で分かる</strong>: プール名を大きく表示し、プールごとに色を変える。応答ヘッダー <code>x-backend-pool</code> にも入れて curl で判定できるようにする</li>
-<li><strong>ゲートウェイを通った証拠を見せる</strong>: 受信ヘッダーを全件表示し、App Gateway が付与する <code>x-forwarded-for</code> / <code>x-forwarded-proto</code> / <code>x-forwarded-port</code> / <code>x-original-host</code> などを強調</li>
-<li><strong>1 ファイル・依存なし</strong>: Node.js 標準モジュールのみ。プールの違いは環境変数だけで表現</li>
-<li><strong>ヘルス プローブ用エンドポイント</strong>: <code>/healthz</code> が 200 を返す</li>
-<li><strong>安全な表示</strong>: 受信値はすべて HTML エスケープして表示 (ヘッダー経由の注入を防ぐ)</li></ul>
+<section id="backend"><h2>3. How the backend is built</h2>
+<h3>3.1 Design</h3><ul>
+<li><strong>You can see at a glance which pool answered</strong>: the page shows the pool name in large type, in a different color per pool. The name is also in the <code>x-backend-pool</code> response header, so curl can check it</li>
+<li><strong>It proves the request went through the gateway</strong>: the page lists every request header and highlights the ones Application Gateway adds, such as <code>x-forwarded-for</code>, <code>x-forwarded-proto</code>, <code>x-forwarded-port</code>, and <code>x-original-host</code></li>
+<li><strong>One file, no dependencies</strong>: Node.js standard modules only. Pools differ only in environment variables</li>
+<li><strong>Health probe endpoint</strong>: <code>/healthz</code> returns 200</li>
+<li><strong>Safe output</strong>: every received value is HTML-escaped before it is shown (no injection through headers)</li></ul>
 
-<h3>3.2 エンドポイント</h3>
-<table><thead><tr><th scope="col">パス</th><th scope="col">応答</th></tr></thead><tbody>
-<tr><td><code>/healthz</code></td><td>200 <code>ok</code> (App Gateway のプローブ用)</td></tr>
-<tr><td>任意のパス</td><td>HTML: プール名・インスタンス・Method・Path・Query・受信ヘッダー一覧</td></tr>
-<tr><td>任意のパス <code>?format=json</code> または <code>Accept: application/json</code></td><td>同じ内容の JSON</td></tr>
+<h3>3.2 Endpoints</h3>
+<table><thead><tr><th scope="col">Path</th><th scope="col">Response</th></tr></thead><tbody>
+<tr><td><code>/healthz</code></td><td>200 <code>ok</code> (for the Application Gateway probe)</td></tr>
+<tr><td>Any path</td><td>HTML: pool name, instance, method, path, query, and the request headers</td></tr>
+<tr><td>Any path with <code>?format=json</code> or <code>Accept: application/json</code></td><td>The same content as JSON</td></tr>
 </tbody></table>
 
-<h3>3.3 プール定義 (<code>backend/pools.conf</code>)</h3>
+<h3>3.3 Pool definitions (<code>backend/pools.conf</code>)</h3>
 <pre><code># name|port|label|color  (one Node.js process per line on the backend VM)
-pool-web|8080|Web (既定)|#334155
-pool-partner|8081|パートナー専用|#7c2d12
-pool-tenant|8082|テナント専用|#0f766e
+pool-web|8080|Web (default)|#334155
+pool-partner|8081|Partner|#7c2d12
+pool-tenant|8082|Tenant|#0f766e
 pool-api-v2|8083|Orders API v2|#1d4ed8
-pool-mobile|8085|モバイル|#7e22ce</code></pre>
-<p>シミュレーターのプール一覧と同じ名前・色にそろえているため、シミュレーターの「応答」パネルと実機のページが同じ見た目になります。</p>
-<p><code>pools.conf</code> は、VM 上で動く Node.js プロセス (待ち受けるポート) の定義です。ポート 8090 は、Application Gateway のリスナーのポートで、バックエンドのプロセスは 8090 番を待ち受けません。優先度ベース (8090) は、次のゲートウェイのプールを使い、それぞれ既存のプロセス (8080 番) を指します。</p>
-<table><thead><tr><th scope="col">ゲートウェイのプール</th><th scope="col">指す先 (VM とプロセス)</th><th scope="col">使われる場面</th></tr></thead><tbody>
-<tr><td><code>pool-primary</code></td><td>VM 2 (192.168.1.11) の <code>pool-canary</code> プロセス (:8080)</td><td>:8090 の優先度 1 (Primary)</td></tr>
-<tr><td><code>pool-standby</code></td><td>VM 1 (192.168.1.10) の <code>pool-web</code> プロセス (:8080)</td><td>:8090 の優先度 2 (Standby)、既定</td></tr>
-<tr><td><code>pool-web</code></td><td>VM 1 の <code>pool-web</code> プロセス (:8080)</td><td>:80 の既定、:8080 のカナリア 90%</td></tr>
-<tr><td><code>pool-canary</code></td><td>VM 2 の <code>pool-canary</code> プロセス (:8080)</td><td>:8080 のカナリア 10%、:80 の変種 B (<code>X-Variant: B</code>)</td></tr>
+pool-mobile|8085|Mobile|#7e22ce</code></pre>
+<p>The names and colors are the same as in the simulator's pool list, so the simulator's "Response" panel and the real page look alike.</p>
+<p><code>pools.conf</code> defines the Node.js processes on the VM and the ports they listen on. Ports 8090 and 8100 are listener ports of the Application Gateway; no backend process listens on them. Priority-based selection (8090) and the A/B test (8100) use the gateway pools below, which point at the existing processes on port 8080.</p>
+<table><thead><tr><th scope="col">Gateway pool</th><th scope="col">Points at (VM and process)</th><th scope="col">Used for</th></tr></thead><tbody>
+<tr><td><code>pool-primary</code></td><td>The <code>pool-canary</code> process on VM 2 (192.168.1.11), port 8080</td><td>Priority 1 (Primary) on :8090</td></tr>
+<tr><td><code>pool-standby</code></td><td>The <code>pool-web</code> process on VM 1 (192.168.1.10), port 8080</td><td>Priority 2 (Standby) and default on :8090</td></tr>
+<tr><td><code>pool-web</code></td><td>The <code>pool-web</code> process on VM 1, port 8080</td><td>Default on :80, 90% of the canary on :8080</td></tr>
+<tr><td><code>pool-canary</code></td><td>The <code>pool-canary</code> process on VM 2, port 8080</td><td>10% of the canary on :8080</td></tr>
+<tr><td><code>pool-A</code></td><td>The <code>pool-web</code> process on VM 1, port 8080</td><td>Variant A (default) on :8100</td></tr>
+<tr><td><code>pool-B</code></td><td>The <code>pool-canary</code> process on VM 2, port 8080</td><td>Variant B (<code>X-Variant: B</code>) on :8100</td></tr>
 </tbody></table>
 
-<h3>3.4 サーバー本体 (<code>backend/server.js</code>) の要点</h3>
-<p><code>backend/server.js</code> の抜粋です (環境変数の読み取り、CORS、リクエストの処理)。</p>
+<h3>3.4 The server (<code>backend/server.js</code>)</h3>
+<p>An excerpt of <code>backend/server.js</code>: reading the environment variables, CORS, and handling a request.</p>
 <pre><code>const POOL_NAME = process.env.POOL_NAME || "pool-web";
 const POOL_LABEL = process.env.POOL_LABEL || POOL_NAME;
 const POOL_COLOR = /^#[0-9a-fA-F]{6}$/.test(process.env.POOL_COLOR || "") ? process.env.POOL_COLOR : "#334155";
@@ -230,7 +239,7 @@ function cors(res) {
   res.setHeader("access-control-expose-headers", "x-backend-pool");
   res.setHeader("access-control-max-age", "0"); // preflight is routed too; do not cache it
 }
-// ... (中略: ヘッダー名の定義、page() の HTML 生成) ...
+// ... (omitted: header names, page() that builds the HTML) ...
 http
   .createServer((req, res) =&gt; {
     cors(res);
@@ -254,51 +263,52 @@ http
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     res.end(page(s));
   })</code></pre>
-<p>ローカル確認:</p>
-<pre><code>POOL_NAME=pool-tenant POOL_LABEL=&quot;テナント専用&quot; POOL_COLOR=&quot;#0f766e&quot; PORT=8082 node backend/server.js
-curl -i -H &quot;X-Tenant-Id: customer-1024&quot; http://localhost:8082/app/dashboard</code></pre>
+<p>Try it locally:</p>
+<pre><code>POOL_NAME=pool-tenant POOL_LABEL="Tenant" POOL_COLOR="#0f766e" PORT=8082 node backend/server.js
+curl -i -H "X-Tenant-Id: customer-1024" http://localhost:8082/app/dashboard</code></pre>
 
-<h3>3.5 VM への配置 (cloud-init + systemd)</h3>
-<p><code>deploy/make-cloud-init.sh</code> が、VM ごとに 2 つの初期化ファイルを生成します (<code>deploy.sh</code> が実行します)。引数で入力 (プール定義) と出力ファイルを指定します。</p><ul><li><code>cloud-init.yaml</code>: VM 1 用。<code>backend/pools.conf</code> の 5 プール (ポート 8080–8083、8085)</li><li><code>cloud-init-canary.yaml</code>: VM 2 用 (カナリア)。<code>backend/pools-canary.conf</code> の <code>pool-canary</code> (ポート 8080)</li></ul><p>どちらも中身は次の 3 点です。</p><ol>
-<li>Node.js をインストールし、<code>server.js</code> を <code>/opt/agw-demo/</code> に配置 (base64 埋め込み)</li>
-<li>テンプレート ユニット <code>agw-pool@.service</code> を作成 (<code>DynamicUser=yes</code> で専用ユーザーなしに実行)</li>
-<li>プールごとに <code>/etc/agw-demo/&lt;pool&gt;.env</code> を作り、<code>systemctl enable --now agw-pool@&lt;pool&gt;</code></li></ol>
+<h3>3.5 Putting it on the VMs (cloud-init + systemd)</h3>
+<p><code>deploy/make-cloud-init.sh</code> generates one bootstrap file per VM (<code>deploy.sh</code> runs it). Its arguments are the input (pool definitions) and the output file.</p><ul><li><code>cloud-init.yaml</code>: for VM 1. The five pools of <code>backend/pools.conf</code> (ports 8080–8083, 8085)</li><li><code>cloud-init-canary.yaml</code>: for VM 2 (canary). <code>pool-canary</code> (port 8080) from <code>backend/pools-canary.conf</code></li></ul><p>Both do these three things.</p><ol>
+<li>Install Node.js and put <code>server.js</code> in <code>/opt/agw-demo/</code> (embedded as base64)</li>
+<li>Create the template unit <code>agw-pool@.service</code> (<code>DynamicUser=yes</code> runs it without a dedicated user)</li>
+<li>Create <code>/etc/agw-demo/&lt;pool&gt;.env</code> per pool and run <code>systemctl enable --now agw-pool@&lt;pool&gt;</code></li></ol>
 <pre><code>[Service]
 EnvironmentFile=/etc/agw-demo/%i.env
 ExecStart=/usr/bin/node /opt/agw-demo/server.js
 Restart=always
 DynamicUser=yes</code></pre>
-<p class="note">バックエンド VM にはパブリック IP を付けません。外向き通信 (パッケージ取得など) は NAT Gateway 経由です。受信は NSG の既定ルールで遮断するため、インターネットからバックエンドへ直接は到達できず、App Gateway 経由のみになります。</p>
+<p class="note">The backend VMs have no public IP. Outbound traffic (package downloads and so on) goes through a NAT gateway. Inbound traffic is denied by the NSG default rules, so the internet cannot reach the backends directly; only the Application Gateway can.</p>
 </section>
 
-<section id="agw"><h2>4. Application Gateway の構築</h2>
-<p>手順は <code>deploy/deploy.sh</code> に集約しています。CLI で 1 つずつ作る必要はありません。<code>deploy.sh</code> が <code>deploy/main.bicep</code> のテンプレートをデプロイし、次のリソースをまとめて作成します。</p>
+<section id="agw"><h2>4. Building the Application Gateway</h2>
+<p>Everything is in <code>deploy/deploy.sh</code>. You do not create resources one by one with the CLI. <code>deploy.sh</code> deploys the template <code>deploy/main.bicep</code>, which creates the resources below in one go.</p>
 <pre><code>cd agw-advanced-routing-demo/deploy
-./deploy.sh      # 完了まで 15〜20 分程度</code></pre>
+./deploy.sh      # about 15–20 minutes</code></pre>
 
-<h3>4.1 作成されるリソース</h3>
-<table><thead><tr><th scope="col">リソース</th><th scope="col">内容</th></tr></thead><tbody>
-<tr><td>VNet / サブネット</td><td><code>appgw</code> 192.168.0.0/24 (Application Gateway 専用)、<code>backend</code> 192.168.1.0/24 (NSG 付き)</td></tr>
-<tr><td>バックエンド VM 1</td><td>固定 IP 192.168.1.10。Node.js プロセス × 5 (ポート 8080–8083、8085)。cloud-init で <code>server.js</code> を配置</td></tr>
-<tr><td>カナリア VM 2</td><td>固定 IP 192.168.1.11。Node.js プロセス × 1 (<code>pool-canary</code>、ポート 8080)</td></tr>
-<tr><td>WAF ポリシー</td><td>Prevention、DRS 2.1。カスタムルール <code>BlockDemoIp</code> (送信元 IP)、<code>BlockDemoUA</code> (User-Agent に <code>agw-block-demo</code> を含む要求を遮断)</td></tr>
-<tr><td>NAT Gateway</td><td>backend サブネットに関連付け (StandardV2、専用の StandardV2 public IP)。バックエンド VM の外向き通信 (apt など) に使う。バックエンド VM には public IP を付けず、サブネットはプライベート (既定の外向き IP なし)</td></tr>
-<tr><td>Application Gateway (WAF_v2)</td><td>リスナー <code>listener-http</code> (:80)、<code>listener-canary</code> (:8080)、<code>listener-priority</code> (:8090)、<code>listener-ab</code> (:8100)。ルール <code>rule1</code> (Advanced、:80、マップ <code>advancedRoutingMap1</code>)、<code>rule-canary</code> (Advanced、:8080、マップ <code>canaryMap</code>)、<code>rule-priority</code> (Advanced、:8090、マップ <code>priorityMap</code>)、<code>rule-ab</code> (Advanced、:8100、マップ <code>abMap</code>)</td></tr>
-<tr><td>プローブ・プール・バックエンド設定</td><td>プローブ <code>healthz</code>。プール 6 つ (<code>pool-web</code>、<code>pool-partner</code>、<code>pool-tenant</code>、<code>pool-api-v2</code>、<code>pool-canary</code>、<code>pool-mobile</code>) と、それぞれのバックエンド設定 <code>hs-&lt;pool&gt;</code>。加えて、優先度ベース用の <code>pool-primary</code> / <code>pool-standby</code> と、A/B テスト用の <code>pool-A</code> / <code>pool-B</code> (それぞれ既存の VM のプロセスを指す)</td></tr>
-<tr><td>リダイレクト</td><td><code>redirect-campaign</code>: 302、<code>https://www.contoso.com/campaign</code> へ。クエリ文字列を引き継ぐ</td></tr>
-<tr><td>条件セット</td><td><code>cs-partner</code>、<code>cs-tenant</code>、<code>cs-apiv2</code>、<code>cs-campaign</code>、<code>cs-mobile</code>、<code>cs-ab-variant-b</code> (ポート 8100 の abMap) の 6 つ</td></tr>
-<tr><td>Advanced routing map</td><td><code>advancedRoutingMap1</code>。既定プール <code>pool-web</code>。ルールは優先度順に partner (10)、tenant (20)、api-v2 (30)、campaign (40)、mobile (60)。ポート 8100 のマップ <code>abMap</code> は ab-variant-b (10) → pool-B、既定 pool-A</td></tr>
-<tr><td>カナリアの重み付け</td><td>マップ <code>canaryMap</code> のルール <code>canary-split</code> (パス <code>^/</code> の全リクエスト): pool-web 90 : pool-canary 10 (<code>WeightedDistribution</code>)。マップの既定は pool-canary</td></tr>
-<tr><td>優先度ベースの振り分け (ポート 8090)</td><td>リスナー <code>listener-priority</code> (:8090)、Advanced ルール <code>rule-priority</code> (優先度 300) → マップ <code>priorityMap</code> のルール <code>priority-split</code> (全パス): <code>pool-primary</code> (VM 2、優先度 1) → <code>pool-standby</code> (VM 1、優先度 2)、<code>PriorityAware</code>、最小正常割合 60%。既定は <code>pool-standby</code></td></tr>
+<h3>4.1 Resources that are created</h3>
+<table><thead><tr><th scope="col">Resource</th><th scope="col">Details</th></tr></thead><tbody>
+<tr><td>VNet / subnets</td><td><code>appgw</code> 192.168.0.0/24 (Application Gateway only), <code>backend</code> 192.168.1.0/24 (with an NSG)</td></tr>
+<tr><td>Backend VM 1</td><td>Static IP 192.168.1.10. Five Node.js processes (ports 8080–8083, 8085). cloud-init installs <code>server.js</code></td></tr>
+<tr><td>Canary VM 2</td><td>Static IP 192.168.1.11. One Node.js process (<code>pool-canary</code>, port 8080)</td></tr>
+<tr><td>WAF policy</td><td>Prevention, DRS 2.1. Custom rules <code>BlockDemoIp</code> (source IP) and <code>BlockDemoUA</code> (blocks requests whose User-Agent contains <code>agw-block-demo</code>)</td></tr>
+<tr><td>NAT gateway</td><td>Attached to the backend subnet (StandardV2, with its own StandardV2 public IP). Used for the VMs' outbound traffic (apt and so on). The VMs have no public IP and the subnet is private (no default outbound IP)</td></tr>
+<tr><td>Application Gateway (WAF_v2)</td><td>Listeners <code>listener-http</code> (:80), <code>listener-canary</code> (:8080), <code>listener-priority</code> (:8090), <code>listener-ab</code> (:8100). Rules <code>rule1</code> (Advanced, :80, map <code>advancedRoutingMap1</code>), <code>rule-canary</code> (Advanced, :8080, map <code>canaryMap</code>), <code>rule-priority</code> (Advanced, :8090, map <code>priorityMap</code>), <code>rule-ab</code> (Advanced, :8100, map <code>abMap</code>)</td></tr>
+<tr><td>Probe, pools, backend settings</td><td>Probe <code>healthz</code>. Six pools (<code>pool-web</code>, <code>pool-partner</code>, <code>pool-tenant</code>, <code>pool-api-v2</code>, <code>pool-canary</code>, <code>pool-mobile</code>), each with backend settings <code>hs-&lt;pool&gt;</code>. Plus <code>pool-primary</code> / <code>pool-standby</code> for priority-based selection and <code>pool-A</code> / <code>pool-B</code> for the A/B test (they point at the existing processes)</td></tr>
+<tr><td>Redirect</td><td><code>redirect-campaign</code>: 302 to <code>https://www.contoso.com/campaign</code>. The query string is kept</td></tr>
+<tr><td>Condition sets</td><td>Port 80: <code>cs-partner</code>, <code>cs-tenant</code>, <code>cs-apiv2</code>, <code>cs-campaign</code>, <code>cs-mobile</code>. Port 8080: <code>cs-canary-split</code>. Port 8090: <code>cs-priority-all</code>. Port 8100: <code>cs-ab-variant-b</code></td></tr>
+<tr><td>Advanced routing map (port 80)</td><td><code>advancedRoutingMap1</code>. Default pool <code>pool-web</code>. Rules in priority order: partner (10), tenant (20), api-v2 (30), campaign (40), mobile (60)</td></tr>
+<tr><td>Canary (port 8080)</td><td>Map <code>canaryMap</code>, rule <code>canary-split</code> (path <code>^/</code>, every request): pool-web 90 : pool-canary 10 (<code>WeightedDistribution</code>). The map default is pool-canary</td></tr>
+<tr><td>Priority-based selection (port 8090)</td><td>Map <code>priorityMap</code>, rule <code>priority-split</code> (every path): <code>pool-primary</code> (VM 2, priority 1) → <code>pool-standby</code> (VM 1, priority 2), <code>PriorityAware</code>, minimum healthy percentage 60%. The default is <code>pool-standby</code></td></tr>
+<tr><td>A/B test (port 8100)</td><td>Map <code>abMap</code>, rule <code>ab-variant-b</code> (priority 10, header <code>X-Variant</code> = <code>B</code>) → <code>pool-B</code>. The default is <code>pool-A</code></td></tr>
 </tbody></table>
 <figure class="diagram">
-<img src="https://learn.microsoft.com/azure/application-gateway/media/advanced-load-distribution/pool-selection.png" alt="一致したルールのプールを、重み付け配分と優先度ベース選択のどちらで選ぶかを示す図" style="inline-size:100%;block-size:auto;border:1px solid var(--line-soft);border-radius:16px;background:var(--card)">
-<figcaption>図 2. プール選択 (出典: Microsoft Learn「Advanced load balancing」)。重み付けは比率どおりに振り分け、優先度は優先度 1 のプールが条件を満たす間だけ使う。</figcaption>
+<img src="https://learn.microsoft.com/azure/application-gateway/media/advanced-load-distribution/pool-selection.png" alt="Diagram showing that the pools of the matched rule are chosen by weighted distribution or by priority-based selection" style="inline-size:100%;block-size:auto;border:1px solid var(--line-soft);border-radius:16px;background:var(--card)">
+<figcaption>Figure 2. Pool selection (source: Microsoft Learn, "Advanced load balancing"). Weighted distribution splits traffic by ratio; priority-based selection uses the priority 1 pool only while it qualifies.</figcaption>
 </figure>
 <figure class="diagram"><pre><code>client --:8080--&gt; listener-canary --&gt; rule-canary (Advanced)
                                     |
-                                    v   マップ canaryMap
-                          rule: canary-split  (パス ^/ = 全リクエスト)
+                                    v   map canaryMap
+                          rule: canary-split  (path ^/ = every request)
                                     |   WeightedDistribution
                       +-------------+-------------+
                       |                           |
@@ -306,188 +316,186 @@ DynamicUser=yes</code></pre>
                       |                           |
                       v                           v
              pool-web (VM1 :8080)        pool-canary (VM2 :8080)
-             既存バージョン                新バージョン</code></pre>
-<figcaption>図 3. ポート 8080 のカナリアの流れ。</figcaption>
+             current version             new version</code></pre>
+<figcaption>Figure 3. The canary on port 8080.</figcaption>
 </figure>
 <figure class="diagram"><pre><code>client --:8090--&gt; listener-priority --&gt; rule-priority (Advanced)
                                     |
-                                    v   マップ priorityMap
-                          rule: priority-split  (パス ^/ = 全リクエスト)
-                                    |   PriorityAware (最小正常割合 60%)
+                                    v   map priorityMap
+                          rule: priority-split  (path ^/ = every request)
+                                    |   PriorityAware (minimum healthy 60%)
                       +-------------+-------------+
                       |                           |
                 priority 1 (Primary)        priority 2 (Standby)
                       |                           |
                       v                           v
              pool-primary (VM2 :8080)    pool-standby (VM1 :8080)
-             = VM 2 の pool-canary        = VM 1 の pool-web
-             正常ならここへ              Primary が条件を満たさないとき</code></pre>
-<figcaption>図 4. ポート 8090 の優先度ベースの流れ (VM 2 が止まると Standby に切り替わる)。</figcaption>
+             = pool-canary on VM 2       = pool-web on VM 1
+             used while healthy          used when the primary
+                                         does not qualify</code></pre>
+<figcaption>Figure 4. Priority-based selection on port 8090 (when VM 2 stops, traffic switches to Standby).</figcaption>
 </figure>
 <figure class="diagram"><pre><code>client --:8100--&gt; listener-ab --&gt; rule-ab (Advanced)
                                     |
-                                    v   マップ abMap
-                          rule: ab-variant-b (ヘッダー X-Variant = B)
+                                    v   map abMap
+                          rule: ab-variant-b (header X-Variant = B)
                                     |
                  +------------------+------------------+
                  |                                     |
-        X-Variant: B (一致)                  それ以外 (既定 = 変種 A)
+        X-Variant: B (match)                 anything else (default = variant A)
                  |                                     |
                  v                                     v
         pool-B (VM2 :8080)                  pool-A (VM1 :8080)
-        = VM 2 の pool-canary               = VM 1 の pool-web
-        変種 B                              変種 A</code></pre>
-<figcaption>図 5. ポート 8100 の A/B テストの流れ (ヘッダー X-Variant で変種を決める)。</figcaption>
+        = pool-canary on VM 2               = pool-web on VM 1
+        variant B                           variant A</code></pre>
+<figcaption>Figure 5. The A/B test on port 8100 (the header X-Variant picks the variant).</figcaption>
 </figure>
 
-<p class="note">Advanced routing rule は Basic リスナーにのみ関連付けできます (マルチサイト リスナーは非対応)。<code>rule1</code> と <code>rule-canary</code> は最初から Advanced で作られるため、後から切り替える手順はありません。</p>
+<p class="note">An advanced routing rule can be attached to a Basic listener only (multisite listeners are not supported). The four rules (<code>rule1</code>, <code>rule-canary</code>, <code>rule-priority</code>, <code>rule-ab</code>) are created as Advanced from the start, so there is no step that converts them later.</p>
 
-
-<h3>4.2 動作確認</h3>
-<p>確認は <code>deploy/test.sh</code> と <code>deploy/canary-check.sh</code> で行います。</p>
-<pre><code>FRONTEND=&lt;フロントエンド IP&gt; ./test.sh
-FRONTEND=&lt;フロントエンド IP&gt;:8080 ./canary-check.sh /app/home 100</code></pre>
-<pre><code>通常アクセス       HTTP 200  pool-web
-テナント           HTTP 200  pool-tenant
-パートナー         HTTP 200  pool-partner
-API v2             HTTP 200  pool-api-v2
-エンコード済み     HTTP 200  pool-api-v2   ← /api%2Forders はデコード後に評価
-カナリア (:8080)   HTTP 200  pool-canary
-キャンペーン       HTTP 302  redirect -&gt; https://www.contoso.com/campaign?...
-モバイル           HTTP 200  pool-mobile
-A/B 変種 A       HTTP 200  pool-web (pool-A)   ← :8100
-A/B 変種 B       HTTP 200  pool-canary (pool-B) ← :8100
-WAF ブロック (UA)  HTTP 403</code></pre>
-<p class="note">上は <code>test.sh</code> の出力の例です。カナリアの行は、8080 番の振り分け (90:10) の 1 回分なので、pool-web と pool-canary のどちらにもなります。</p>
-<h4>優先度ベース (ポート 8090) の確認</h4>
-<p>8090 番は、VM 2 の <code>pool-canary</code> (Primary) を優先し、止まると VM 1 の <code>pool-web</code> (Standby) に切り替わります。<code>canary-check.sh</code> は応答ヘッダーの <code>x-backend-pool</code> (VM 上のプロセス名) を数えるため、Primary は <code>pool-canary</code>、Standby は <code>pool-web</code> と表示されます。</p>
-<pre><code>FRONTEND=&lt;フロントエンド IP&gt;:8090 ./canary-check.sh /app/home 100   # 正常時
-# VM 2 の pool-canary を停止し、2〜3 分待つ
+<h3>4.2 Verification</h3>
+<p>Use <code>deploy/test.sh</code> and <code>deploy/canary-check.sh</code>.</p>
+<pre><code>FRONTEND=&lt;frontend IP&gt; ./test.sh
+FRONTEND=&lt;frontend IP&gt;:8080 ./canary-check.sh /app/home 100</code></pre>
+<pre><code>Default                HTTP 200  pool-web
+Tenant                 HTTP 200  pool-tenant
+Partner                HTTP 200  pool-partner
+API v2                 HTTP 200  pool-api-v2
+Encoded path           HTTP 200  pool-api-v2   ← /api%2Forders is decoded, then evaluated
+Canary (:8080 90:10)   HTTP 200  pool-web
+Campaign               HTTP 302  redirect -&gt; https://www.contoso.com/campaign?...
+A/B variant A          HTTP 200  pool-web      ← :8100 (pool-A)
+A/B variant B          HTTP 200  pool-canary   ← :8100 (pool-B)
+Mobile                 HTTP 200  pool-mobile
+WAF block (UA)         HTTP 403</code></pre>
+<p class="note">This is sample output of <code>test.sh</code>. The Canary line is one request of the 90:10 split on port 8080, so it can be pool-web or pool-canary.</p>
+<h4>Priority-based selection (port 8090)</h4>
+<p>Port 8090 prefers <code>pool-canary</code> on VM 2 (Primary) and switches to <code>pool-web</code> on VM 1 (Standby) when the primary stops. <code>canary-check.sh</code> counts the <code>x-backend-pool</code> response header, which is the process name on the VM, so Primary shows as <code>pool-canary</code> and Standby as <code>pool-web</code>.</p>
+<pre><code>FRONTEND=&lt;frontend IP&gt;:8090 ./canary-check.sh /app/home 100   # normal
+# stop pool-canary on VM 2, then wait 2–3 minutes
 az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"
-FRONTEND=&lt;フロントエンド IP&gt;:8090 ./canary-check.sh /app/home 100   # 停止後
-# VM 2 を起動し、2〜3 分待つ
+FRONTEND=&lt;frontend IP&gt;:8090 ./canary-check.sh /app/home 100   # stopped
+# start it again, then wait 2–3 minutes
 az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-canary"
-FRONTEND=&lt;フロントエンド IP&gt;:8090 ./canary-check.sh /app/home 100   # 復旧後</code></pre>
-<p>期待結果 (例):</p>
-<pre><code>正常時   100 件すべて pool-canary (Primary = VM 2)
-停止後   100 件すべて pool-web    (Standby = VM 1)
-復旧後   100 件すべて pool-canary (Primary = VM 2)</code></pre>
-<p class="note">停止後の切り替えには約 2〜3 分かかります。直後に確認すると、まだ pool-canary が返ることがあります。</p>
-<h4>A/B テスト (ポート 8100) の確認</h4>
-<p>8100 番の <code>abMap</code> は、ヘッダー <code>X-Variant: B</code> の要求を <code>pool-B</code> (変種 B、VM 2 の 8080 番) に送り、それ以外は既定の <code>pool-A</code> (変種 A、VM 1 の 8080 番) に送ります。<code>x-backend-pool</code> はプロセス名なので、変種 A は <code>pool-web</code>、変種 B は <code>pool-canary</code> と表示されます。</p>
-<pre><code>curl -s -D - -o /dev/null http://&lt;フロントエンド IP&gt;:8100/ | grep -i x-backend-pool
-curl -s -D - -o /dev/null -H "X-Variant: A" http://&lt;フロントエンド IP&gt;:8100/ | grep -i x-backend-pool
-curl -s -D - -o /dev/null -H "X-Variant: B" http://&lt;フロントエンド IP&gt;:8100/ | grep -i x-backend-pool</code></pre>
-<pre><code>変種ヘッダーなし  x-backend-pool: pool-web     (pool-A、変種 A)
-X-Variant: A      x-backend-pool: pool-web     (pool-A、変種 A)
-X-Variant: B      x-backend-pool: pool-canary  (pool-B、変種 B)</code></pre>
-<p class="note">ポート 80 の <code>/ab</code> には A/B のルールがありません。A/B のテストは、必ず 8100 番を使います。</p>
-<h3>4.3 ポータルでヘッダーベースのルールを手動で作る (チュートリアルの手順)</h3>
-<p>Microsoft Learn の <a href="https://learn.microsoft.com/ja-jp/azure/application-gateway/configure-advanced-routing-rule">チュートリアル: Azure ポータルで Application Gateway の Advanced Rules を使ってヘッダーベースのルーティングを設定する</a> の手順です。このデモは <code>deploy.sh</code> が作るため、通常は不要です。ポータルの操作を確かめるときに使います。</p>
-<p class="note">ポータルの「アプリケーション ゲートウェイの作成」では Advanced ルールを設定できません。基本ルールで作成した後に、基本ルールを Advanced に変更します。</p>
-<p><strong>前提</strong>: 基本ルール、リスナー、既定のバックエンド プールと設定がある Application Gateway。v2 用の 2 つ目のバックエンド プールと、そのバックエンド設定。</p>
+FRONTEND=&lt;frontend IP&gt;:8090 ./canary-check.sh /app/home 100   # restored</code></pre>
+<p>Expected (example):</p>
+<pre><code>normal     all 100 requests: pool-canary (Primary = VM 2)
+stopped    all 100 requests: pool-web    (Standby = VM 1)
+restored   all 100 requests: pool-canary (Primary = VM 2)</code></pre>
+<p class="note">The switch takes about 2–3 minutes after the stop. Right after it, pool-canary can still answer. While pool-canary is stopped, the canary on port 8080 and variant B on port 8100 are affected too, so start it again after the test.</p>
+<h4>A/B test (port 8100)</h4>
+<p>On port 8100, <code>abMap</code> sends requests with the header <code>X-Variant: B</code> to <code>pool-B</code> (variant B, VM 2 port 8080) and everything else to the default <code>pool-A</code> (variant A, VM 1 port 8080). <code>x-backend-pool</code> is the process name, so variant A shows as <code>pool-web</code> and variant B as <code>pool-canary</code>.</p>
+<pre><code>curl -s -D - -o /dev/null http://&lt;frontend IP&gt;:8100/ | grep -i x-backend-pool
+curl -s -D - -o /dev/null -H "X-Variant: A" http://&lt;frontend IP&gt;:8100/ | grep -i x-backend-pool
+curl -s -D - -o /dev/null -H "X-Variant: B" http://&lt;frontend IP&gt;:8100/ | grep -i x-backend-pool</code></pre>
+<pre><code>no variant header  x-backend-pool: pool-web     (pool-A, variant A)
+X-Variant: A       x-backend-pool: pool-web     (pool-A, variant A)
+X-Variant: B       x-backend-pool: pool-canary  (pool-B, variant B)</code></pre>
+<p class="note">Port 80 has no A/B rule for <code>/ab</code>. Always use port 8100 for the A/B test.</p>
+<h3>4.3 Creating a header-based rule by hand in the portal (the tutorial)</h3>
+<p>These are the steps of the Microsoft Learn <a href="https://learn.microsoft.com/en-us/azure/application-gateway/configure-advanced-routing-rule">Tutorial: Configure header-based routing with Application Gateway Advanced Rules in the Azure portal</a>. This demo does not need them, because <code>deploy.sh</code> creates everything. Use them to try the portal.</p>
+<p class="note">The portal's "Create application gateway" experience cannot configure an Advanced rule. Create the gateway with a Basic rule, then change the Basic rule to Advanced.</p>
+<p><strong>Before you start</strong>: an Application Gateway with a Basic rule, a listener, and a default backend pool and settings. A second backend pool for v2 and its backend settings.</p>
 <ol>
-<li>ゲートウェイの <strong>ルール</strong> を開き、基本ルールを選ぶ。</li>
-<li><strong>ルールの種類</strong> を <strong>Advanced</strong> にする。</li>
-<li><strong>リスナー</strong> タブ: ルール名 (例: <code>rule1</code>) と <strong>ルールの優先度</strong> を入力する。数値が小さいほど先に評価される。リスナーは既存のものが事前に入る。</li>
-<li><strong>ルーティング</strong> タブ: <strong>Advanced ルール名</strong> (例: <code>V2-app-routing</code>) と <strong>Advanced ルールの優先度</strong> を入力する。</li>
-<li><strong>条件</strong>: <strong>+ Add conditions</strong> で条件セットを作る。
+<li>Open <strong>Rules</strong> on the gateway and select the Basic rule.</li>
+<li>Set <strong>Rule type</strong> to <strong>Advanced</strong>.</li>
+<li><strong>Listener</strong> tab: enter the rule name (for example <code>rule1</code>) and the <strong>Rule priority</strong>. Lower numbers are evaluated first. The existing listener is prefilled.</li>
+<li><strong>Routing</strong> tab: enter the <strong>Advanced rule name</strong> (for example <code>V2-app-routing</code>) and the <strong>Advanced rule priority</strong>.</li>
+<li><strong>Conditions</strong>: select <strong>+ Add conditions</strong> and create a condition set.
   <ul>
-    <li>条件セット名: <code>V2-app-condition</code> (条件セットの名前であり、ヘッダー名ではない)</li>
-    <li>条件の種類: HTTP header / ヘッダーの種類: Custom / カスタム ヘッダー: <code>X-App-Version</code> / 一致の種類: Static / 値: <code>v2</code></li>
+    <li>Condition set name: <code>V2-app-condition</code> (the name of the condition set, not the header name)</li>
+    <li>Condition type: HTTP header / Header type: Custom / Custom header: <code>X-App-Version</code> / Match type: Static / Value: <code>v2</code></li>
   </ul>
-  <strong>Add Conditions</strong> を押しても、この時点ではまだ保存されない。</li>
-<li><strong>ターゲット</strong>: <strong>+ Add Targets</strong>。ターゲットの種類: Backend pool / バックエンド プール: v2 用のプール / バックエンド設定: v2 用の設定。</li>
-<li><strong>既定のターゲット</strong>: 基本ルールの <code>Target</code> と <code>Backend Settings</code> と同じ値になっていることを確認する (既定の振り分け先)。</li>
-<li><strong>Review</strong> → <strong>Save</strong>。</li>
+  Selecting <strong>Add Conditions</strong> does not save anything yet.</li>
+<li><strong>Targets</strong>: select <strong>+ Add Targets</strong>. Target type: Backend pool / Backend pool: the v2 pool / Backend settings: the v2 settings.</li>
+<li><strong>Default targets</strong>: check that <code>Target</code> and <code>Backend Settings</code> have the values of the Basic rule (the default destination).</li>
+<li><strong>Review</strong> → <strong>Save</strong>.</li>
 </ol>
-<h4>テスト</h4>
-<pre><code>curl http://&lt;FRONTEND-IP&gt;/                              # 既定のプール
-curl -H "X-App-Version: v2" http://&lt;FRONTEND-IP&gt;/      # v2 のプール
-curl -H "X-App-Version: none" http://&lt;FRONTEND-IP&gt;/    # 既定のプール</code></pre>
-<h4>注意 (実際に起きた間違い)</h4>
+<h4>Test</h4>
+<pre><code>curl http://&lt;FRONTEND-IP&gt;/                              # default pool
+curl -H "X-App-Version: v2" http://&lt;FRONTEND-IP&gt;/      # v2 pool
+curl -H "X-App-Version: none" http://&lt;FRONTEND-IP&gt;/    # default pool</code></pre>
+<h4>Mistakes that actually happened</h4>
 <ul>
-  <li><strong>条件セット名をヘッダー名の欄に入れると、一致しない</strong>: ヘッダー名が <code>V2-app-condition</code> になると、<code>X-App-Version: v2</code> は一致せず、既定の振り分け先に送られる。ヘッダー名は必ず <code>X-App-Version</code>。</li>
-  <li><strong>既存のルールを変えると、動きが変わる</strong>: <code>partner</code> を <code>V2-app-routing</code> に変えて <code>X-App-Version: v2</code> の条件を AND で追加すると、<code>X-Partner-Id</code> だけのリクエストは <code>pool-partner</code> に届かなくなる。</li>
-  <li><strong>ポータルでの手作業は、再デプロイで消える</strong>: <code>deploy/main.bicep</code> の定義で作ったルールは、<code>deploy.sh</code> を実行すると定義どおりに戻る。</li>
+  <li><strong>Typing the condition set name into the header name field makes the rule never match</strong>: when the header name is <code>V2-app-condition</code>, <code>X-App-Version: v2</code> does not match and the request goes to the default destination. The header name must be <code>X-App-Version</code>.</li>
+  <li><strong>Editing an existing rule changes its behavior</strong>: renaming <code>partner</code> to <code>V2-app-routing</code> and adding the <code>X-App-Version: v2</code> condition (AND) means a request with only <code>X-Partner-Id</code> no longer reaches <code>pool-partner</code>.</li>
+  <li><strong>Portal edits disappear on redeploy</strong>: rules defined in <code>deploy/main.bicep</code> go back to their definition when <code>deploy.sh</code> runs.</li>
 </ul>
 </section>
 
-<section id="front"><h2>5. シミュレーターをフロントエンドにする</h2>
-<h3>5.1 現在の構成 (すぐ使える)</h3><ol>
-<li>シミュレーターでシナリオを選び [要求を送信] → 経路図・ルールごとの一致/不一致・応答 (模擬) を説明</li>
-<li>「実機で同じ要求を送る (curl)」をコピーし、<code>&lt;FRONTEND-IP&gt;</code> を実際の IP に置き換えて実行</li>
-<li>実機の応答ヘッダー <code>x-backend-pool</code>、またはブラウザーで開いたページの色・プール名が、シミュレーターの「応答」と一致することを見せる</li></ol>
-<p>シミュレーターのルールと <code>deploy.sh</code> のルールは同じ定義です。ルールを変える場合は、シミュレーターの [JSON] 表示と <code>deploy/main.bicep</code> の定義を見比べて両方をそろえます。Azure CLI 2.87.0 には advanced-routing のコマンドがないため、実機側はポータルの [ルール] 画面で確認します。</p>
+<section id="front"><h2>5. Using the simulator as the front end</h2>
+<h3>5.1 Offline (works right away)</h3><ol>
+<li>Pick a scenario in the simulator and select [Send request] → explain the route diagram, the match / no match per rule, and the simulated response</li>
+<li>Copy "Send the same request with curl", replace <code>&lt;FRONTEND-IP&gt;</code> with the real IP, and run it</li>
+<li>Show that the real <code>x-backend-pool</code> header, or the color and pool name of the page opened in a browser, equals the simulator's "Response"</li></ol>
+<p>The simulator's rules and the rules that <code>deploy.sh</code> creates are the same definitions. When you change a rule, compare the simulator's [JSON] view with <code>deploy/main.bicep</code> and change both. Azure CLI 2.87.0 has no advanced-routing commands, so check the real gateway on the portal's [Rules] page.</p>
 
-<h3>5.2 発展: シミュレーターから実機へ直接送信する場合の要件</h3>
-<p>単体 HTML 版 <a href="../agw-routing-simulator.html"><code>agw-routing-simulator.html</code></a> は、画面上部の「ゲートウェイ URL」が空ならオフラインでシミュレーションし、URL を入れると実機に要求を送って「予測」と「実機の応答」を並べて表示します (予測と一致 / 不一致も表示)。ファイルをローカルで開けば (file://) http のゲートウェイにも送れます。ブラウザーの制約は次のとおりです。</p>
-<table><thead><tr><th scope="col">課題</th><th scope="col">原因</th><th scope="col">対応</th></tr></thead><tbody>
-<tr><td>HTTPS (https のページから使う場合)</td><td>https で配信されたページから http のゲートウェイへの fetch は混在コンテンツとしてブロックされる</td><td>単体 HTML をローカル (file://) で開く。https のページから使う場合は HTTPS リスナーを追加</td></tr>
-<tr><td>CORS</td><td>別オリジンへの fetch でカスタム ヘッダー (X-Tenant-Id など) を送るとプリフライト (OPTIONS) が発生</td><td>全プールの server.js で OPTIONS に応答し、<code>Access-Control-Allow-Origin</code> / <code>-Allow-Headers</code> / <code>-Expose-Headers: x-backend-pool</code> を返す。OPTIONS 自体も App Gateway のルーティングを通るため、全プールで同じ処理が必要</td></tr>
-<tr><td>User-Agent を変えられない</td><td>ブラウザーの fetch では User-Agent を任意に設定できない</td><td>モバイル ルールは実機のスマートフォンで開くか、デモ用にカスタム ヘッダー (例 X-Device) の条件に置き換える</td></tr>
-<tr><td>Client IP は実際の IP</td><td>ブラウザーから送る要求の送信元は端末の実 IP</td><td>実機モードでは送信元 IP はゲートウェイが見ている実際の値を使う。WAF は User-Agent (agw-block-demo) を遮断するカスタム ルールで見せる</td></tr>
-<tr><td>リダイレクトを読めない</td><td>fetch はリダイレクトを自動追従、<code>redirect: "manual"</code> では Location を読めない</td><td>「リダイレクトされた」ことだけを表示する</td></tr>
-<tr><td>WAF 403 の中身を読めない</td><td>WAF の応答には CORS ヘッダーが付かず、fetch がネットワーク エラーになる</td><td>エラー時は「ブロックされた可能性」として表示し、curl で 403 を確認</td></tr>
-<tr><td>アプリからの外部通信</td><td>公開アプリの実行環境が外部 URL への通信を許可するか未確認</td><td>実装前に疎通テストが必要</td></tr>
+<h3>5.2 Sending from the simulator to the real gateway (browser limits)</h3>
+<p>The standalone page <a href="../agw-routing-simulator.html?lang=en"><code>agw-routing-simulator.html</code></a> simulates offline while "Gateway URL" at the top is empty. With a URL, it sends the request to the real gateway and shows the prediction next to the real response (and whether they match). Opened as a local file (file://), it can also send to an http gateway. The browser sets these limits.</p>
+<table><thead><tr><th scope="col">Limit</th><th scope="col">Cause</th><th scope="col">What to do</th></tr></thead><tbody>
+<tr><td>HTTPS (when the page is served over https)</td><td>A fetch from an https page to an http gateway is blocked as mixed content</td><td>Open the standalone HTML locally (file://). To use it from an https page, add an HTTPS listener</td></tr>
+<tr><td>CORS</td><td>A cross-origin fetch with custom headers (X-Tenant-Id and so on) triggers a preflight (OPTIONS)</td><td>server.js answers OPTIONS in every pool and returns <code>Access-Control-Allow-Origin</code> / <code>-Allow-Headers</code> / <code>-Expose-Headers: x-backend-pool</code>. The OPTIONS request is routed by the gateway too, so every pool must do the same</td></tr>
+<tr><td>User-Agent cannot be changed</td><td>A browser fetch cannot set User-Agent</td><td>Show the mobile rule on a real phone or with <code>curl -A</code></td></tr>
+<tr><td>Client IP is the real IP</td><td>A request from the browser comes from the device's real IP</td><td>In live mode the prediction uses the source IP the gateway sees. Show WAF with the User-Agent rule (agw-block-demo) and <code>curl -A</code></td></tr>
+<tr><td>Redirects cannot be read</td><td>fetch follows redirects, and with <code>redirect: "manual"</code> the Location header is not readable</td><td>The simulator only reports that a redirect happened</td></tr>
+<tr><td>The WAF 403 cannot be read</td><td>The WAF response has no CORS headers, so fetch fails with a network error</td><td>The simulator reports "possibly blocked"; check the 403 with curl</td></tr>
 </tbody></table>
-<p>server.js には次の CORS 対応を組み込み済みです (環境変数 <code>ALLOW_ORIGIN</code>、既定は <code>*</code>。空文字で無効化)。</p>
-<pre><code>const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN === undefined ? &quot;*&quot; : process.env.ALLOW_ORIGIN;
+<p>server.js has this CORS support built in (environment variable <code>ALLOW_ORIGIN</code>, default <code>*</code>; an empty string turns it off).</p>
+<pre><code>const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN === undefined ? "*" : process.env.ALLOW_ORIGIN;
 function cors(res) {
   if (!ALLOW_ORIGIN) return;
-  res.setHeader(&quot;access-control-allow-origin&quot;, ALLOW_ORIGIN);
-  res.setHeader(&quot;access-control-allow-methods&quot;, &quot;GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS&quot;);
-  res.setHeader(&quot;access-control-allow-headers&quot;, &quot;*&quot;);
-  res.setHeader(&quot;access-control-expose-headers&quot;, &quot;x-backend-pool&quot;);
-  res.setHeader(&quot;access-control-max-age&quot;, &quot;0&quot;);
+  res.setHeader("access-control-allow-origin", ALLOW_ORIGIN);
+  res.setHeader("access-control-allow-methods", "GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS");
+  res.setHeader("access-control-allow-headers", "*");
+  res.setHeader("access-control-expose-headers", "x-backend-pool");
+  res.setHeader("access-control-max-age", "0");
 }
-// createServer の先頭で:
+// at the top of createServer:
 cors(res);
-if (req.method === &quot;OPTIONS&quot; &amp;&amp; req.headers[&quot;access-control-request-method&quot;]) { res.writeHead(204); return res.end(); }</code></pre>
+if (req.method === "OPTIONS" &amp;&amp; req.headers["access-control-request-method"]) { res.writeHead(204); return res.end(); }</code></pre>
 </section>
 
-<section id="demo"><h2>6. デモの進め方 (例: 15 分)</h2>
-<table><thead><tr><th scope="col">#</th><th scope="col">見せること</th><th scope="col">シミュレーター</th><th scope="col">実機</th></tr></thead><tbody>
-<tr><td>1</td><td>構成と評価の流れ (リスナー → WAF → マップ → プール)</td><td>経路図</td><td>ポータルの [ルール] 画面 (<code>rule1</code> が Advanced、マップ <code>advancedRoutingMap1</code>)</td></tr>
-<tr><td>2</td><td>マルチテナント: Header の正規表現 AND Path</td><td>「テナント」→ X-Tenant-Id を消して再送</td><td><code>test.sh</code> / curl で pool-tenant ⇔ 既定 (pool-web)</td></tr>
-<tr><td>3</td><td>優先度: 先に一致したルールが勝つ</td><td>パートナーとテナントの両ヘッダーを付ける</td><td>同じヘッダーで curl → pool-partner</td></tr>
-<tr><td>4</td><td>API バージョニングと URL デコード</td><td>「エンコード済みパス」</td><td><code>/api%2Forders</code> でも pool-api-v2</td></tr>
-<tr><td>5</td><td>リダイレクト</td><td>「キャンペーン」→ 302</td><td><code>curl -i</code> で 302 と Location (クエリ文字列が引き継がれる) を確認</td></tr>
-<tr><td>6</td><td>WAF はルーティングより前</td><td>「WAF ブロック」→ 全ルール未評価、403</td><td><code>curl -i -A agw-block-demo http://&lt;IP&gt;/app/home</code> → 403 (User-Agent の WAF ルール)</td></tr>
-<tr><td>7</td><td>User-Agent による振り分け</td><td>「モバイル」→ pool-mobile (ブラウザーは User-Agent を送れないため、実機の応答は既定の pool-web になる)</td><td><code>curl -i -A "Mozilla/5.0 (iPhone; ...)" http://&lt;IP&gt;/app/home</code> → pool-mobile</td></tr>
-<tr><td>8</td><td>カナリア (ポート 8080)</td><td>「カナリア (ポート 8080)」→ 重み付けの予測 (90:10)</td><td><code>FRONTEND=&lt;IP&gt;:8080 ./canary-check.sh /app/home 100</code> → pool-web 約 90 件、pool-canary 約 10 件 (実機確認: 91 / 9)</td></tr>
-<tr><td>9</td><td>優先度ベース (ポート 8090)</td><td>「優先度 (ポート 8090)」→ Primary (VM 2) が正常なら Primary、停止していれば Standby (VM 1)</td><td><code>FRONTEND=&lt;IP&gt;:8090 ./canary-check.sh /app/home 100</code> → 正常時は pool-canary (VM 2)。VM 2 の <code>agw-pool@pool-canary</code> を止めて 2〜3 分後は pool-web (VM 1)。確認後は起動して戻す</td></tr>
-<tr><td>10</td><td>A/B テスト (変種 A / B)</td><td>「A/B (変種 A)」「A/B (変種 B)」→ 変種 A は pool-A (VM 1 の pool-web)、変種 B は pool-B (VM 2 の pool-canary)</td><td><code>curl -H "X-Variant: B" http://&lt;IP&gt;:8100/</code> → pool-canary。ヘッダーなし、または <code>X-Variant: A</code> → pool-web</td></tr>
+<section id="demo"><h2>6. Running the demo (example: 15 minutes)</h2>
+<table><thead><tr><th scope="col">#</th><th scope="col">What to show</th><th scope="col">Simulator</th><th scope="col">Real gateway</th></tr></thead><tbody>
+<tr><td>1</td><td>The structure and the flow (listener → WAF → map → pool)</td><td>Route diagram</td><td>The portal's [Rules] page (<code>rule1</code> is Advanced, map <code>advancedRoutingMap1</code>)</td></tr>
+<tr><td>2</td><td>Multi-tenant: header regular expression AND path</td><td>"Tenant" → remove X-Tenant-Id and send again</td><td><code>test.sh</code> / curl: pool-tenant ⇔ default (pool-web)</td></tr>
+<tr><td>3</td><td>Priority: the first matching rule wins</td><td>Add both the partner and the tenant header</td><td>curl with the same headers → pool-partner</td></tr>
+<tr><td>4</td><td>API versioning and URL decoding</td><td>"Encoded path"</td><td><code>/api%2Forders</code> also reaches pool-api-v2</td></tr>
+<tr><td>5</td><td>Redirect</td><td>"Campaign" → 302</td><td><code>curl -i</code>: 302 and Location (the query string is kept)</td></tr>
+<tr><td>6</td><td>WAF runs before routing</td><td>"WAF block" → no rule is evaluated, 403</td><td><code>curl -i -A agw-block-demo http://&lt;IP&gt;/app/home</code> → 403 (the User-Agent WAF rule)</td></tr>
+<tr><td>7</td><td>Routing by User-Agent</td><td>"Mobile" → pool-mobile (a browser cannot send User-Agent, so the real response is the default pool-web)</td><td><code>curl -i -A "Mozilla/5.0 (iPhone; ...)" http://&lt;IP&gt;/app/home</code> → pool-mobile</td></tr>
+<tr><td>8</td><td>Canary (port 8080)</td><td>"Canary (port 8080)" → the weighted prediction (90:10)</td><td><code>FRONTEND=&lt;IP&gt;:8080 ./canary-check.sh /app/home 100</code> → about 90 pool-web, 10 pool-canary (measured: 91 / 9)</td></tr>
+<tr><td>9</td><td>Priority-based selection (port 8090)</td><td>"Priority (port 8090)" → Primary (VM 2) while healthy, Standby (VM 1) when stopped</td><td><code>FRONTEND=&lt;IP&gt;:8090 ./canary-check.sh /app/home 100</code> → pool-canary (VM 2) normally. Stop <code>agw-pool@pool-canary</code> on VM 2 and after 2–3 minutes it is pool-web (VM 1). Start it again afterwards</td></tr>
+<tr><td>10</td><td>A/B test (variants A / B)</td><td>"A/B (variant A)" and "A/B (variant B)" → variant A is pool-A (pool-web on VM 1), variant B is pool-B (pool-canary on VM 2)</td><td><code>curl -H "X-Variant: B" http://&lt;IP&gt;:8100/</code> → pool-canary. No header or <code>X-Variant: A</code> → pool-web</td></tr>
 </tbody></table>
-<p class="note">カナリアは、ポート 8080 の全リクエストを pool-web 90% / pool-canary 10% に振り分けます (高度なルール <code>canary-split</code>)。件数が少ないと期待値から外れるため、100 件以上で確認してください。</p>
+<p class="note">The canary sends every request on port 8080 to pool-web 90% / pool-canary 10% (advanced rule <code>canary-split</code>). With few requests the counts drift from the expected values, so check with 100 or more.</p>
 </section>
 
-<section id="trouble"><h2>7. トラブルシューティング</h2>
-<p>確認は <code>deploy/test.sh</code> と <code>deploy/canary-check.sh</code> で行います。原因の切り分けには、デプロイの出力 (<code>deploy.sh</code>) を使います。</p>
-<table><thead><tr><th scope="col">症状</th><th scope="col">確認すること</th></tr></thead><tbody>
-<tr><td><code>test.sh</code> が 502 を返す</td><td>バックエンドの正常性が未確認。再デプロイ直後は、cloud-init (パッケージ取得と起動) が終わるまで数分かかる。少し待ってから <code>./test.sh</code> を再実行する。改善しない場合は <code>deploy.sh</code> を再実行する (バックエンド VM の初期化データが変わっていなければ、再作成は不要)</td></tr>
-<tr><td><code>deploy.sh</code> がプリフライトでエラーになる</td><td>出力の <code>InnerErrors</code> の <code>message</code> を読む。例: <code>ApplicationGatewayAdvancedRoutingRuleMustReference</code> は、高度なルールに <code>backendAddressPool</code> が必要という意味</td></tr>
-<tr><td><code>deploy.sh</code> が <code>PropertyChangeNotAllowed</code> (<code>osProfile.customData</code>) で失敗する</td><td>既存の VM の初期化データ (cloud-init) が変わったため。VM を作り直す (VM 1 または VM 2 を削除してから <code>deploy.sh</code> を再実行する)</td></tr>
-<tr><td><code>test.sh</code> のポート 80 の結果が想定と違う</td><td><code>rule1</code> が Advanced で作られているか (デプロイ直後の状態)。条件・優先度の定義は <code>deploy/main.bicep</code> の <code>advancedRoutingConditionSets</code> と <code>advancedRoutingMaps</code> を見る</td></tr>
-<tr><td>8080 の割合が 90:10 にならない</td><td>件数が少ないと期待値から外れる。<code>./canary-check.sh /app/home 100</code> で 100 件以上確認する。マップ <code>canaryMap</code> のルール <code>canary-split</code> の重みを確認する (ポータルで変更した場合は、<code>deploy.sh</code> で定義に戻る)</td></tr>
-<tr><td>8080 が全件 pool-canary になる</td><td>ルール <code>canary-split</code> が一致していない (条件セット <code>cs-canary-split</code> のパス条件)。マップの既定 (pool-canary) だけが使われている状態</td></tr>
-<tr><td>本文のない POST が 403 になる</td><td>既知の問題: DRS のマネージドルールが、本文のない POST を遮断する (本文付きの POST や GET / PUT は通る)。原因のルール ID は未特定。テストは GET で送る</td></tr>
-<tr><td>正規表現が一致しない</td><td>RE2 非対応の構文 (先読み・後方参照など) を使っていないか。シミュレーターと実機で結果が違う場合は実機の結果が正</td></tr>
-<tr><td>シミュレーターと実機で結果が違う</td><td>(1) ブラウザーは User-Agent を送れない (「モバイル」「WAF ブロック」は <code>curl -A</code> で確認)。(2) 送信元 IP は、ゲートウェイが見ている値 (<code>X-Forwarded-For</code>) を使う。(3) ルールの定義 (シミュレーターの JSON と <code>deploy/main.bicep</code>) を比較する</td></tr>
+<section id="trouble"><h2>7. Troubleshooting</h2>
+<p>Check with <code>deploy/test.sh</code> and <code>deploy/canary-check.sh</code>. To find a cause, read the output of <code>deploy.sh</code>.</p>
+<table><thead><tr><th scope="col">Symptom</th><th scope="col">What to check</th></tr></thead><tbody>
+<tr><td><code>test.sh</code> returns 502</td><td>The backends are not healthy yet. Right after a deployment, cloud-init (package download and start) takes a few minutes. Wait and run <code>./test.sh</code> again. If it stays, run <code>deploy.sh</code> again</td></tr>
+<tr><td><code>deploy.sh</code> fails in preflight validation</td><td>Read the <code>message</code> of <code>InnerErrors</code> in the output. Example: <code>ApplicationGatewayAdvancedRoutingRuleMustReference</code> means an advanced rule needs a <code>backendAddressPool</code> (or <code>backendAddressPoolsAndSettings</code>). <code>ApplicationGatewayAdvancedRoutingMapMustSpecifyAdvancedRoutingRules</code> means a map has no rule</td></tr>
+<tr><td><code>deploy.sh</code> fails with <code>PropertyChangeNotAllowed</code> (<code>osProfile.customData</code>)</td><td>The bootstrap data (cloud-init) of an existing VM changed, for example after editing <code>backend/server.js</code> or a pool definition. Recreate the VM: delete VM 1 or VM 2 (or the resource group), then run <code>deploy.sh</code> again</td></tr>
+<tr><td>The port 80 results of <code>test.sh</code> are not what you expect</td><td>Is <code>rule1</code> Advanced (as right after the deployment)? The conditions and priorities are in <code>advancedRoutingConditionSets</code> and <code>advancedRoutingMaps</code> of <code>deploy/main.bicep</code></td></tr>
+<tr><td>Port 8080 is not 90:10</td><td>With few requests the counts drift. Check 100 or more with <code>./canary-check.sh /app/home 100</code>. Check the weights of rule <code>canary-split</code> in map <code>canaryMap</code> (a portal edit goes back to the definition on <code>deploy.sh</code>)</td></tr>
+<tr><td>Port 8080 is all pool-canary</td><td>Rule <code>canary-split</code> does not match (the path condition of condition set <code>cs-canary-split</code>), so only the map default (pool-canary) is used</td></tr>
+<tr><td>A POST without a body returns 403</td><td>Known issue: a DRS managed rule blocks a bodyless POST (a POST with a body, GET, and PUT pass). The rule ID has not been identified. The tests use GET</td></tr>
+<tr><td>A regular expression does not match</td><td>Does it use syntax RE2 does not support (lookahead, backreferences)? When the simulator and the real gateway differ, the real gateway is right</td></tr>
+<tr><td>The simulator and the real gateway differ</td><td>(1) A browser cannot send User-Agent (check "Mobile" and "WAF block" with <code>curl -A</code>). (2) The source IP is the one the gateway sees (<code>X-Forwarded-For</code>). (3) Compare the rule definitions (the simulator's JSON and <code>deploy/main.bicep</code>)</td></tr>
 </tbody></table>
 </section>
 
-<section id="notes"><h2>8. 制約・注意事項</h2><ul>
-<li>Advanced rules はプレビュー機能です。マルチサイト リスナーと L4 (TCP/TLS) プロキシでは使えません</li>
-<li>重み付け (ポート 8080 のカナリア、pool-web 90% / pool-canary 10%) は、高度なルールで <code>WeightedDistribution</code> を指定して作ります</li>
-<li>上限: マップ 100 / ゲートウェイ、条件セット 10,000 / ゲートウェイ、ルール 100 / マップ、条件 5 / 条件セット、値 5 / 条件、値・正規表現 128 文字</li>
-<li>WAF ポリシーはゲートウェイまたはリスナー単位で関連付け。ルール単位の WAF ポリシーは非対応</li>
-<li>シミュレーターの判定はブラウザーの正規表現エンジンで近似しており、RE2 と完全には一致しません</li>
-<li><code>deploy.sh</code> はまだ実環境で実行していません。初回は手順ごとに結果を確認しながら実行してください</li></ul>
+<section id="notes"><h2>8. Limits and notes</h2><ul>
+<li>Advanced rules are a preview feature. They cannot be used with multisite listeners or the L4 (TCP/TLS) proxy</li>
+<li>The weighted split (the canary on port 8080, pool-web 90% / pool-canary 10%) is an advanced rule with <code>WeightedDistribution</code></li>
+<li>Limits: 100 maps per gateway, 10,000 condition sets per gateway, 100 rules per map, 5 conditions per condition set, 5 values per condition, 128 characters per value or regular expression</li>
+<li>A WAF policy is associated with a gateway or a listener. A WAF policy per rule is not supported</li>
+<li>The simulator approximates the rules with the browser's regular expression engine, which is not exactly RE2</li></ul>
 </section>
 
-<section id="cleanup"><h2>9. 後片付け</h2>
-<p>デモ後は、リソース グループごと削除してください。ゲートウェイ (WAF_v2) とバックエンド VM は稼働時間で課金されます。リソース グループを削除すると、作成したリソースはすべて消えます。</p>
+<section id="cleanup"><h2>9. Cleanup</h2>
+<p>After the demo, delete the whole resource group. The gateway (WAF_v2) and the backend VMs are billed while they run. Deleting the resource group removes everything that was created.</p>
 <pre><code>az group delete -n rg-agw-advrouting-demo --yes --no-wait</code></pre>
 </section>
 </main></body></html>

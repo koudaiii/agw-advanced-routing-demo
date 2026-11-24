@@ -1,91 +1,120 @@
-# Application Gateway Advanced Routing — 実機デモ キット
+# Application Gateway Advanced Routing — Live Demo Kit
 
-https://learn.microsoft.com/en-us/azure/application-gateway/advanced-rules
+English | [日本語](README_ja.md)
 
-## 概念図
+A demo of [Azure Application Gateway advanced routing rules (preview)](https://learn.microsoft.com/en-us/azure/application-gateway/advanced-rules) and [advanced load balancing (preview)](https://learn.microsoft.com/en-us/azure/application-gateway/advanced-load-balancing). It deploys a real gateway with Bicep and ships a browser simulator that predicts each routing decision and compares it with the live response.
 
-図は Microsoft Learn の [Azure Application Gateway の高度なルーティングルール (プレビュー)](https://learn.microsoft.com/ja-jp/azure/application-gateway/advanced-rules) から引用しています。
+## Concepts
 
-**リクエストルーティングルールから、高度なルーティングマップ、ルール、条件セット、ルーティング条件までの階層**
+The diagrams are from Microsoft Learn: [What is Azure Application Gateway advanced routing rules (Preview)?](https://learn.microsoft.com/en-us/azure/application-gateway/advanced-rules)
 
-![リクエストルーティングルールから高度なルーティングマップ、ルール、条件セット、ルーティング条件までの階層を示す図](https://learn.microsoft.com/azure/application-gateway/media/advanced-rules/advanced-routing-hierarchy.png)
+**Hierarchy: request routing rule → advanced routing map → rules → condition sets → routing conditions**
 
-**基本・パスベース・高度なルーティングルールそれぞれのリクエストフロー**
+![Diagram showing the hierarchy from a request routing rule to an advanced routing map, rules, condition sets, and routing conditions](https://learn.microsoft.com/azure/application-gateway/media/advanced-rules/advanced-routing-hierarchy.png)
 
-![基本、パスベース、高度なルーティングルールのためのアプリケーションゲートウェイのリクエストフローの図](https://learn.microsoft.com/azure/application-gateway/media/advanced-rules/rule-flows.png)
+**Request flows for basic, path-based, and advanced routing rules**
 
-### 高度な負荷分散 (プレビュー)
+![Diagram of Application Gateway request flows for basic, path-based, and advanced routing rules](https://learn.microsoft.com/azure/application-gateway/media/advanced-rules/rule-flows.png)
 
-図は Microsoft Learn の [Advanced load balancing on Azure Application Gateway (Preview)](https://learn.microsoft.com/en-us/azure/application-gateway/advanced-load-balancing) から引用しています。
+### Advanced load balancing (preview)
 
-**プール選択: 重み付け配分 (Weighted) と優先度ベース (Priority-based)**
+The diagrams are from Microsoft Learn: [Advanced load balancing on Azure Application Gateway (Preview)](https://learn.microsoft.com/en-us/azure/application-gateway/advanced-load-balancing)
 
-![重み付けプール選択と、プライマリ/スタンバイのプールによる優先度ベース選択を比較する図](https://learn.microsoft.com/azure/application-gateway/media/advanced-load-distribution/pool-selection.png)
+**Pool selection: weighted distribution and priority-based selection**
 
-**サーバー選択: Round Robin、Weighted Round Robin、Least Connections**
+![Diagram comparing weighted pool selection and priority-based selection with primary and standby pools](https://learn.microsoft.com/azure/application-gateway/media/advanced-load-distribution/pool-selection.png)
 
-![バックエンドプール内で Round Robin、Weighted Round Robin、Least Connections を比較する図](https://learn.microsoft.com/azure/application-gateway/media/advanced-load-distribution/server-selection.png)
+**Server selection: Round Robin, Weighted Round Robin, Least Connections**
 
-**読み方**: 一致したルールのプールは、次の 2 つの方式のどちらかで選ばれます。
-- **重み付け (Weighted)**: 重みの比率で振り分けます (例: 重み 8 と 2 なら 80% / 20%)。プールが異常でも、設定した割合は変わりません。
-- **優先度 (Priority)**: 優先度 1 のプールが条件 (最小正常割合) を満たす間は、そこに送ります。満たさなければ、優先度 2 のスタンバイに切り替えます。
+![Diagram comparing Round Robin, Weighted Round Robin, and Least Connections inside a backend pool](https://learn.microsoft.com/azure/application-gateway/media/advanced-load-distribution/server-selection.png)
 
+**How to read it**: the pools of the matched rule are chosen in one of two ways.
+- **Weighted**: traffic is split by the ratio of the weights (weights 8 and 2 give 80% / 20%). The configured shares stay the same even when a pool is unhealthy.
+- **Priority**: requests go to the priority 1 pool while it meets the minimum healthy percentage. Otherwise the gateway switches to the priority 2 standby pool.
 
-| フォルダー | 内容 |
+## What is in this repository
+
+| Path | Contents |
 |---|---|
-| `agw-routing-simulator.html` | 単体で動くシミュレーター。ゲートウェイ URL が空ならオフライン、入れると実機に送って予測と比較 |
-| `backend/server.js` | 依存なしの Node.js バックエンド。どのプールが応答したか、受信したヘッダー (App Gateway が付けた X-Forwarded-* などを強調) を HTML / JSON で返します。応答ヘッダー `x-backend-pool` にもプール名が入ります。CORS 対応済み (`ALLOW_ORIGIN`、既定 `*`)。 |
-| `backend/pools.conf` | VM1 (バックエンド) のプール名・ポート・表示名・色。5 プール (ポート 8080–8083、8085) |
-| `backend/pools-canary.conf` | カナリア VM2 のプール定義 (`pool-canary`、ポート 8080) |
-| `deploy/deploy.sh` | リソースグループを作成し、`deploy/main.bicep` をデプロイ。SSH 鍵がなければ生成 |
-| `deploy/main.bicep` | VNet、バックエンド VM 1 (5 プール)、カナリア VM 2 (`pool-canary`、8080)、WAF ポリシー、App Gateway、条件セット 6 つ、Advanced routing map (`advancedRoutingMap1` と `canaryMap`)、ルール `rule1` (ポート 80) と `rule-canary` (ポート 8080、`canaryMap` の 90:10) を作成 |
-| `deploy/make-cloud-init.sh` / `cloud-init.yaml` | バックエンド VM 1 の初期化データ (`backend/server.js` を埋め込み) |
-| `deploy/cloud-init-canary.yaml` | カナリア VM 2 の初期化データ (`backend/pools-canary.conf` から生成) |
-| `deploy/canary-check.sh` | 指定した URI に 100 回連続で送り、x-backend-pool でプール別の件数と割合を表示。カナリアは `FRONTEND=<IP>:8080` |
-| `deploy/test.sh` | シミュレーターのシナリオを curl で実機に送り、応答したプールを一覧表示 |
+| `agw-routing-simulator.html` | Standalone simulator. Offline when the gateway URL is empty; with a URL it sends the request to the real gateway and compares the answer with its prediction. Shows English or Japanese from the browser language |
+| `docs/agw-advanced-routing-demo-guide.html` | Build guide (English). Japanese: `docs/agw-advanced-routing-demo-guide_ja.html` |
+| `backend/server.js` | Dependency-free Node.js backend. Returns which pool answered and the request headers it received (the `X-Forwarded-*` headers added by Application Gateway are highlighted) as HTML or JSON. The pool name is also in the `x-backend-pool` response header. CORS is enabled (`ALLOW_ORIGIN`, default `*`) |
+| `backend/pools.conf` | Pool name, port, label, and color for VM 1. Five pools (ports 8080–8083, 8085) |
+| `backend/pools-canary.conf` | Pool definition for canary VM 2 (`pool-canary`, port 8080) |
+| `deploy/deploy.sh` | Creates the resource group and deploys `deploy/main.bicep`. Generates an SSH key if there is none |
+| `deploy/main.bicep` | VNet, backend VM 1 (five pools), canary VM 2 (`pool-canary`, 8080), NAT gateway, WAF policy, Application Gateway, and four listeners, each with an advanced rule and its own routing map: `rule1` / `advancedRoutingMap1` (port 80), `rule-canary` / `canaryMap` (port 8080), `rule-priority` / `priorityMap` (port 8090), `rule-ab` / `abMap` (port 8100) |
+| `deploy/make-cloud-init.sh` / `cloud-init.yaml` | Bootstrap data for backend VM 1 (embeds `backend/server.js`) |
+| `deploy/cloud-init-canary.yaml` | Bootstrap data for canary VM 2 (generated from `backend/pools-canary.conf`) |
+| `deploy/canary-check.sh` | Sends 100 consecutive requests to one URI and prints the count and share per pool from `x-backend-pool`. For the canary use `FRONTEND=<IP>:8080` |
+| `deploy/test.sh` | Sends the simulator's scenarios to the real gateway with curl and lists which pool answered. |
 
-## 手順
+## Steps
+
 ```bash
 az login
 cd deploy
 ./deploy.sh
-FRONTEND=<表示されたフロントエンド IP> ./test.sh
-FRONTEND=<表示されたフロントエンド IP>:8080 ./canary-check.sh /app/home 100   # ポート 8080 に 100 回連続で送り、プール別の件数を表示
+FRONTEND=<frontend IP printed by deploy.sh> ./test.sh
+FRONTEND=<frontend IP>:8080 ./canary-check.sh /app/home 100   # 100 requests to port 8080, count per pool
 ```
-- カナリア展開: ポート 8080 のリスナーで、ルール `canary-split` が全リクエストを pool-web 90% / pool-canary 10% に振り分けます (高度なルールの重み付け)。URI では絞りません。ポート 80 は高度なルール (A/B やヘッダーの振り分け) のままです。
-- カナリアの配置: pool-canary は VM2 (192.168.1.11) の 8080 番で動かします。pool-web は VM1 の 8080 番です。同じポートで別の応答を返すため、IP アドレスを分けています。VM2 を別ポートにできるかは未検証です (高度なルールでは、プールごとにバックエンド設定を持てます)。
-- 優先度ベースのプール選択 (ポート 8090): ルール `rule-priority` (Advanced、優先度 300) がマップ `priorityMap` を参照します。マップの中では、全パスに一致するルール `priority-split` が、`pool-primary` (Primary、VM 2 の 8080 番、優先度 1) を使い、`pool-primary` の正常なサーバーが最小正常割合 60% に達しない場合は `pool-standby` (Standby、VM 1 の 8080 番、優先度 2) に切り替えます。既定の振り分け先は `pool-standby` です。各プールは 1 台のため、切り替えはプール全体の単位です。
-  - 確認: `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100` で件数を見ます。
-  - 停止と復旧 (手動): `az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"` で VM 2 を止めると、切り替わるまで約 2〜3 分かかります。`systemctl start agw-pool@pool-canary` で戻すと、また `pool-primary` に送られます。
-  - シミュレーターの「テスト要求」は、選んでいる要求のポートに件数分送り、どのプールに届いたかを数えます。Primary / Standby の名前で表示します。
-- 重み付けは Advanced load balancing の機能です。8080 番のカナリアは、高度なルールで `WeightedDistribution` を使います。
-- A/B テスト (ポート 8100、#27、マップ `abMap`): `X-Variant: B` を付けた要求は `pool-B` (変種 B、VM 2 の 8080 番) に送ります。それ以外は既定の `pool-A` (変種 A、VM 1 の 8080 番) です。確認: `curl -H "X-Variant: B" http://<FRONTEND-IP>:8100/`。
-  ```text
-  client --:8080--> listener-canary --> rule-canary (Advanced)
-                                              |
-                                              v   マップ canaryMap
-                                    rule: canary-split  (パス ^/ = 全リクエスト)
-                                              |   WeightedDistribution
-                                +-------------+-------------+
-                                |                           |
-                          weight 90                   weight 10
-                                |                           |
-                                v                           v
-                       pool-web (VM1 :8080)        pool-canary (VM2 :8080)
-                       既存バージョン                新バージョン
-  ```
-- デプロイは Bicep (`main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。Azure CLI 2.87.0 には advanced-routing 用のコマンド (`az network application-gateway advanced-routing-map` など) がないため、CLI では作成できません。
-- ARM API の確認 (2026-11-20): 現在の template は 2026-03-01 / 2026-05-01 / 2026-07-01 のすべてで検証に成功します。高度なルールは、単一プール (`backendAddressPool`) と複数プール (`backendAddressPoolsAndSettings` + `poolSelectionAlgorithm`) のどちらも指定できます。`loadDistributionPolicy` だけを指定すると、ARM は `ApplicationGatewayAdvancedRoutingRuleMustReference` で拒否します。Bicep 0.49.2 は `loadDistributionPolicy` を BCP037 で指摘します。
-- 完了まで 15〜20 分程度かかります (Application Gateway の作成と更新に時間がかかるため)。
-ブラウザーで `http://<フロントエンド IP>/app/home` を開くと、応答したプールのページが表示されます。ヘッダーを付ける場合は curl か、ブラウザー拡張 (ModHeader など) を使います。
 
-## 補足
-- WAF ブロックの実演 (WAF はルーティングより前に評価されます): User-Agent に `agw-block-demo` を含む要求は、どのクライアントからでも 403 になります。ルールはテンプレートの `BlockDemoUA` (優先度 12) として最初から入っています。
+Deployment takes about 15–20 minutes, because creating and updating an Application Gateway is slow. Open `http://<frontend IP>/app/home` in a browser to see the page of the pool that answered. To add headers, use curl or a browser extension such as ModHeader.
+
+Deployment uses Bicep (`main.bicep`, ARM API `Microsoft.Network/applicationGateways@2026-03-01`). Azure CLI 2.87.0 has no advanced-routing commands (such as `az network application-gateway advanced-routing-map`), so the gateway cannot be created with the CLI.
+
+## The four listeners
+
+| Port | Rule / map | What it shows |
+|---|---|---|
+| 80 | `rule1` / `advancedRoutingMap1` | Condition-based routing: header, path, query string, and User-Agent rules, a redirect, and a default pool (`pool-web`) |
+| 8080 | `rule-canary` / `canaryMap` | Canary: weighted distribution, `pool-web` 90% / `pool-canary` 10% |
+| 8090 | `rule-priority` / `priorityMap` | Priority-based selection: `pool-primary` first, `pool-standby` when the primary is unhealthy |
+| 8100 | `rule-ab` / `abMap` | A/B test: `X-Variant: B` goes to `pool-B`, everything else to `pool-A` |
+
+### Canary (port 8080)
+
+The rule `canary-split` sends every request on port 8080 to `pool-web` 90% / `pool-canary` 10% (weighted distribution in an advanced rule). It does not filter by URI.
+
+```text
+client --:8080--> listener-canary --> rule-canary (Advanced)
+                                            |
+                                            v   map canaryMap
+                                  rule: canary-split  (path ^/ = every request)
+                                            |   WeightedDistribution
+                              +-------------+-------------+
+                              |                           |
+                        weight 90                   weight 10
+                              |                           |
+                              v                           v
+                     pool-web (VM1 :8080)        pool-canary (VM2 :8080)
+                     current version             new version
+```
+
+`pool-canary` runs on VM 2 (192.168.1.11), port 8080. `pool-web` runs on VM 1, port 8080. They answer differently on the same port, so they need different IP addresses. Whether VM 2 could use a different port instead has not been tested (in an advanced rule each pool can have its own backend settings).
+
+### Priority-based selection (port 8090)
+
+The rule `rule-priority` (Advanced, priority 300) uses the map `priorityMap`. In the map, the rule `priority-split` matches every path and uses `pool-primary` (VM 2, port 8080, priority 1). When the healthy servers of `pool-primary` fall below the minimum healthy percentage of 60%, it switches to `pool-standby` (VM 1, port 8080, priority 2). The default target is `pool-standby`. Each pool has one server, so the switch is for the whole pool.
+
+- Check: `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100`
+- Stop and restore by hand: `az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"` stops VM 2's process. The switch takes about 2–3 minutes. `systemctl start agw-pool@pool-canary` restores it, and requests go to `pool-primary` again.
+- The simulator's "Test requests" button sends the chosen number of requests to the port of the selected request and counts which pool answered, using the Primary / Standby names.
+
+### A/B test (port 8100)
+
+Requests with `X-Variant: B` go to `pool-B` (variant B, VM 2 port 8080). Everything else goes to the default `pool-A` (variant A, VM 1 port 8080). Check: `curl -H "X-Variant: B" http://<FRONTEND-IP>:8100/`
+
+`pool-primary`, `pool-standby`, `pool-A`, and `pool-B` are gateway pools that point at the existing processes, so the `x-backend-pool` header shows the process name: `pool-canary` for VM 2 and `pool-web` for VM 1.
+
+## Notes
+
+- WAF runs before routing. A request whose User-Agent contains `agw-block-demo` gets 403 from any client. The rule is in the template as `BlockDemoUA` (priority 12).
   ```bash
   curl -i -A "agw-block-demo" http://<FRONTEND>/app/home   # → 403
   curl -i http://<FRONTEND>/app/home                        # → 200
   ```
-  送信元 IP による遮断 (`BlockDemoIp`) も残しています。IP は環境で変わるため、デモでは User-Agent を使います。
-- 既知の問題: 本文のない POST が、WAF (マネージドルール DRS 2.1) に遮断されて 403 になります。本文 (JSON) を付けた POST や GET / PUT は通ります。テストとシミュレーターのパートナー シナリオは、GET で送るようにしています。原因のルール ID は未特定です。
-- ドキュメントには「パブリック プレビュー中は Header 条件のみサポート」とも書かれています。Path / QueryString / ClientIP / Method の条件作成でエラーになった場合は、該当ルールを Header 条件だけにしてください。
-- 後片付け: `az group delete -n rg-agw-advrouting-demo --yes --no-wait`
+  The source IP rule (`BlockDemoIp`) is also there. Source IPs differ per environment, so the demo uses the User-Agent rule.
+- Known issue: a POST without a body is blocked by WAF (managed rules, DRS 2.1) and returns 403. A POST with a JSON body, GET, and PUT pass. The partner scenario in the tests and the simulator uses GET. The rule ID that blocks it has not been identified.
+- ARM API facts (checked 2026-11-20): the template validates with API versions 2026-03-01, 2026-05-01, and 2026-07-01. An advanced rule accepts a single pool (`backendAddressPool`) or several pools (`backendAddressPoolsAndSettings` + `poolSelectionAlgorithm`). With only `loadDistributionPolicy`, ARM rejects it with `ApplicationGatewayAdvancedRoutingRuleMustReference`. Bicep 0.49.2 flags `loadDistributionPolicy` with BCP037.
+- The Microsoft Learn page also says "During the public preview, the service supports only header-based conditions". If creating a Path, QueryString, ClientIP, or Method condition fails, change that rule to header conditions only.
+- Cleanup: `az group delete -n rg-agw-advrouting-demo --yes --no-wait`
