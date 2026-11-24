@@ -1,6 +1,6 @@
 // Demo backend for Azure Application Gateway Advanced Routing.
 // Zero dependencies (Node.js 18+). One process = one backend pool.
-//   POOL_NAME=pool-tenant POOL_LABEL="テナント専用" POOL_COLOR="#0f766e" PORT=8082 node server.js
+//   POOL_NAME=pool-tenant POOL_LABEL="Tenant" POOL_COLOR="#0f766e" PORT=8082 node server.js
 // GET /healthz          -> 200 "ok" (App Gateway health probe)
 // GET /...?format=json  -> JSON echo (or Accept: application/json)
 // GET /...              -> HTML page showing which pool answered and what it received
@@ -66,10 +66,10 @@ function page(s) {
         )}</td></tr>`
     )
     .join("");
-  const query = Object.keys(s.query).length ? esc(new URLSearchParams(s.query).toString()) : "(なし)";
+  const query = Object.keys(s.query).length ? esc(new URLSearchParams(s.query).toString()) : "(none)";
   return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(s.pool)} が応答しました</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(s.pool)}  answered</title>
 <style>
   :root{--pool:${POOL_COLOR}}
   body{margin:0;font-family:system-ui,"Segoe UI","Yu Gothic UI",sans-serif;color:#0f172a;background:#f8fafc}
@@ -88,18 +88,18 @@ function page(s) {
   .note{font-size:13px;margin-top:8px}
 </style></head>
 <body>
-<header><p>この応答を返したバックエンド プール</p><h1>${esc(s.pool)}</h1><h2>${esc(s.poolLabel)}</h2></header>
+<header><p>Backend pool that answered this request</p><h1>${esc(s.pool)}</h1><h2>${esc(s.poolLabel)}</h2></header>
 <main>
 <dl>
-  <dt>インスタンス</dt><dd>${esc(s.instance)}</dd>
-  <dt>受信時刻 (UTC)</dt><dd>${esc(s.receivedAt)}</dd>
+  <dt>Instance</dt><dd>${esc(s.instance)}</dd>
+  <dt>Received at (UTC)</dt><dd>${esc(s.receivedAt)}</dd>
   <dt>Method</dt><dd>${esc(s.method)}</dd>
   <dt>Path</dt><dd>${esc(s.path)}</dd>
   <dt>Query string</dt><dd>${query}</dd>
-  <dt>接続元 (ゲートウェイ)</dt><dd>${esc(s.peer)}</dd>
+  <dt>Peer (gateway)</dt><dd>${esc(s.peer)}</dd>
 </dl>
-<table><caption>受信したリクエスト ヘッダー</caption><tbody>${rows}</tbody></table>
-<p class="note">黄色の行は Application Gateway が付与・書き換えたヘッダーです。</p>
+<table><caption>Request headers received</caption><tbody>${rows}</tbody></table>
+<p class="note">Highlighted rows are headers that Application Gateway added or rewrote.</p>
 </main></body></html>`;
 }
 
