@@ -1203,6 +1203,7 @@ function renderDistResult() {
 // Test requests (live): send N requests to the gateway port of the current preset.
 // Answers are kept in order. Results are shown 50 at a time (paging); cancel stops the requests not yet sent.
 const TEST_PAGE = 50;
+const TEST_TIMEOUT_MS = 10000; // per request, the same as a single "Send"
 let testRun = null; // { seq, n, url, cancelled, finished, controller, page }
 function setTestButton(running) {
   const b = $("testBtn");
@@ -1233,12 +1234,22 @@ async function runTestRequests() {
       await Promise.all(Array.from({ length: batch }, (_, k) => {
         const i = done + k;
         return (async () => {
+          // A request with no response would block its batch forever, so each one gets its own timeout.
+          // AbortSignal.any() needs newer browsers, so the run's cancel signal is forwarded by hand.
+          const ctl = new AbortController();
+          const onCancel = () => ctl.abort();
+          run.controller.signal.addEventListener("abort", onCancel);
+          let timedOut = false;
+          const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, TEST_TIMEOUT_MS);
           try {
-            const res = await fetch(url, { cache: "no-store", mode: "cors", redirect: "manual", signal: run.controller.signal });
+            const res = await fetch(url, { cache: "no-store", mode: "cors", redirect: "manual", signal: ctl.signal });
             run.seq[i] = { pool: gatewayPoolName(res.headers.get("x-backend-pool") || L("(ヘッダーなし)", "(no header)"), port), status: res.status };
           } catch (e) {
-            run.seq[i] = run.cancelled ? { cancelled: true } : { error: (e && e.message) || L("送信に失敗しました", "Request failed") };
-          }
+            const secs = TEST_TIMEOUT_MS / 1000;
+            if (run.cancelled) run.seq[i] = { cancelled: true };
+            else if (timedOut) run.seq[i] = { error: L(`${secs} 秒以内に応答なし`, `no response within ${secs} seconds`), timeout: true };
+            else run.seq[i] = { error: (e && e.message) || L("送信に失敗しました", "Request failed") };
+          } finally { clearTimeout(timer); run.controller.signal.removeEventListener("abort", onCancel); }
         })();
       }));
       done += batch;
@@ -1256,6 +1267,7 @@ function renderTestRun(run, page) {
   const pages = Math.max(1, Math.ceil(run.n / TEST_PAGE));
   const answered = run.seq.filter((r) => r && r.pool).length;
   const failed = run.seq.filter((r) => r && r.error).length;
+  const timeouts = run.seq.filter((r) => r && r.timeout).length;
   const sent = run.seq.filter(Boolean).length;
   const counts = new Map();
   for (const r of run.seq) if (r && r.pool) counts.set(r.pool, (counts.get(r.pool) || 0) + 1);
@@ -1267,7 +1279,7 @@ function renderTestRun(run, page) {
     let style, label, title;
     if (!r) { style = "background:transparent;border:1px dashed #94a3b8;color:#64748b"; label = L("未送信", "not sent"); title = L(`${i + 1} 件目: 未送信`, `#${i + 1}: not sent`); }
     else if (r.cancelled) { style = "background:transparent;border:1px dashed #94a3b8;color:#64748b"; label = L("中止", "aborted"); title = L(`${i + 1} 件目: 中止`, `#${i + 1}: aborted`); }
-    else if (r.error) { style = "background:#e2e8f0;color:#334155"; label = L("失敗", "failed"); title = L(`${i + 1} 件目: 失敗 (${r.error})`, `#${i + 1}: failed (${r.error})`); }
+    else if (r.error) { style = "background:#e2e8f0;color:#334155"; label = r.timeout ? L("応答なし", "timeout") : L("失敗", "failed"); title = L(`${i + 1} 件目: 失敗 (${r.error})`, `#${i + 1}: failed (${r.error})`); }
     else { style = `background:${colorOf(r.pool)};color:#fff`; label = r.pool; title = L(`${i + 1} 件目: ${r.pool} (HTTP ${r.status})`, `#${i + 1}: ${r.pool} (HTTP ${r.status})`); }
     cells.push(el("span", { title, style: `display:inline-flex;flex-direction:column;justify-content:center;align-items:center;inline-size:70px;block-size:36px;margin:2px;border-radius:6px;font-size:10px;line-height:1.2;padding:1px;overflow:hidden;${style}` },
       el("b", { text: `#${i + 1}` }), el("span", { text: label })));
@@ -1283,6 +1295,9 @@ function renderTestRun(run, page) {
     el("span", { class: "note", style: "display:inline-flex;align-items:center;gap:6px;margin-inline-end:14px" },
       el("span", { style: `display:inline-block;inline-size:12px;block-size:12px;border-radius:3px;background:${colorOf(pool)}` }),
       el("span", { text: L(`${pool}: ${c} 件 (${answered ? Math.round((c / answered) * 100) : 0}%)`, `${pool}: ${c} (${answered ? Math.round((c / answered) * 100) : 0}%)`) })));
+  if (failed) legend.push(el("span", { class: "note", style: "display:inline-flex;align-items:center;gap:6px;margin-inline-end:14px" },
+    el("span", { style: "display:inline-block;inline-size:12px;block-size:12px;border-radius:3px;background:#e2e8f0;border:1px solid #94a3b8" }),
+    el("span", { text: L(`失敗: ${failed} 件${timeouts ? ` (うち ${TEST_TIMEOUT_MS / 1000} 秒以内に応答なし ${timeouts} 件)` : ""}`, `Failed: ${failed}${timeouts ? ` (${timeouts} with no response within ${TEST_TIMEOUT_MS / 1000} seconds)` : ""}`) })));
   // The results are shown at the top of the "Real response" column, above the response of the single request.
   out.replaceChildren(el("div", { class: "card stack" },
     el("p", { style: "margin:0;font-weight:600", text: L(`テスト要求の結果 (${run.n} 件)`, `Test request results (${run.n} requests)`) }),

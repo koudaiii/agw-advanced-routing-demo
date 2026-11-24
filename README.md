@@ -98,7 +98,7 @@ The rule `rule-priority` (Advanced, priority 300) uses the map `priorityMap`. In
 
 - Check: `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100`
 - Stop and restore by hand: `az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"` stops VM 2's process. The switch takes about 2–3 minutes. `systemctl start agw-pool@pool-canary` restores it, and requests go to `pool-primary` again.
-- The simulator's "Test requests" button sends the chosen number of requests to the port of the selected request and counts which pool answered, using the Primary / Standby names. The results appear under "Real response".
+- The simulator's "Test requests" button sends the chosen number of requests to the port of the selected request and counts which pool answered, using the Primary / Standby names. The results appear under "Real response". A request with no response within 10 seconds is counted as failed.
 
 ### A/B test (port 8100)
 
