@@ -159,7 +159,7 @@ az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --c
 
 - Without stopping `pool-canary` on VM 2, every request keeps going to the primary and the failover cannot be seen.
 - Stopping `pool-canary` also affects port 8080 (the canary's 10%) and variant B on port 8100. Restore it after the test.
-- The simulator's "Test requests" button sends the chosen number of requests to the port of the selected request. Select the "Priority (port 8090)" preset first to count Primary / Standby. While sending, the button becomes "Cancel". Results are shown under "Real response", 50 at a time.
+- The simulator's "Test requests" button sends the chosen number of requests to the port of the selected request. Select the "Priority (port 8090)" preset first to count Primary / Standby. While sending, the button becomes "Cancel". Results are shown under "Real response", 50 at a time. A request with no response within 10 seconds is counted as failed.
 
 ### A/B test (port 8100)
 
