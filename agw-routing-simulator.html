@@ -229,7 +229,7 @@ ol.rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
       <div class="row">
         <div style="inline-size:200px"><label for="distMode" data-ja="① プール選択">① Pool selection</label><select id="distMode"><option value="weighted" data-ja="重み付け配分">Weighted distribution</option><option value="priority" data-ja="優先度ベース">Priority-based</option></select></div>
         <div style="inline-size:150px" id="distMinWrap"><label for="distMin" data-ja="最小正常割合 (%)">Minimum healthy (%)</label><input id="distMin" type="number" min="0" max="100" class="mono"></div>
-        <div style="inline-size:170px"><label for="distConc" data-ja="同時処理数 (LC 用)">Concurrency (for LC)</label><input id="distConc" type="number" min="1" max="50" class="mono"></div>
+        <div style="inline-size:170px"><label for="distConc" data-ja="同時に送る利用者数">Concurrent users</label><input id="distConc" type="number" min="1" max="50" class="mono"></div>
         <div style="inline-size:150px"><label for="distN" data-ja="シミュレーション件数">Requests to simulate</label><select id="distN"><option>1</option><option selected>100</option><option>1000</option></select></div>
       </div>
       <div id="distPools" class="stack"></div>
@@ -282,6 +282,10 @@ const POOLS = [
   { id: "pool-mobile", label: L("モバイル", "Mobile"), port: 8085, color: "#7e22ce" },
   { id: "pool-flag-off", label: L("機能フラグ オフ (VM 1)", "Feature flag off (VM 1)"), port: 8080, color: "#0369a1" },
   { id: "pool-flag-on", label: L("機能フラグ オン (VM 2)", "Feature flag on (VM 2)"), port: 8080, color: "#be185d" },
+  // Server selection (#84): gateway pools with two servers each. The servers are the processes in SERVER_INFO.
+  { id: "pool-rr", label: L("Round Robin (速い 2 台)", "Round Robin (two fast servers)"), port: 8087, color: "#0e7490" },
+  { id: "pool-rr-slow", label: L("Round Robin (遅い 1 台を含む)", "Round Robin (one slow server)"), port: 8086, color: "#9a3412" },
+  { id: "pool-lc", label: L("Least Connections (遅い 1 台を含む)", "Least Connections (one slow server)"), port: 8086, color: "#4d7c0f" },
 ];
 const TYPES = ["Header", "QueryString", "ClientIP", "Method", "Path"];
 const METHODS = ["GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "PATCH"];
@@ -317,6 +321,9 @@ const PRESETS = [
   [L("モバイル", "Mobile"), () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X)"]]), uaSensitive: true })],
   [L("カナリア (ポート 8080)", "Canary (port 8080)"), () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]]), port: 8080 })],
   [L("優先度 (ポート 8090)", "Priority (port 8090)"), () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]]), port: 8090 })],
+  [L("Round Robin (ポート 8110)", "Round Robin (port 8110)"), () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]]), port: 8110 })],
+  [L("Round Robin 遅いサーバーあり (ポート 8120)", "Round Robin with a slow server (port 8120)"), () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]]), port: 8120 })],
+  [L("Least Connections (ポート 8130)", "Least Connections (port 8130)"), () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", DESKTOP_UA]]), port: 8130 })],
   [L("WAF ブロック", "WAF block"), () => ({ ...req("GET", "/app/home", "", "192.0.2.41", [["User-Agent", "agw-block-demo"]]), uaSensitive: true })],
 ];
 
@@ -434,6 +441,7 @@ function evaluate(cfg, r) {
   }
   if (r.port === 8080) return { path, results: order.map(({ i }) => ({ i, status: "skip", conds: [] })), d: { kind: "weighted", port: 8080 } };
   if (r.port === 8090) return { path, results: order.map(({ i }) => ({ i, status: "skip", conds: [] })), d: { kind: "priority", port: 8090 } };
+  if (SERVER_SELECT_PORTS[r.port]) return { path, results: order.map(({ i }) => ({ i, status: "skip", conds: [] })), d: { kind: "server", port: r.port } };
   let d = null;
   const results = order.map(({ r: rule, i }) => {
     if (d || ruleMap(rule) !== mapPort) return { i, status: "skip", conds: [] };
@@ -444,7 +452,21 @@ function evaluate(cfg, r) {
   });
   return { path, results, d: d || { kind: "default", pool: mapPort === 8100 ? FLAG_DEFAULT_POOL : cfg.defaultPool, port: mapPort } };
 }
-const pool = (id) => POOLS.find((p) => p.id === id) || { id, label: id, port: 0, color: PRIORITY_COLOR[id] || "#334155" };
+const pool = (id) => POOLS.find((p) => p.id === id) || (SERVER_INFO[id] ? { id, label: SERVER_INFO[id].label, port: SERVER_INFO[id].port, color: SERVER_INFO[id].color } : { id, label: id, port: 0, color: PRIORITY_COLOR[id] || "#334155" });
+// Server selection (#84): ports 8110 / 8120 / 8130 use Basic rules, one pool each, two servers per pool.
+// x-backend-pool shows the process (server) that answered, so the names are kept as they are (no gatewayPoolName mapping).
+const SERVER_INFO = {
+  "pool-slow": { label: L("遅いサーバー (3 秒)", "Slow server (3 s)"), color: "#b91c1c", vm: 1, port: 8086 },
+  "pool-fast": { label: L("速いサーバー", "Fast server"), color: "#15803d", vm: 2, port: 8086 },
+  "pool-rr-a": { label: "Round Robin A", color: "#0e7490", vm: 1, port: 8087 },
+  "pool-rr-b": { label: "Round Robin B", color: "#6d28d9", vm: 2, port: 8087 },
+};
+const SERVER_SELECT_PORTS = {
+  8110: { pool: "pool-rr", algo: "rr", servers: ["pool-rr-a", "pool-rr-b"] },
+  8120: { pool: "pool-rr-slow", algo: "rr", servers: ["pool-slow", "pool-fast"] },
+  8130: { pool: "pool-lc", algo: "lc", servers: ["pool-slow", "pool-fast"] },
+};
+const algoName = (a) => (a === "lc" ? "Least Connections" : "Round Robin");
 // Priority-based (8090): Primary = VM 2 (process pool-canary), Standby = VM 1 (process pool-web)
 const PRIORITY_COLOR = { "pool-primary": "#b45309", "pool-standby": "#475569" };
 const PRIORITY_NAME_ON_8090 = { "pool-canary": "pool-primary", "pool-web": "pool-standby" };
@@ -457,6 +479,7 @@ function gatewayPoolName(processPool, port, path) {
 function describe(d, cfg) {
   if (d.kind === "waf") return L(`WAF がブロック (${d.cidr}) — ルーティング評価なし`, `Blocked by WAF (${d.cidr}) — no routing evaluation`);
   if (d.kind === "weighted") return L(`ポート ${d.port} は重み付け (既定 pool-web 90% / pool-canary 10%)。1 件の経路は確率で決まります`, `Port ${d.port} is weighted (pool-web 90% / pool-canary 10%). A single request lands on one of them by chance`);
+  if (d.kind === "server") { const sp = SERVER_SELECT_PORTS[d.port]; return L(`ポート ${d.port} は ${sp.pool} の 2 台 (${sp.servers.join(" / ")}) に ${algoName(sp.algo)} で振り分けます`, `Port ${d.port} sends requests to the two servers of ${sp.pool} (${sp.servers.join(" / ")}) with ${algoName(sp.algo)}`); }
   if (d.kind === "priority") return L(`ポート ${d.port} は優先度ベース。Primary (VM 2) が最小正常割合 60% 以上なら Primary、そうでなければ Standby (VM 1) に送ります`, `Port ${d.port} is priority-based. Requests go to Primary (VM 2) while it meets the minimum healthy percentage of 60%, otherwise to Standby (VM 1)`);
   if (d.kind === "pool") return L(`「${cfg.rules[d.i].name}」に一致 → ${pool(d.pool).label} (${d.pool})`, `Matched "${cfg.rules[d.i].name}" → ${pool(d.pool).label} (${d.pool})`);
   if (d.kind === "redirect") return L(`「${cfg.rules[d.i].name}」に一致 → ${d.url} へリダイレクト`, `Matched "${cfg.rules[d.i].name}" → redirect to ${d.url}`);
@@ -494,6 +517,7 @@ function routeColorOf(d) {
   if (!d) return "var(--primary)";
   if (d.kind === "waf") return "#a4493a";
   if (d.kind === "weighted" || d.kind === "priority") return POOLS[0].color;
+  if (d.kind === "server") return pool(d.port === 8110 ? "pool-rr" : d.port === 8120 ? "pool-rr-slow" : "pool-lc").color;
   if (d.kind === "pool" || d.kind === "default") { const p = POOLS.find((x) => x.id === d.pool); return p ? p.color : "var(--primary)"; }
   return "var(--primary)";
 }
@@ -635,7 +659,7 @@ async function send() {
   state.history = state.history.slice(0, 8);
   renderHistory();
 }
-function tones(d) { return d.kind === "waf" ? ["b-err", "WAF"] : d.kind === "weighted" ? ["b-info", "90:10"] : d.kind === "priority" ? ["b-info", L("優先度", "Priority")] : d.kind === "redirect" ? ["b-info", "302"] : d.kind === "default" ? ["b-warn", L("既定", "Default")] : ["b-ok", L("一致", "Match")]; }
+function tones(d) { return d.kind === "waf" ? ["b-err", "WAF"] : d.kind === "weighted" ? ["b-info", "90:10"] : d.kind === "priority" ? ["b-info", L("優先度", "Priority")] : d.kind === "server" ? ["b-info", algoName(SERVER_SELECT_PORTS[d.port].algo)] : d.kind === "redirect" ? ["b-info", "302"] : d.kind === "default" ? ["b-warn", L("既定", "Default")] : ["b-ok", L("一致", "Match")]; }
 function liveSummary(l) {
   if (!l) return "";
   if (l.kind === "pending") return L("送信中", "Sending");
@@ -646,7 +670,7 @@ function liveSummary(l) {
 }
 function verdict() {
   const l = state.live, d = state.ev && state.ev.d;
-  if (!l || !d || l.kind === "pending" || l.kind === "opaque" || d.kind === "weighted" || d.kind === "priority") return null;
+  if (!l || !d || l.kind === "pending" || l.kind === "opaque" || d.kind === "weighted" || d.kind === "priority" || d.kind === "server") return null;
   let same;
   if (d.kind === "waf") same = l.kind === "error" || (l.kind === "response" && l.status === 403);
   else if (d.kind === "redirect") same = l.kind === "redirect" || (l.kind === "response" && l.status >= 300 && l.status < 400);
@@ -666,13 +690,15 @@ function renderDiagram() {
   const rowOf = (id) => {
     const pp = priorityPools.find((x) => x.id === id);
     if (pp) return pp;
+    const si = SERVER_INFO[id];
+    if (si) return { id, t: id, sub: `VM ${si.vm} :${si.port} ${si.label}`, color: si.color };
     const p = POOLS.find((x) => x.id === id);
     return { id: p.id, t: p.id + (p.id === cfg.defaultPool ? L(" (既定)", " (default)") : ""), sub: `:${p.port} ${p.label}` };
   };
   // One frame per VM: VM 2 = pool-primary, pool-canary, pool-flag-on; VM 1 = pool-standby and the other pools
   const vmGroups = [
-    { label: "VM 2 (192.168.1.11)", rows: ["pool-primary", "pool-canary", "pool-flag-on"].map(rowOf) },
-    { label: "VM 1 (192.168.1.10)", rows: ["pool-standby", "pool-web", "pool-flag-off", "pool-partner", "pool-tenant", "pool-api-v2", "pool-mobile"].map(rowOf) },
+    { label: "VM 2 (192.168.1.11)", rows: ["pool-primary", "pool-canary", "pool-flag-on", "pool-fast", "pool-rr-b"].map(rowOf) },
+    { label: "VM 1 (192.168.1.10)", rows: ["pool-standby", "pool-web", "pool-flag-off", "pool-partner", "pool-tenant", "pool-api-v2", "pool-mobile", "pool-slow", "pool-rr-a"].map(rowOf) },
   ];
   const rowH = 42, groupGap = 14, frameHead = 26;
   const frames = [];
@@ -695,13 +721,14 @@ function renderDiagram() {
   const weighted = !!(d && (d.kind === "weighted" || d.kind === "priority"));
   const priority = !!(d && d.kind === "priority");
   // Priority-based: Primary (pool-canary on VM 2) is the hit while healthy; when it is stopped the real answer is Standby (pool-web on VM 1)
-  const hitSet = priority ? new Set(["pool-primary"]) : weighted ? new Set(["pool-web", "pool-canary"]) : new Set(active ? [active] : []);
+  const serverSel = d && d.kind === "server" ? SERVER_SELECT_PORTS[d.port] : null;
+  const hitSet = serverSel ? new Set(serverSel.servers) : priority ? new Set(["pool-primary"]) : weighted ? new Set(["pool-web", "pool-canary"]) : new Set(active ? [active] : []);
   const st = (x) => (x ? "var(--primary)" : "var(--line)");
   // The left part of the route (client → listener → WAF → map) uses the color of the first destination pool
   const routeColor = routeColorOf(d);
   const stages = [
     { x: 8, l: L("クライアント", "Client"), sub: isLive() ? L("このブラウザー", "this browser") : "", on },
-    { x: 148, l: L("Basic リスナー", "Basic listener"), sub: d && d.kind === "priority" ? L(":8090 (優先度)", ":8090 (priority)") : weighted ? L(":8080 (カナリア)", ":8080 (canary)") : ":80", on },
+    { x: 148, l: L("Basic リスナー", "Basic listener"), sub: serverSel ? `:${d.port} (${serverSel.algo === "lc" ? "LC" : "RR"})` : d && d.kind === "priority" ? L(":8090 (優先度)", ":8090 (priority)") : weighted ? L(":8080 (カナリア)", ":8080 (canary)") : ":80", on },
     { x: 288, l: "WAF", sub: blocked ? L("403 で遮断", "blocked with 403") : cfg.waf.enabled ? L("ポリシー有効", "policy on") : L("無効", "off"), on: on && !blocked, bad: blocked },
   ];
   stages.slice(0, -1).forEach((g, i) => svg.append(s("line", { x1: g.x + 120, y1: mid, x2: stages[i + 1].x, y2: mid, stroke: (i < 2 ? on : stages[i + 1].on) ? routeColor : "var(--line)", "stroke-width": on ? 3 : 1.5 })));
@@ -710,14 +737,16 @@ function renderDiagram() {
     svg.append(s("text", { x: g.x + 60, y: mid - 3, "text-anchor": "middle", "font-size": g.l.length > 14 ? 9.5 : 12.5, "font-weight": 700, fill: "var(--fg)" }, g.l));
     svg.append(s("text", { x: g.x + 60, y: mid + 14, "text-anchor": "middle", "font-size": 10.5, fill: "var(--fg)" }, g.sub));
   });
-  // Four advanced routing maps, one per listener port. The map of the called port is highlighted and the route starts from it
+  // One box per listener port: four advanced routing maps, then the three Basic rules of server selection (#84).
+  // The box of the called port is highlighted and the route starts from it
   const activePort = d && d.port ? d.port : 80;
   const mapDefs = [
-    { port: 80, y: mid - 105, l: "Routing map :80", sub: "advancedRoutingMap1" },
-    { port: 8080, y: mid - 35, l: "canaryMap :8080", sub: "canary-split 90 : 10" },
-    { port: 8090, y: mid + 35, l: "priorityMap :8090", sub: "Primary 1 / Standby 2" },
-    { port: 8100, y: mid + 105, l: "flagMap :8100", sub: L("オン → pool-flag-on", "on → pool-flag-on") },
-  ];
+    { port: 80, l: "Routing map :80", sub: "advancedRoutingMap1" },
+    { port: 8080, l: "canaryMap :8080", sub: "canary-split 90 : 10" },
+    { port: 8090, l: "priorityMap :8090", sub: "Primary 1 / Standby 2" },
+    { port: 8100, l: "flagMap :8100", sub: L("オン → pool-flag-on", "on → pool-flag-on") },
+    ...Object.entries(SERVER_SELECT_PORTS).map(([port, sp]) => ({ port: Number(port), l: `Basic rule :${port}`, sub: `${sp.pool} · ${algoName(sp.algo)}` })),
+  ].map((m, k, all) => ({ ...m, y: mid + (k - (all.length - 1) / 2) * 70 }));
   const activeY = (mapDefs.find((m) => m.port === activePort) || mapDefs[0]).y;
   mapDefs.forEach((m) => {
     const isActive = on && !blocked && m.port === activePort;
@@ -740,6 +769,7 @@ function renderDiagram() {
       return ids;
     }
     if (port === 8100) return ["pool-flag-on", "pool-flag-off"];
+    if (SERVER_SELECT_PORTS[port]) return SERVER_SELECT_PORTS[port].servers;
     if (port === 8080) return ["pool-web", "pool-canary"];
     return ["pool-primary", "pool-standby"];
   };
@@ -767,7 +797,23 @@ function renderDiagram() {
   $("summary").textContent = summary;
 }
 
-function backendPage(p, method, path, query, headers, instance) {
+// Server selection ports (#84): one gateway pool with two servers. Lists both servers; `answered` (the process name
+// from x-backend-pool) is marked. With no `answered` (the prediction), neither is marked: one request can reach either.
+function serverSelectBlock(port, answered) {
+  const sp = SERVER_SELECT_PORTS[port];
+  const rows = sp.servers.map((id) => {
+    const si = SERVER_INFO[id], hit = id === answered;
+    return el("li", { "data-server": id, "data-answered": hit ? "true" : "false", style: `display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;${hit ? `background:${si.color};color:#fff;font-weight:700` : "border:1px solid var(--line)"}` },
+      el("span", { "aria-hidden": "true", text: hit ? "●" : "○" }),
+      el("span", { class: "mono", text: id }),
+      el("span", { text: `VM ${si.vm} :${si.port} ${si.label}` }),
+      hit ? el("span", { text: L("← この応答", "← this response") }) : null);
+  });
+  return el("div", { class: "card stack", style: "gap:6px" },
+    el("p", { style: "margin:0" }, el("span", { text: L("バックエンド プール: ", "Backend pool: ") }), el("b", { class: "mono", text: sp.pool }), el("span", { text: ` (${algoName(sp.algo)})` })),
+    el("ul", { style: "list-style:none;margin:0;padding:0;display:grid;gap:4px" }, rows));
+}
+function backendPage(p, method, path, query, headers, instance, heading) {
   const dl = el("dl", {},
     el("dt", { text: L("インスタンス", "Instance") }), el("dd", { text: instance }),
     el("dt", { text: "Method" }), el("dd", { text: method }),
@@ -777,7 +823,7 @@ function backendPage(p, method, path, query, headers, instance) {
   const rows = headers.slice().sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) =>
     el("tr", { class: GW.has(k) ? "gw" : null }, el("th", { scope: "row", text: k }), el("td", {}, String(v), GW.has(k) ? el("span", { class: "sr-only", text: L(" (Application Gateway が付与)", " (added by Application Gateway)") }) : null)));
   return el("div", { class: "page", role: "group", "aria-label": L(`${p.id} が返すページ`, `Page returned by ${p.id}`) },
-    el("div", { class: "ph", style: `background:${p.color}` }, el("p", { text: L("この応答を返したバックエンド プール", "Backend pool that answered this request") }), el("p", { class: "pn", text: p.id }), el("p", { text: p.label })),
+    el("div", { class: "ph", style: `background:${p.color}` }, el("p", { text: heading || L("この応答を返したバックエンド プール", "Backend pool that answered this request") }), el("p", { class: "pn", text: p.id }), el("p", { text: p.label })),
     dl, el("table", {}, el("caption", { text: L("受信したリクエスト ヘッダー", "Request headers received") }), el("tbody", {}, rows)),
     el("p", { class: "note", style: "padding-inline:18px", text: L("黄色の行は Application Gateway が付与・書き換えたヘッダーです。", "Highlighted rows are headers that Application Gateway added or rewrote.") }));
 }
@@ -790,6 +836,17 @@ function renderSim() {
   if (d.kind === "waf") { out.append(statusBlock(403, "Forbidden", L("WAF がブロックしたため、バックエンドには届きません。", "WAF blocked the request, so it does not reach a backend."))); return; }
   if (d.kind === "weighted") { out.append(statusBlock("—", "", L("ポート 8080 の重み付けのため、1 件では pool-web か pool-canary のどちらかに確率で決まります。100 件の割合は canary-check.sh で確認します。", "Port 8080 is weighted, so a single request lands on pool-web or pool-canary by chance. Check the ratio of 100 requests with canary-check.sh."))); return; }
   if (d.kind === "priority") { out.append(statusBlock("—", "", L("ポート 8090 は優先度ベース。Primary (VM 2) が正常なら Primary、停止していれば Standby (VM 1) に届きます。テスト要求で件数を送って確認します。", "Port 8090 is priority-based. The request reaches Primary (VM 2) while it is healthy, and Standby (VM 1) when it is stopped. Use the test requests to count."))); return; }
+  if (d.kind === "server") {
+    const sp = SERVER_SELECT_PORTS[d.port];
+    const slow = sp.servers.includes("pool-slow")
+      ? L(" pool-slow は毎回 3 秒待ってから応答します。", " pool-slow waits 3 s before every answer.") : "";
+    const how = sp.algo === "lc"
+      ? L("Least Connections は、開いている接続が少ないサーバーを選ぶので、新しい要求は遅いサーバーを避けます。", "Least Connections picks the server with fewer open connections, so new requests avoid the slow server.")
+      : L("Round Robin は、サーバーの状態を見ずに交互に配ります。", "Round Robin hands requests to the servers in turn, whatever their state.");
+    out.append(serverSelectBlock(d.port, null));
+    out.append(statusBlock("—", "", L(`ポート ${d.port} は ${sp.pool} (${algoName(sp.algo)})。${how}${slow} 1 件ではどちらに届くかは決まりません。テスト要求で件数と時間を確かめます (8120 と 8130 は同時に試さないでください)。`, `Port ${d.port} uses ${sp.pool} (${algoName(sp.algo)}). ${how}${slow} A single request can reach either server. Use the test requests to see the counts and the time (do not test 8120 and 8130 at the same time).`)));
+    return;
+  }
   if (d.kind === "redirect") { const q = r.query.replace(/^\?/, ""); out.append(statusBlock(302, "Found", `Location: ${q ? `${d.url}?${q}` : d.url}`)); return; }
   const p = pool(d.pool);
   const hs = r.headers.filter((h) => h.name.trim()).map((h) => [h.name.trim().toLowerCase(), h.value]);
@@ -827,7 +884,10 @@ function renderLive() {
   const b = l.body;
   if (b && b.pool) {
     const hs = Object.entries(b.headers || {}).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : v]);
-    out.append(backendPage(pool(gatewayPoolName(b.pool, l.port, l.path)), b.method || "", b.path || "", new URLSearchParams(b.query || {}).toString(), hs, b.instance || ""));
+    const serverPort = SERVER_SELECT_PORTS[Number(l.port)] ? Number(l.port) : null;
+    if (serverPort) out.append(serverSelectBlock(serverPort, b.pool));
+    out.append(backendPage(pool(gatewayPoolName(b.pool, l.port, l.path)), b.method || "", b.path || "", new URLSearchParams(b.query || {}).toString(), hs, b.instance || "",
+      serverPort ? L("この応答を返したサーバー", "Server that answered this request") : null));
   } else {
     out.append(statusBlock(l.status, l.statusText || "", l.pool ? `x-backend-pool: ${l.pool}${l.rawPool && l.rawPool !== l.pool ? L(` (VM のプロセス: ${l.rawPool})`, ` (process on the VM: ${l.rawPool})`) : ""}` : L("x-backend-pool ヘッダーなし (デモ用バックエンドではないか、CORS の Expose-Headers 未設定)", "No x-backend-pool header (not the demo backend, or CORS Expose-Headers is missing)")));
   }
@@ -952,11 +1012,14 @@ $("copyCurl").addEventListener("click", async () => {
 //                           priority = highest-priority pool (1 is highest) that has >= minHealthy % healthy servers;
 //                           if none qualifies, the highest-priority pool is used.
 // Stage 2 (server selection inside the chosen pool): rr = round robin over healthy servers,
-//                           wrr = smooth weighted round robin over healthy servers, lc = fewest in-flight requests.
-// Each simulated request holds its connection for `concurrency` further requests (used by lc).
+//                           wrr = smooth weighted round robin over healthy servers, lc = fewest open connections.
+// Time (#84): `concurrency` users each send one request at a time. A request takes BASE_MS + the server's delay and
+// keeps its connection open for that long, so a slow server collects open connections and Least Connections avoids it.
 const DIST_ALGOS = [["rr", L("Round Robin (既定)", "Round Robin (default)")], ["wrr", "Weighted Round Robin"], ["lc", "Least Connections"]];
 const DIST_MAX = { pools: 5, servers: 8, concurrency: 50 };
-const sv = (name, weight = 1, healthy = true) => ({ name, weight, healthy });
+const DIST_BASE_MS = 20;
+const DIST_MAX_DELAY = 10000;
+const sv = (name, weight = 1, healthy = true, delay = 0) => ({ name, weight, healthy, delay });
 function distSample() {
   return {
     mode: "weighted", minHealthy: 60, concurrency: 4,
@@ -983,6 +1046,12 @@ const DIST_PRESETS = [
   [L("WRR 6:3:1 (全台正常)", "WRR 6:3:1 (all healthy)"), () => ({ mode: "weighted", minHealthy: 60, concurrency: 4, pools: [
     { id: "pool-web", weight: 100, priority: 1, algo: "wrr", servers: [sv("srv-6", 6), sv("srv-3", 3), sv("srv-1", 1)] },
   ] })],
+  [L("8120: Round Robin、片方が 3 秒", "8120: Round Robin, one server takes 3 s"), () => ({ mode: "weighted", minHealthy: 60, concurrency: 6, pools: [
+    { id: "pool-rr-slow", weight: 100, priority: 1, algo: "rr", servers: [sv("pool-slow", 1, true, 3000), sv("pool-fast")] },
+  ] })],
+  [L("8130: Least Connections、片方が 3 秒", "8130: Least Connections, one server takes 3 s"), () => ({ mode: "weighted", minHealthy: 60, concurrency: 6, pools: [
+    { id: "pool-lc", weight: 100, priority: 1, algo: "lc", servers: [sv("pool-slow", 1, true, 3000), sv("pool-fast")] },
+  ] })],
   [L("WRR 6:3:1 (重み 6 が異常)", "WRR 6:3:1 (weight 6 unhealthy)"), () => ({ mode: "weighted", minHealthy: 60, concurrency: 4, pools: [
     { id: "pool-web", weight: 100, priority: 1, algo: "wrr", servers: [sv("srv-6", 6, false), sv("srv-3", 3), sv("srv-1", 1)] },
   ] })],
@@ -992,7 +1061,7 @@ function validateDist(d) {
   if (!d || typeof d !== "object") return [L("分散設定がオブジェクトではありません", "The distribution settings are not an object")];
   if (d.mode !== "weighted" && d.mode !== "priority") e.push(L('mode は "weighted" か "priority" です', 'mode must be "weighted" or "priority"'));
   if (!Number.isInteger(d.minHealthy) || d.minHealthy < 0 || d.minHealthy > 100) e.push(L("最小正常割合は 0〜100 の整数です", "Minimum healthy must be an integer from 0 to 100"));
-  if (!Number.isInteger(d.concurrency) || d.concurrency < 1 || d.concurrency > DIST_MAX.concurrency) e.push(L(`同時処理数は 1〜${DIST_MAX.concurrency} の整数です`, `Concurrency must be an integer from 1 to ${DIST_MAX.concurrency}`));
+  if (!Number.isInteger(d.concurrency) || d.concurrency < 1 || d.concurrency > DIST_MAX.concurrency) e.push(L(`同時に送る利用者数は 1〜${DIST_MAX.concurrency} の整数です`, `Concurrent users must be an integer from 1 to ${DIST_MAX.concurrency}`));
   if (!Array.isArray(d.pools) || d.pools.length < 1 || d.pools.length > DIST_MAX.pools) return e.concat(L(`プールは 1〜${DIST_MAX.pools} 個です`, `There must be 1 to ${DIST_MAX.pools} pools`));
   const ids = new Set(), prios = new Set();
   d.pools.forEach((p, i) => {
@@ -1006,6 +1075,7 @@ function validateDist(d) {
       if (typeof x.name !== "string" || !x.name.trim()) e.push(L(`${at}・サーバー ${j + 1}: 名前が必要です`, `${at}, server ${j + 1}: name is required`));
       if (!Number.isInteger(x.weight) || x.weight < 0 || x.weight > 100) e.push(L(`${at}・サーバー ${j + 1}: 重みは 0〜100 の整数です`, `${at}, server ${j + 1}: weight must be an integer from 0 to 100`));
       if (typeof x.healthy !== "boolean") e.push(L(`${at}・サーバー ${j + 1}: 正常/異常の指定が不正です`, `${at}, server ${j + 1}: healthy must be true or false`));
+      if (!Number.isInteger(x.delay) || x.delay < 0 || x.delay > DIST_MAX_DELAY) e.push(L(`${at}・サーバー ${j + 1}: 遅延は 0〜${DIST_MAX_DELAY} の整数 (ms) です`, `${at}, server ${j + 1}: delay must be an integer from 0 to ${DIST_MAX_DELAY} (ms)`));
     });
     if (d.mode === "weighted") {
       if (!Number.isInteger(p.weight) || p.weight < 0 || p.weight > 100) e.push(L(`${at}: 重みは 0〜100 の整数です`, `${at}: weight must be an integer from 0 to 100`));
@@ -1069,28 +1139,33 @@ function selectServer(p, st) {
 }
 function simulate(d, n) {
   const st = { pool: {}, srv: {}, rr: {}, active: {}, total: {}, inflight: [] };
-  const poolCount = {}, srvCount = {};
-  let failed = 0, first = null;
+  const poolCount = {}, srvCount = {}, srvMs = {};
+  let failed = 0, first = null, now = 0, elapsedMs = 0;
   for (let i = 0; i < n; i++) {
+    // A user is free when fewer than `concurrency` requests are open; otherwise wait for the earliest one to finish.
+    if (st.inflight.length >= d.concurrency) now = Math.max(now, Math.min(...st.inflight.map((x) => x.end)));
+    st.inflight = st.inflight.filter((x) => { if (x.end > now) return true; if (x.key) st.active[x.key] -= 1; return false; });
     const p = selectPool(d, st);
     const s2 = selectServer(p, st);
-    let rec;
+    let rec, key = null, ms = DIST_BASE_MS;
     if (!s2) {
       failed += 1;
       rec = { pool: p.id, server: null };
     } else {
-      const key = `${p.id}/${s2.name}`;
+      key = `${p.id}/${s2.name}`;
+      ms = DIST_BASE_MS + (s2.delay || 0);
       poolCount[p.id] = (poolCount[p.id] || 0) + 1;
       srvCount[key] = (srvCount[key] || 0) + 1;
+      srvMs[key] = (srvMs[key] || 0) + ms;
       st.total[key] = (st.total[key] || 0) + 1;
       st.active[key] = (st.active[key] || 0) + 1;
-      st.inflight.push(key);
-      if (st.inflight.length > d.concurrency) { const old = st.inflight.shift(); st.active[old] -= 1; }
       rec = { pool: p.id, server: s2.name };
     }
+    st.inflight.push({ key, end: now + ms });
+    elapsedMs = Math.max(elapsedMs, now + ms);
     if (first === null) first = rec;
   }
-  return { n, poolCount, srvCount, failed, first };
+  return { n, poolCount, srvCount, srvMs, failed, first, elapsedMs };
 }
 // Expected share (in %) of a server within its pool, or null when it is not computable (lc) or excluded (unhealthy).
 function expectedServerPct(p, s2) {
@@ -1113,10 +1188,12 @@ function serverRow(p, s2, j, i) {
   hc.checked = s2.healthy;
   hc.style.inlineSize = "auto";
   hc.addEventListener("change", () => { s2.healthy = hc.checked; distChanged(false); });
+  const dIn = el("input", { type: "number", min: 0, max: DIST_MAX_DELAY, step: 100, class: "mono", style: "inline-size:90px", "aria-label": L(`プール ${i + 1} のサーバー ${j + 1} の遅延 (ms)`, `Pool ${i + 1} server ${j + 1} delay (ms)`), value: s2.delay || 0 });
+  dIn.addEventListener("input", () => { s2.delay = Number(dIn.value); distChanged(false); });
   const del = el("button", { type: "button", class: "icon", "aria-label": L(`プール ${i + 1} のサーバー ${j + 1} を削除`, `Remove pool ${i + 1} server ${j + 1}`), text: "×" });
   del.addEventListener("click", () => { p.servers.splice(j, 1); distChanged(true); });
   return el("div", { class: "row", style: "gap:6px" }, nameIn, el("span", { class: "note", text: L("サーバー重み", "Server weight") }), wIn,
-    el("label", { style: "margin:0;font-weight:400" }, hc, L(" 正常", " Healthy")), del);
+    el("label", { style: "margin:0;font-weight:400" }, hc, L(" 正常", " Healthy")), el("span", { class: "note", text: L("遅延 (ms)", "Delay (ms)") }), dIn, del);
 }
 function poolEditor(p, i) {
   const d = state.dist;
@@ -1185,10 +1262,12 @@ function distReport(d, r, n) {
     if (!s2.healthy) note = L("異常 (除外)", "unhealthy (excluded)");
     else if (p.algo === "lc") note = L("接続数により変動", "depends on connections");
     else note = L(`期待 ${(ex * poolExp(p) / 100).toFixed(1)}%`, `expected ${(ex * poolExp(p) / 100).toFixed(1)}%`);
-    srvRows.push(el("div", { class: "dist-row" }, el("span", { class: "mono", text: key }), el("div", {}, distBar(pct(c))), el("span", { class: "mono", text: L(`${c} 件 (${pct(c).toFixed(1)}%)・${note}`, `${c} (${pct(c).toFixed(1)}%) · ${note}`) })));
+    const avg = c ? `${(r.srvMs[key] / c / 1000).toFixed(1)}` : "—";
+    srvRows.push(el("div", { class: "dist-row" }, el("span", { class: "mono", text: key }), el("div", {}, distBar(pct(c))), el("span", { class: "mono", text: L(`${c} 件 (${pct(c).toFixed(1)}%)・平均 ${avg} 秒・${note}`, `${c} (${pct(c).toFixed(1)}%) · avg ${avg} s · ${note}`) })));
   }));
   return el("div", { class: "stack" },
     el("p", { class: "note", text: L(`最初の要求の経路: ${firstTxt}`, `Route of the first request: ${firstTxt}`) }),
+    el("p", { class: "note", text: L(`所要時間: ${(r.elapsedMs / 1000).toFixed(1)} 秒 (模擬、同時 ${d.concurrency} 人)`, `Total time: ${(r.elapsedMs / 1000).toFixed(1)} s (simulated, ${d.concurrency} users at a time)`) }),
     el("h3", { text: L(`① プール別の割合 (${n} 件)`, `① Share per pool (${n} requests)`) }), poolRows,
     el("h3", { text: L("② サーバー別の割合 (選ばれたプール内)", "② Share per server (inside the selected pool)") }), srvRows.length ? srvRows : el("p", { class: "note", text: L("サーバーがありません", "No servers") }),
     el("p", { class: "note", text: L("件数が少ないと割合は期待値から外れます。重み付けは件数を増やすほど期待値に近づきます。", "With few requests the shares drift from the expected values. The more requests, the closer weighted distribution gets.") }));
@@ -1283,7 +1362,7 @@ function renderTestRun(run, page) {
   const msSum = new Map(); // only answered requests count toward the average; timeouts and failures do not
   for (const r of run.seq) if (r && r.pool) { counts.set(r.pool, (counts.get(r.pool) || 0) + 1); msSum.set(r.pool, (msSum.get(r.pool) || 0) + r.ms); }
   const secs = (ms) => (ms / 1000).toFixed(1);
-  const colorOf = (pool) => (POOLS.find((p) => p.id === pool) || {}).color || PRIORITY_COLOR[pool] || "#64748b";
+  const colorOf = (pool) => (POOLS.find((p) => p.id === pool) || {}).color || PRIORITY_COLOR[pool] || (SERVER_INFO[pool] || {}).color || "#64748b";
   const start = (page - 1) * TEST_PAGE, end = Math.min(run.n, start + TEST_PAGE);
   const cells = [];
   for (let i = start; i < end; i++) {
@@ -1334,6 +1413,8 @@ $("distAddPool").addEventListener("click", () => {
 
 // ---------- start ----------
 renderMode(); renderRequest(); showStorage();
+// Settings saved before servers had a delay (#84): treat a missing delay as 0.
+if (saved && saved.dist && Array.isArray(saved.dist.pools)) saved.dist.pools.forEach((p) => (Array.isArray(p.servers) ? p.servers : []).forEach((x) => { if (x && x.delay === undefined) x.delay = 0; }));
 state.dist = saved && saved.dist && validateDist(saved.dist).length === 0 ? saved.dist : distSample();
 // Settings saved before the User-Agent rule existed have no blockedUA: give them the sample value.
 if (!Array.isArray(state.config.waf.blockedUA)) state.config.waf.blockedUA = ["agw-block-demo"];
