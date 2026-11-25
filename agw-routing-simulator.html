@@ -1221,7 +1221,13 @@ async function runTestRequests() {
   }
   const out = $("testResult"), state_ = $("testState");
   if (!isLive()) { state_.textContent = L("送信できません。ゲートウェイ URL が空です。上の「ゲートウェイ URL」に入力すると、実機に送れます。", "Cannot send: the gateway URL is empty. Enter it in \"Gateway URL\" at the top to send to the real gateway."); out.replaceChildren(); return; }
-  const port = Number(state.request.port) || 80;
+  // Evaluate the request like send() does, so the prediction and the route diagram match the requests being sent.
+  // The single response shown before belongs to an older request, so it is cleared.
+  const r = JSON.parse(JSON.stringify(state.request));
+  if (state.observedIp) r.clientIp = state.observedIp;
+  state.sent = r; state.ev = evaluate(state.config, r); state.live = null;
+  renderAll();
+  const port = Number(r.port) || 80;
   const n = Number($("testN").value) || 100;
   const u = new URL(normBase(state.backendUrl));
   u.port = String(port);
