@@ -44,6 +44,38 @@ var poolAddressPools = [for p in pools: {
   }
 }]
 
+// One backend HTTP setting per process in `pools`.
+var poolHttpSettings = [
+  for p in pools: {
+    name: 'hs-${p.name}'
+    properties: {
+      port: p.port
+      protocol: 'Http'
+      cookieBasedAffinity: 'Disabled'
+      requestTimeout: 20
+      probe: {
+        id: '${gwId}/probes/healthz'
+      }
+    }
+  }
+]
+// #82 server selection demo: 8086 = pool-slow (VM 1) / pool-fast (VM 2), 8087 = pool-rr-a (VM 1) / pool-rr-b (VM 2).
+// Affinity stays off: Least Connections is not applied while cookie-based affinity is on.
+var serverSelectHttpSettings = [
+  for port in [8086, 8087]: {
+    name: 'hs-${port}'
+    properties: {
+      port: port
+      protocol: 'Http'
+      cookieBasedAffinity: 'Disabled'
+      requestTimeout: 20
+      probe: {
+        id: '${gwId}/probes/healthz'
+      }
+    }
+  }
+]
+
 var appgwSubnetId = resourceId('Microsoft.Network/virtualNetworks/subnets', vnetName, 'appgw')
 var backendSubnetId = resourceId('Microsoft.Network/virtualNetworks/subnets', vnetName, 'backend')
 var gwId = resourceId('Microsoft.Network/applicationGateways', gwName)
@@ -414,6 +446,27 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
           port: 8100
         }
       }
+      {
+        // Port 8110: Round Robin with two fast servers (#82).
+        name: 'port-8110'
+        properties: {
+          port: 8110
+        }
+      }
+      {
+        // Port 8120: Round Robin with one slow server (pool-slow waits 3 s) (#82).
+        name: 'port-8120'
+        properties: {
+          port: 8120
+        }
+      }
+      {
+        // Port 8130: Least Connections over the same slow and fast servers as 8120 (#82).
+        name: 'port-8130'
+        properties: {
+          port: 8130
+        }
+      }
     ]
     probes: [
       {
@@ -478,21 +531,56 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
           ]
         }
       }
-    ])
-    backendHttpSettingsCollection: [
-      for p in pools: {
-        name: 'hs-${p.name}'
+      {
+        // #82 server selection demo. Every pool here has two servers; the port comes from hs-8086 / hs-8087.
+        // 8110: pool-rr-a (VM 1, 8087) and pool-rr-b (VM 2, 8087), both fast. Round Robin (the default).
+        name: 'pool-rr'
         properties: {
-          port: p.port
-          protocol: 'Http'
-          cookieBasedAffinity: 'Disabled'
-          requestTimeout: 20
-          probe: {
-            id: '${gwId}/probes/healthz'
-          }
+          backendAddresses: [
+            {
+              ipAddress: vm1Ip
+            }
+            {
+              ipAddress: vm2Ip
+            }
+          ]
         }
       }
-    ]
+      {
+        // 8120: pool-slow (VM 1, 8086, 3 s) and pool-fast (VM 2, 8086). Round Robin (the default).
+        name: 'pool-rr-slow'
+        properties: {
+          backendAddresses: [
+            {
+              ipAddress: vm1Ip
+            }
+            {
+              ipAddress: vm2Ip
+            }
+          ]
+        }
+      }
+      {
+        // 8130: the same two servers as pool-rr-slow, with Least Connections.
+        name: 'pool-lc'
+        properties: {
+          backendAddresses: [
+            {
+              ipAddress: vm1Ip
+            }
+            {
+              ipAddress: vm2Ip
+            }
+          ]
+          // Preview property, missing from the public API spec and the Bicep types (no warning here only because
+          // this array is built with concat()).
+          // Found by setting Least Connections on a pool in the portal and diffing the gateway (see
+          // docs/superpowers/specs/2026-11-25-server-selection-demo-design.md).
+          serverSelectionAlgorithm: 'LeastConnections'
+        }
+      }
+    ])
+    backendHttpSettingsCollection: concat(poolHttpSettings, serverSelectHttpSettings)
     httpListeners: [
       {
         name: 'listener-http'
@@ -538,6 +626,42 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
           }
           frontendPort: {
             id: '${gwId}/frontendPorts/port-8100'
+          }
+          protocol: 'Http'
+        }
+      }
+      {
+        name: 'listener-rr'
+        properties: {
+          frontendIPConfiguration: {
+            id: '${gwId}/frontendIPConfigurations/fe-ip'
+          }
+          frontendPort: {
+            id: '${gwId}/frontendPorts/port-8110'
+          }
+          protocol: 'Http'
+        }
+      }
+      {
+        name: 'listener-rr-slow'
+        properties: {
+          frontendIPConfiguration: {
+            id: '${gwId}/frontendIPConfigurations/fe-ip'
+          }
+          frontendPort: {
+            id: '${gwId}/frontendPorts/port-8120'
+          }
+          protocol: 'Http'
+        }
+      }
+      {
+        name: 'listener-lc'
+        properties: {
+          frontendIPConfiguration: {
+            id: '${gwId}/frontendIPConfigurations/fe-ip'
+          }
+          frontendPort: {
+            id: '${gwId}/frontendPorts/port-8130'
           }
           protocol: 'Http'
         }
@@ -918,6 +1042,57 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
           }
           advancedRoutingMap: {
             id: '${gwId}/advancedRoutingMaps/${flagMapName}'
+          }
+        }
+      }
+      {
+        // Port 8110: Round Robin over two fast servers (#82). Basic rule: no conditions are needed.
+        name: 'rule-rr'
+        properties: {
+          ruleType: 'Basic'
+          priority: 500
+          httpListener: {
+            id: '${gwId}/httpListeners/listener-rr'
+          }
+          backendAddressPool: {
+            id: '${gwId}/backendAddressPools/pool-rr'
+          }
+          backendHttpSettings: {
+            id: '${gwId}/backendHttpSettingsCollection/hs-8087'
+          }
+        }
+      }
+      {
+        // Port 8120: Round Robin with a slow server; about half of the requests wait 3 s.
+        name: 'rule-rr-slow'
+        properties: {
+          ruleType: 'Basic'
+          priority: 600
+          httpListener: {
+            id: '${gwId}/httpListeners/listener-rr-slow'
+          }
+          backendAddressPool: {
+            id: '${gwId}/backendAddressPools/pool-rr-slow'
+          }
+          backendHttpSettings: {
+            id: '${gwId}/backendHttpSettingsCollection/hs-8086'
+          }
+        }
+      }
+      {
+        // Port 8130: Least Connections (set on pool-lc); new requests avoid the slow server.
+        name: 'rule-lc'
+        properties: {
+          ruleType: 'Basic'
+          priority: 700
+          httpListener: {
+            id: '${gwId}/httpListeners/listener-lc'
+          }
+          backendAddressPool: {
+            id: '${gwId}/backendAddressPools/pool-lc'
+          }
+          backendHttpSettings: {
+            id: '${gwId}/backendHttpSettingsCollection/hs-8086'
           }
         }
       }
