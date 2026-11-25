@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Application Gateway Advanced Routing Demo</title>
+<style>
+  :root { --bg: #ffffff; --fg: #1f2328; --muted: #57606a; --link: #0969da; --line: #d0d7de; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #0d1117; --fg: #e6edf3; --muted: #8d96a0; --link: #4493f8; --line: #30363d; }
+  }
+  :root[data-theme="dark"] { --bg: #0d1117; --fg: #e6edf3; --muted: #8d96a0; --link: #4493f8; --line: #30363d; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px; }
+  h1 { font-size: 1.6rem; margin: 0 0 8px; }
+  h2 { font-size: 1.15rem; margin: 32px 0 8px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+  p { margin: 8px 0; }
+  ul { padding-left: 1.2em; }
+  li { margin: 6px 0; }
+  a { color: var(--link); }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Application Gateway Advanced Routing Demo</h1>
+  <p class="muted">Azure Application Gateway advanced routing rules (preview) and advanced load balancing (preview). <a href="https://github.com/koudaiii/agw-advanced-routing-demo">Source on GitHub</a></p>
+
+  <h2>English</h2>
+  <ul>
+    <li><a href="agw-routing-simulator.html?lang=en">Routing simulator</a>: predicts which pool answers each request, and compares it with a live gateway.</li>
+    <li><a href="docs/agw-advanced-routing-demo-guide.html?lang=en">Build guide</a>: how the demo environment is built and what to check.</li>
+  </ul>
+
+  <h2>日本語</h2>
+  <ul>
+    <li><a href="agw-routing-simulator.html?lang=ja">ルーティング シミュレーター</a>: 各要求をどのプールが受けるかを予測し、実機の応答と比べます。</li>
+    <li><a href="docs/agw-advanced-routing-demo-guide_ja.html?lang=ja">構築ガイド</a>: デモ環境の構築手順と確認方法です。</li>
+  </ul>
+</main>
+</body>
+</html>
