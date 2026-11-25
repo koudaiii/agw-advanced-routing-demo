@@ -203,12 +203,14 @@ svg .l{text-anchor:start}
 </tbody></table>
 
 <h3>3.3 Pool definitions (<code>backend/pools.conf</code>)</h3>
-<pre><code># name|port|label|color  (one Node.js process per line on the backend VM)
-pool-web|8080|Web (default)|#334155
-pool-partner|8081|Partner|#7c2d12
-pool-tenant|8082|Tenant|#0f766e
-pool-api-v2|8083|Orders API v2|#1d4ed8
-pool-mobile|8085|Mobile|#7e22ce</code></pre>
+<pre><code># name|port|label|color|delay_ms  (one Node.js process per line on the backend VM)
+pool-web|8080|Web (default)|#334155|0
+pool-partner|8081|Partner|#7c2d12|0
+pool-tenant|8082|Tenant|#0f766e|0
+pool-api-v2|8083|Orders API v2|#1d4ed8|0
+pool-mobile|8085|Mobile|#7e22ce|0
+pool-slow|8086|Slow server (3 s)|#b91c1c|3000
+pool-rr-a|8087|Round Robin A|#0e7490|0</code></pre>
 <p>The names and colors are the same as in the simulator's pool list, so the simulator's "Response" panel and the real page look alike.</p>
 <p><code>pools.conf</code> defines the Node.js processes on the VM and the ports they listen on. Ports 8090 and 8100 are listener ports of the Application Gateway; no backend process listens on them. Priority-based selection (8090) and the feature flag (8100) use the gateway pools below, which point at the existing processes on port 8080.</p>
 <table><thead><tr><th scope="col">Gateway pool</th><th scope="col">Points at (VM and process)</th><th scope="col">Used for</th></tr></thead><tbody>
@@ -218,6 +220,9 @@ pool-mobile|8085|Mobile|#7e22ce</code></pre>
 <tr><td><code>pool-canary</code></td><td>The <code>pool-canary</code> process on VM 2, port 8080</td><td>10% of the canary on :8080</td></tr>
 <tr><td><code>pool-flag-off</code></td><td>The <code>pool-web</code> process on VM 1, port 8080</td><td>Flag off (default) on :8100</td></tr>
 <tr><td><code>pool-flag-on</code></td><td>The <code>pool-canary</code> process on VM 2, port 8080</td><td>Flag on (<code>X-Feature: new</code>) on :8100</td></tr>
+<tr><td><code>pool-rr</code></td><td>The <code>pool-rr-a</code> process on VM 1 and the <code>pool-rr-b</code> process on VM 2, port 8087</td><td>Round Robin on :8110 (two fast servers)</td></tr>
+<tr><td><code>pool-rr-slow</code></td><td>The <code>pool-slow</code> process on VM 1 (waits 3 s) and the <code>pool-fast</code> process on VM 2, port 8086</td><td>Round Robin with a slow server on :8120</td></tr>
+<tr><td><code>pool-lc</code></td><td>The same two processes as <code>pool-rr-slow</code></td><td>Least Connections on :8130 (<code>serverSelectionAlgorithm</code> on the pool)</td></tr>
 </tbody></table>
 
 <h3>3.4 The server (<code>backend/server.js</code>)</h3>
@@ -300,6 +305,7 @@ DynamicUser=yes</code></pre>
 <tr><td>Canary (port 8080)</td><td>Map <code>canaryMap</code>, rule <code>canary-split</code> (path <code>^/</code>, every request): pool-web 90 : pool-canary 10 (<code>WeightedDistribution</code>). The map default is pool-canary</td></tr>
 <tr><td>Priority-based selection (port 8090)</td><td>Map <code>priorityMap</code>, rule <code>priority-split</code> (every path): <code>pool-primary</code> (VM 2, priority 1) → <code>pool-standby</code> (VM 1, priority 2), <code>PriorityAware</code>, minimum healthy percentage 60%. The default is <code>pool-standby</code></td></tr>
 <tr><td>Feature flag (port 8100)</td><td>Map <code>flagMap</code>, rule <code>flag-on</code> (priority 10, header <code>X-Feature</code> = <code>new</code>) → <code>pool-flag-on</code>. The default is <code>pool-flag-off</code></td></tr>
+<tr><td>Server selection (ports 8110 / 8120 / 8130)</td><td>Listeners <code>listener-rr</code> / <code>listener-rr-slow</code> / <code>listener-lc</code>, Basic rules <code>rule-rr</code> (500) / <code>rule-rr-slow</code> (600) / <code>rule-lc</code> (700) → pools <code>pool-rr</code> / <code>pool-rr-slow</code> / <code>pool-lc</code>, backend settings <code>hs-8087</code> / <code>hs-8086</code> (affinity off). Only <code>pool-lc</code> sets <code>serverSelectionAlgorithm: 'LeastConnections'</code></td></tr>
 </tbody></table>
 <figure class="diagram">
 <img src="https://learn.microsoft.com/azure/application-gateway/media/advanced-load-distribution/pool-selection.png" alt="Diagram showing that the pools of the matched rule are chosen by weighted distribution or by priority-based selection" style="inline-size:100%;block-size:auto;border:1px solid var(--line-soft);border-radius:16px;background:var(--card)">
@@ -367,7 +373,10 @@ Campaign               HTTP 302  redirect -&gt; https://www.contoso.com/campaign
 Feature flag off       HTTP 200  pool-web      ← :8100 (pool-flag-off)
 Feature flag on        HTTP 200  pool-canary   ← :8100 (pool-flag-on)
 Mobile                 HTTP 200  pool-mobile
-WAF block (UA)         HTTP 403</code></pre>
+WAF block (UA)         HTTP 403
+Round Robin (:8110)    HTTP 200  pool-rr-a     ← or pool-rr-b
+RR slow (:8120)        HTTP 200  pool-fast     ← or pool-slow (3 s)
+Least conn (:8130)     HTTP 200  pool-fast     ← or pool-slow (3 s)</code></pre>
 <p class="note">This is sample output of <code>test.sh</code>. The Canary line is one request of the 90:10 split on port 8080, so it can be pool-web or pool-canary.</p>
 <h4>Priority-based selection (port 8090)</h4>
 <p>Port 8090 prefers <code>pool-canary</code> on VM 2 (Primary) and switches to <code>pool-web</code> on VM 1 (Standby) when the primary stops. <code>canary-check.sh</code> counts the <code>x-backend-pool</code> response header, which is the process name on the VM, so Primary shows as <code>pool-canary</code> and Standby as <code>pool-web</code>.</p>
@@ -392,6 +401,17 @@ curl -s -D - -o /dev/null -H "X-Feature: new" http://&lt;frontend IP&gt;:8100/ |
 X-Feature: other  x-backend-pool: pool-web     (pool-flag-off, flag off)
 X-Feature: new    x-backend-pool: pool-canary  (pool-flag-on, flag on)</code></pre>
 <p class="note">Port 80 has no feature flag rule. Always use port 8100. This is not an A/B test: the client chooses, and there is no random split (a statistical A/B test is tracked in issue #27).</p>
+<h4>Server selection (ports 8110 / 8120 / 8130)</h4>
+<p>These three ports show how the gateway picks a server inside one pool, and what happens when one server is stuck (a hot spot). 8110 is Round Robin over two fast servers. 8120 is Round Robin over <code>pool-slow</code> (waits 3 s) and <code>pool-fast</code>, so about half of the requests wait. 8130 uses Least Connections over the same two servers, so new requests avoid the slow one. <code>x-backend-pool</code> shows the server that answered.</p>
+<pre><code>FRONTEND=&lt;frontend IP&gt;:8110 ./lb-check.sh /app/home 100 6
+FRONTEND=&lt;frontend IP&gt;:8120 ./lb-check.sh /app/home 100 6
+FRONTEND=&lt;frontend IP&gt;:8130 ./lb-check.sh /app/home 100 6</code></pre>
+<table><thead><tr><th scope="col">Port</th><th scope="col">Distribution (100 requests, 6 at a time)</th><th scope="col">Total time</th></tr></thead><tbody>
+<tr><td>8110</td><td><code>pool-rr-a</code> and <code>pool-rr-b</code> about half each</td><td>Short</td></tr>
+<tr><td>8120</td><td><code>pool-slow</code> and <code>pool-fast</code> about half each</td><td>Long: about 25 s or more</td></tr>
+<tr><td>8130</td><td><code>pool-slow</code> 10 or fewer</td><td>Much shorter than 8120</td></tr>
+</tbody></table>
+<p class="note">Least Connections only differs from Round Robin while the slow server still holds earlier requests, so <code>lb-check.sh</code> and the simulator's test requests keep 6 requests open at a time (<code>canary-check.sh</code> sends one at a time and cannot show it). Test one port at a time: 8120 and 8130 share the same two servers. The 3 s delay is shorter than the probe timeout (20 s), so the slow server stays healthy; a server that stops answering is removed by the probe with either algorithm. Least Connections is not applied while cookie-based affinity is on, so <code>hs-8086</code> keeps it off.</p>
 <h3>4.3 Creating a header-based rule by hand in the portal (the tutorial)</h3>
 <p>These are the steps of the Microsoft Learn <a href="https://learn.microsoft.com/en-us/azure/application-gateway/configure-advanced-routing-rule">Tutorial: Configure header-based routing with Application Gateway Advanced Rules in the Azure portal</a>. This demo does not need them, because <code>deploy.sh</code> creates everything. Use them to try the portal.</p>
 <p class="note">The portal's "Create application gateway" experience cannot configure an Advanced rule. Create the gateway with a Basic rule, then change the Basic rule to Advanced.</p>
@@ -467,6 +487,7 @@ if (req.method === "OPTIONS" &amp;&amp; req.headers["access-control-request-meth
 <tr><td>8</td><td>Canary (port 8080)</td><td>"Canary (port 8080)" → the weighted prediction (90:10)</td><td><code>FRONTEND=&lt;IP&gt;:8080 ./canary-check.sh /app/home 100</code> → about 90 pool-web, 10 pool-canary (measured: 91 / 9)</td></tr>
 <tr><td>9</td><td>Priority-based selection (port 8090)</td><td>"Priority (port 8090)" → Primary (VM 2) while healthy, Standby (VM 1) when stopped</td><td><code>FRONTEND=&lt;IP&gt;:8090 ./canary-check.sh /app/home 100</code> → pool-canary (VM 2) normally. Stop <code>agw-pool@pool-canary</code> on VM 2 and after 2–3 minutes it is pool-web (VM 1). Start it again afterwards</td></tr>
 <tr><td>10</td><td>Feature flag (off / on)</td><td>"Feature flag (off)" and "Feature flag (on)" → off is pool-flag-off (pool-web on VM 1), on is pool-flag-on (pool-canary on VM 2)</td><td><code>curl -H "X-Feature: new" http://&lt;IP&gt;:8100/</code> → pool-canary. No header or another value → pool-web</td></tr>
+<tr><td>11</td><td>Server selection (ports 8110 / 8120 / 8130)</td><td>"Round Robin (port 8110)", "Round Robin with a slow server (port 8120)", "Least Connections (port 8130)" → test requests show the count and average time per server, and the total time</td><td><code>FRONTEND=&lt;IP&gt;:8130 ./lb-check.sh /app/home 100 6</code> → pool-slow 10 or fewer. On 8120 about half, and a much longer total time</td></tr>
 </tbody></table>
 <p class="note">The canary sends every request on port 8080 to pool-web 90% / pool-canary 10% (advanced rule <code>canary-split</code>). With few requests the counts drift from the expected values, so check with 100 or more.</p>
 </section>

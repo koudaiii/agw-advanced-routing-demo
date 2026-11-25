@@ -11,6 +11,8 @@
 5. 負荷分散シミュレーション (シミュレーターのみ)
 6. 片付け
 
+カナリア (8080)、優先度 (8090)、機能フラグ (8100)、サーバー選択 (8110〜8130) の節は、片付けの節の後にあります。
+
 作業ディレクトリは **リポジトリのルート** です。Azure の操作は実行前にユーザーへ確認を取ってください (課金が発生し、数分かかります)。
 
 ## 1. 前提確認
@@ -64,6 +66,9 @@ cd deploy && FRONTEND=<表示された IP> ./test.sh
 | Mobile (モバイル) | 200 pool-mobile | iPhone UA。カナリアはポート 8080 のみのため影響しない |
 | Feature flag off | 200 pool-web (`pool-flag-off`) | ポート 8100 (`X-Feature: new` なし)。マップ `flagMap` の既定 |
 | Feature flag on | 200 pool-canary (`pool-flag-on`) | ポート 8100 + `X-Feature: new`。ルール `flag-on` (優先度 10) |
+| Round Robin (:8110) | 200 pool-rr-a または pool-rr-b | `pool-rr` の速い 2 台 |
+| RR slow (:8120) | 200 pool-fast、または 3 秒後に pool-slow | 遅いサーバーと速いサーバーの Round Robin |
+| Least conn (:8130) | 200 pool-fast、または 3 秒後に pool-slow | 1 件ではどちらにも届く。件数は `lb-check.sh` で見る |
 | WAF block (UA) | 403 | `curl -A agw-block-demo` の要求。ルーティングの前に WAF が遮断する (`BlockDemoUA`) |
 
 **100 回連続の確認** (`deploy/canary-check.sh`、ポート 8080):
@@ -119,7 +124,7 @@ curl -i http://<FRONTEND>/app/home                        # → 200 (比較用)
 ```
 
 
-`agw-routing-simulator.html` の「負荷分散: プール選択 → サーバー選択」セクションは **シミュレーションのみ** です。実機には反映されません (実機の各プールはサーバー 1 台です)。
+`agw-routing-simulator.html` の「負荷分散: プール選択 → サーバー選択」セクションは **シミュレーションのみ** です。実機には反映されません。実機で 2 台入りのプールがあるのは、ポート 8110〜8130 だけです。
 
 - プリセット: ポート 8080 全体のカナリア 90:10 (実機と同じ構成)、重み 8:2、優先度 (5 台中 1 台異常 → プライマリ、5 台中 3 台異常 → スタンバイ)、WRR 6:3:1 (全台正常 / 重み 6 が異常)
 - 期待値 (ドキュメントと一致): 90:10 → 90/10、8:2 → 80/20。WRR 6:3:1 全台正常 → 60/30/10、重み 6 が異常 → 75/25。優先度 最小正常割合 60%: 5 台中 1 台異常はプライマリ、5 台中 3 台異常はスタンバイ。
@@ -152,6 +157,7 @@ cd deploy && ./cleanup.sh --yes       # 確認なしで削除 (端末がない�
 | 正規表現 (RE2) とパス正規化 | advanced-rules: Path, Pattern matching | 「エンコード済みパス」 |
 | 負荷分散 (プール選択 / サーバー選択 / 最小正常割合) | advanced-load-balancing | 「負荷分散」セクション (シミュレーター) |
 | 重み付けによるカナリア (ポート全体 90:10) | advanced-load-balancing: Weighted distribution (Advanced ルール) | ポート 8080 の `rule-canary` と マップ `canaryMap`、`canary-check.sh` |
+| サーバー選択 (Round Robin / Least Connections) | advanced-load-balancing: Server selection algorithm | ポート 8110 / 8120 / 8130 と `lb-check.sh`、シミュレーターの 8120 / 8130 プリセット |
 
 ## 設計メモ: なぜカナリア用の VM2 が必要か
 
@@ -220,6 +226,30 @@ curl -s -D - -o /dev/null -H "X-Feature: new" http://<FRONTEND-IP>:8100/ | grep 
 - シミュレーターの「機能フラグ (オフ / オン)」プリセットで、同じ予測を確認できます。
 - クライアントが選ぶ方式で、ランダムには分けないため、A/B テストではありません。統計的な A/B テスト (ランダムに分け、同じ利用者を同じ側に固定する) は #27 で扱います。
 
+## サーバー選択 (ポート 8110 / 8120 / 8130)
+
+1 つのプールの中でゲートウェイがサーバーをどう選ぶか、1 台が詰まったとき (hot spot) に何が起きるかを見せます。各ポートは Basic のルールで、2 台入りのプールに送ります。`x-backend-pool` には応答したサーバーが出ます。
+
+| ポート | ルール / プール | サーバー | 期待 (100 件、同時 6 件) |
+|---|---|---|---|
+| 8110 | `rule-rr` / `pool-rr` (Round Robin) | `pool-rr-a` (VM 1 の 8087 番)、`pool-rr-b` (VM 2 の 8087 番) | 約半分ずつ。所要時間は短い |
+| 8120 | `rule-rr-slow` / `pool-rr-slow` (Round Robin) | `pool-slow` (VM 1 の 8086 番、3 秒待つ)、`pool-fast` (VM 2 の 8086 番) | `pool-slow` が 35〜65 件。所要時間は約 25 秒以上 |
+| 8130 | `rule-lc` / `pool-lc` (Least Connections) | 8120 と同じ 2 台 | `pool-slow` が 10 件以下。所要時間は 8120 より明らかに短い |
+
+```bash
+cd deploy && FRONTEND=<IP>:8110 ./lb-check.sh /app/home 100 6
+cd deploy && FRONTEND=<IP>:8120 ./lb-check.sh /app/home 100 6
+cd deploy && FRONTEND=<IP>:8130 ./lb-check.sh /app/home 100 6
+```
+
+- Least Connections と Round Robin の差は、遅いサーバーに前の要求が残っている間にだけ出ます。`lb-check.sh` とシミュレーターのテスト要求は同時に 6 件を保って送ります。1 件ずつ送る `canary-check.sh` では差が出ません。
+- ポートは 1 つずつ試してください。8120 と 8130 は同じ 2 台を使います。
+- 3 秒の遅延はプローブのタイムアウト (20 秒) より短いため、`pool-slow` は正常のままです。応答しなくなったサーバーは、どちらのアルゴリズムでもヘルスプローブで外れます。Least Connections が役に立つのは、プローブには合格するが遅い、というときです。
+- Cookie によるアフィニティが有効だと Least Connections は使われません。`hs-8086` と `hs-8087` では無効にしています。
+- アルゴリズムはプールの `serverSelectionAlgorithm: 'LeastConnections'` (`pool-lc`) です。公開 API 仕様にも Bicep の型定義にもないプレビューの項目で、ポータルでプールを変更し、前後のゲートウェイを比べて見つけました。
+- 新しいプロセスは最初の起動時に cloud-init で入ります。この変更より前にデプロイした環境は、`./cleanup.sh` の後に `./deploy.sh` で作り直してください。
+- シミュレーターのプリセット: 「Round Robin (ポート 8110)」「Round Robin 遅いサーバーあり (ポート 8120)」「Least Connections (ポート 8130)」。
+
 ## 設計メモ: 外向き通信 (NAT Gateway)
 
 - バックエンド VM には public IP を付けません。受信は NSG の既定ルール (インターネットからの受信は拒否) で遮断します。
@@ -233,6 +263,7 @@ curl -s -D - -o /dev/null -H "X-Feature: new" http://<FRONTEND-IP>:8100/ | grep 
 - `deploy/make-cloud-init.sh`, `deploy/cloud-init.yaml`, `deploy/cloud-init-canary.yaml`: バックエンド VM の初期化 (VM 1 / カナリア VM 2)
 - `deploy/test.sh`: 疎通確認
 - `deploy/canary-check.sh`: 指定した URI に 100 回連続で送り、プール別の件数を表示 (カナリアは `FRONTEND=<IP>:8080`)
+- `deploy/lb-check.sh`: 件数分を同時 6 件で送り、サーバーごとの件数と平均の時間、全体の所要時間を表示 (8110〜8130 のサーバー選択)
 - `deploy/cleanup.sh`: リソースグループを削除 (`--dry-run` は一覧表示だけ、`--yes` は確認を省く)
 - `backend/server.js`, `backend/pools.conf`, `backend/pools-canary.conf`: バックエンドとプール定義
 - `agw-routing-simulator.html`: 予測と実機の比較、負荷分散シミュレーション

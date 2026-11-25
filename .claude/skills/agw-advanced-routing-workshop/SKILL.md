@@ -1,6 +1,6 @@
 ---
 name: agw-advanced-routing-workshop
-description: Run the Azure Application Gateway Advanced Routing workshop in this repo end to end — prerequisites, Bicep deploy, scenario verification with test.sh, live demos (header/path/IP/method/query/UA rules, WAF-before-routing, redirect, weighted canary, priority-based failover, feature flag, multi-pool distribution simulation), expected results, known issues, and cleanup. Use when the user asks to run, present, rehearse, or troubleshoot this Application Gateway advanced rules demo or workshop.
+description: Run the Azure Application Gateway Advanced Routing workshop in this repo end to end — prerequisites, Bicep deploy, scenario verification with test.sh, live demos (header/path/IP/method/query/UA rules, WAF-before-routing, redirect, weighted canary, server selection (Round Robin / Least Connections on ports 8110–8130), priority-based failover, feature flag, multi-pool distribution simulation), expected results, known issues, and cleanup. Use when the user asks to run, present, rehearse, or troubleshoot this Application Gateway advanced rules demo or workshop.
 ---
 
 # Application Gateway Advanced Routing workshop
@@ -13,7 +13,7 @@ This repository demonstrates [Advanced rules (preview)](https://learn.microsoft.
 2. Deploy (Bicep, about 15–20 minutes)
 3. Verify (`test.sh`)
 4. Live demo (rules, WAF, redirect)
-5. Canary, priority-based selection, and feature flag (ports 8080, 8090, 8100)
+5. Canary, priority-based selection, feature flag, and server selection (ports 8080, 8090, 8100, 8110–8130)
 6. Load distribution simulation (simulator only)
 7. Clean up
 
@@ -47,7 +47,7 @@ On success the last lines include `Done. Frontend: http://<IP>/`. `deploy.sh` do
   - Backend VM 1 (Ubuntu 24.04, static IP 192.168.1.10, five Node.js processes on ports 8080–8083 and 8085)
   - Canary VM 2 (static IP 192.168.1.11, `pool-canary` on port 8080)
   - WAF policy (Prevention, DRS 2.1, custom rules `BlockDemoIp` and `BlockDemoUA`)
-  - Application Gateway (WAF_v2) with four listeners, each with an advanced rule and its own map:
+  - Application Gateway (WAF_v2) with seven listeners. Four have an advanced rule and its own map; three (8110–8130) have a Basic rule for server selection:
 
 | Port | Listener | Rule | Map | Contents |
 |---|---|---|---|---|
@@ -55,6 +55,9 @@ On success the last lines include `Done. Frontend: http://<IP>/`. `deploy.sh` do
 | 8080 | `listener-canary` | `rule-canary` | `canaryMap` | Rule `canary-split` (every path): `pool-web` 90 / `pool-canary` 10, `WeightedDistribution`. Default `pool-canary` |
 | 8090 | `listener-priority` | `rule-priority` | `priorityMap` | Rule `priority-split` (every path): `pool-primary` (priority 1) then `pool-standby` (priority 2), `PriorityAware`, minimum healthy 60%. Default `pool-standby` |
 | 8100 | `listener-flag` | `rule-flag` | `flagMap` | Rule `flag-on` (`X-Feature: new`) → `pool-flag-on`. Default `pool-flag-off` |
+| 8110 | `listener-rr` | `rule-rr` (Basic) | — | `pool-rr`: `pool-rr-a` / `pool-rr-b` (8087), Round Robin |
+| 8120 | `listener-rr-slow` | `rule-rr-slow` (Basic) | — | `pool-rr-slow`: `pool-slow` (3 s) / `pool-fast` (8086), Round Robin |
+| 8130 | `listener-lc` | `rule-lc` (Basic) | — | `pool-lc`: the same servers as 8120, `serverSelectionAlgorithm: 'LeastConnections'` |
 
 The backends can take a few minutes to become healthy. Check:
 
@@ -82,6 +85,9 @@ cd deploy && FRONTEND=<IP printed by deploy.sh> ./test.sh
 | Feature flag off | 200 pool-web (`pool-flag-off`) | Port 8100, no `X-Feature: new` header. Default of `flagMap` |
 | Feature flag on | 200 pool-canary (`pool-flag-on`) | Port 8100 with `X-Feature: new`. Rule `flag-on` (priority 10) |
 | Mobile | 200 pool-mobile | iPhone User-Agent |
+| Round Robin (:8110) | 200 pool-rr-a or pool-rr-b | Two fast servers in `pool-rr` |
+| RR slow (:8120) | 200 pool-fast, or pool-slow after 3 s | Round Robin over a slow and a fast server |
+| Least conn (:8130) | 200 pool-fast, or pool-slow after 3 s | One request can reach either; use `lb-check.sh` for counts |
 | WAF block (UA) | 403 | `curl -A agw-block-demo`. WAF blocks it before routing (`BlockDemoUA`) |
 
 `x-backend-pool` is the name of the process that answered. The gateway pools `pool-primary` and `pool-flag-on` point at the `pool-canary` process on VM 2; `pool-standby` and `pool-flag-off` point at the `pool-web` process on VM 1.
@@ -179,6 +185,30 @@ curl -s -D - -o /dev/null -H "X-Feature: new" http://<FRONTEND-IP>:8100/ | grep 
 - The simulator's "Feature flag (off)" and "Feature flag (on)" presets predict the same.
 - This is not an A/B test: the client chooses, and there is no random split. A statistical A/B test (random split with sticky assignment) is tracked in issue #27.
 
+### Server selection (ports 8110 / 8120 / 8130)
+
+These ports show how the gateway picks a server inside one pool, and what happens when one server is stuck (a hot spot). Each port has a Basic rule and one pool with two servers. `x-backend-pool` shows the server that answered.
+
+| Port | Rule / pool | Servers | Expected (100 requests, 6 at a time) |
+|---|---|---|---|
+| 8110 | `rule-rr` / `pool-rr` (Round Robin) | `pool-rr-a` (VM 1 :8087), `pool-rr-b` (VM 2 :8087) | About half each, short total time |
+| 8120 | `rule-rr-slow` / `pool-rr-slow` (Round Robin) | `pool-slow` (VM 1 :8086, waits 3 s), `pool-fast` (VM 2 :8086) | `pool-slow` 35–65, total about 25 s or more |
+| 8130 | `rule-lc` / `pool-lc` (Least Connections) | the same two servers as 8120 | `pool-slow` 10 or fewer, total much shorter than 8120 |
+
+```bash
+cd deploy && FRONTEND=<IP>:8110 ./lb-check.sh /app/home 100 6
+cd deploy && FRONTEND=<IP>:8120 ./lb-check.sh /app/home 100 6
+cd deploy && FRONTEND=<IP>:8130 ./lb-check.sh /app/home 100 6
+```
+
+- Least Connections only differs from Round Robin while the slow server still holds earlier requests. `lb-check.sh` and the simulator's test requests keep 6 open at a time; `canary-check.sh` sends one at a time and cannot show it.
+- Test one port at a time: 8120 and 8130 share the same two servers.
+- The 3 s delay is shorter than the probe timeout (20 s), so `pool-slow` stays healthy. A server that stops answering is removed by the health probe with either algorithm; Least Connections helps when a server is slow but still passes its probe.
+- Least Connections is not applied while cookie-based affinity is on; `hs-8086` and `hs-8087` keep it off.
+- The algorithm is the pool's `serverSelectionAlgorithm: 'LeastConnections'` (`pool-lc`). It is a preview property, not in the public API spec or the Bicep types; it was found by changing a pool in the portal and comparing the gateway before and after.
+- The new processes come from cloud-init at first boot. An environment deployed before this change needs `./cleanup.sh` and `./deploy.sh` again.
+- Simulator presets: "Round Robin (port 8110)", "Round Robin with a slow server (port 8120)", "Least Connections (port 8130)".
+
 ## 6. Load distribution simulation (simulator)
 
 ```text
@@ -195,7 +225,7 @@ curl -s -D - -o /dev/null -H "X-Feature: new" http://<FRONTEND-IP>:8100/ | grep 
    even when unhealthy        decides whether a pool qualifies
 ```
 
-The "Load distribution: pool selection → server selection" section of `agw-routing-simulator.html` is a **simulation only**. It does not change the real gateway (each real pool has one server).
+The "Load distribution: pool selection → server selection" section of `agw-routing-simulator.html` is a **simulation only**. It does not change the real gateway. On the real gateway only the pools of ports 8110–8130 have two servers.
 
 - Presets: canary 90:10 on port 8080 (same as the real gateway), weights 8:2, priority (1 of 5 unhealthy → primary, 3 of 5 unhealthy → standby), WRR 6:3:1 (all healthy / the weight 6 server unhealthy)
 - Expected values (same as the documentation): 90:10 → 90/10, 8:2 → 80/20. WRR 6:3:1 all healthy → 60/30/10, weight 6 unhealthy → 75/25. Priority with minimum healthy 60%: 1 of 5 unhealthy stays on the primary, 3 of 5 unhealthy goes to the standby.
@@ -232,7 +262,7 @@ cd deploy && ./cleanup.sh --yes       # deletes without the prompt (needed when 
 | Weighted distribution (canary 90:10) | advanced-load-balancing: Weighted distribution | Port 8080, `canaryMap`, `canary-check.sh` |
 | Priority-based selection and minimum healthy percentage | advanced-load-balancing: Priority-based selection | Port 8090, `priorityMap`, stop and start VM 2 |
 | Header-based feature flag | advanced-rules: Use cases | Port 8100, `flagMap` |
-| Server selection (RR, WRR, Least Connections) | advanced-load-balancing: Server selection | "Load distribution" section of the simulator |
+| Server selection (RR, WRR, Least Connections) | advanced-load-balancing: Server selection | Ports 8110 / 8120 / 8130 with `lb-check.sh`, and the "Load distribution" section of the simulator (8120 / 8130 presets) |
 
 ## Design note: outbound traffic (NAT gateway)
 
@@ -247,6 +277,7 @@ cd deploy && ./cleanup.sh --yes       # deletes without the prompt (needed when 
 - `deploy/make-cloud-init.sh`, `deploy/cloud-init.yaml`, `deploy/cloud-init-canary.yaml`: VM bootstrap (VM 1 / canary VM 2)
 - `deploy/test.sh`: scenario verification
 - `deploy/canary-check.sh`: sends 100 consecutive requests to one URI and prints the count per pool
+- `deploy/lb-check.sh`: sends N requests 6 at a time and prints the count and average time per server, and the total time (server selection on 8110–8130)
 - `deploy/cleanup.sh`: deletes the resource group (`--dry-run` lists only, `--yes` skips the prompt)
 - `backend/server.js`, `backend/pools.conf`, `backend/pools-canary.conf`: backend and pool definitions
 - `agw-routing-simulator.html`: prediction versus real response, test requests, load distribution simulation (English / Japanese)

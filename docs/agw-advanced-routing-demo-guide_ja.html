@@ -203,12 +203,14 @@ svg .l{text-anchor:start}
 </tbody></table>
 
 <h3>3.3 プール定義 (<code>backend/pools.conf</code>)</h3>
-<pre><code># name|port|label|color  (one Node.js process per line on the backend VM)
-pool-web|8080|Web (default)|#334155
-pool-partner|8081|Partner|#7c2d12
-pool-tenant|8082|Tenant|#0f766e
-pool-api-v2|8083|Orders API v2|#1d4ed8
-pool-mobile|8085|Mobile|#7e22ce</code></pre>
+<pre><code># name|port|label|color|delay_ms  (one Node.js process per line on the backend VM)
+pool-web|8080|Web (default)|#334155|0
+pool-partner|8081|Partner|#7c2d12|0
+pool-tenant|8082|Tenant|#0f766e|0
+pool-api-v2|8083|Orders API v2|#1d4ed8|0
+pool-mobile|8085|Mobile|#7e22ce|0
+pool-slow|8086|Slow server (3 s)|#b91c1c|3000
+pool-rr-a|8087|Round Robin A|#0e7490|0</code></pre>
 <p>シミュレーターのプール一覧と同じ名前・色にそろえているため、シミュレーターの「応答」パネルと実機のページが同じ見た目になります (実機のページの表示は英語です)。</p>
 <p><code>pools.conf</code> は、VM 上で動く Node.js プロセス (待ち受けるポート) の定義です。ポート 8090 と 8100 は、Application Gateway のリスナーのポートで、バックエンドのプロセスはこれらのポートを待ち受けません。優先度ベース (8090) と機能フラグ (8100) は、次のゲートウェイのプールを使い、それぞれ既存のプロセス (8080 番) を指します。</p>
 <table><thead><tr><th scope="col">ゲートウェイのプール</th><th scope="col">指す先 (VM とプロセス)</th><th scope="col">使われる場面</th></tr></thead><tbody>
@@ -218,6 +220,9 @@ pool-mobile|8085|Mobile|#7e22ce</code></pre>
 <tr><td><code>pool-canary</code></td><td>VM 2 の <code>pool-canary</code> プロセス (:8080)</td><td>:8080 のカナリア 10%</td></tr>
 <tr><td><code>pool-flag-off</code></td><td>VM 1 の <code>pool-web</code> プロセス (:8080)</td><td>:8100 のフラグ オフ (既定)</td></tr>
 <tr><td><code>pool-flag-on</code></td><td>VM 2 の <code>pool-canary</code> プロセス (:8080)</td><td>:8100 のフラグ オン (<code>X-Feature: new</code>)</td></tr>
+<tr><td><code>pool-rr</code></td><td>VM 1 の <code>pool-rr-a</code> と VM 2 の <code>pool-rr-b</code> プロセス (:8087)</td><td>:8110 の Round Robin (速い 2 台)</td></tr>
+<tr><td><code>pool-rr-slow</code></td><td>VM 1 の <code>pool-slow</code> (3 秒待つ) と VM 2 の <code>pool-fast</code> プロセス (:8086)</td><td>:8120 の遅いサーバーがある Round Robin</td></tr>
+<tr><td><code>pool-lc</code></td><td><code>pool-rr-slow</code> と同じ 2 プロセス</td><td>:8130 の Least Connections (プールの <code>serverSelectionAlgorithm</code>)</td></tr>
 </tbody></table>
 
 <h3>3.4 サーバー本体 (<code>backend/server.js</code>) の要点</h3>
@@ -299,6 +304,7 @@ DynamicUser=yes</code></pre>
 <tr><td>Advanced routing map</td><td><code>advancedRoutingMap1</code>。既定プール <code>pool-web</code>。ルールは優先度順に partner (10)、tenant (20)、api-v2 (30)、campaign (40)、mobile (60)。ポート 8100 のマップ <code>flagMap</code> は flag-on (10) → pool-flag-on、既定 pool-flag-off</td></tr>
 <tr><td>カナリアの重み付け</td><td>マップ <code>canaryMap</code> のルール <code>canary-split</code> (パス <code>^/</code> の全リクエスト): pool-web 90 : pool-canary 10 (<code>WeightedDistribution</code>)。マップの既定は pool-canary</td></tr>
 <tr><td>優先度ベースの振り分け (ポート 8090)</td><td>リスナー <code>listener-priority</code> (:8090)、Advanced ルール <code>rule-priority</code> (優先度 300) → マップ <code>priorityMap</code> のルール <code>priority-split</code> (全パス): <code>pool-primary</code> (VM 2、優先度 1) → <code>pool-standby</code> (VM 1、優先度 2)、<code>PriorityAware</code>、最小正常割合 60%。既定は <code>pool-standby</code></td></tr>
+<tr><td>サーバー選択 (ポート 8110 / 8120 / 8130)</td><td>リスナー <code>listener-rr</code> / <code>listener-rr-slow</code> / <code>listener-lc</code>、Basic のルール <code>rule-rr</code> (500) / <code>rule-rr-slow</code> (600) / <code>rule-lc</code> (700) → プール <code>pool-rr</code> / <code>pool-rr-slow</code> / <code>pool-lc</code>、バックエンド設定 <code>hs-8087</code> / <code>hs-8086</code> (アフィニティ無効)。<code>pool-lc</code> だけが <code>serverSelectionAlgorithm: 'LeastConnections'</code></td></tr>
 </tbody></table>
 <figure class="diagram">
 <img src="https://learn.microsoft.com/azure/application-gateway/media/advanced-load-distribution/pool-selection.png" alt="一致したルールのプールを、重み付け配分と優先度ベース選択のどちらで選ぶかを示す図" style="inline-size:100%;block-size:auto;border:1px solid var(--line-soft);border-radius:16px;background:var(--card)">
@@ -366,7 +372,10 @@ Campaign               HTTP 302  redirect -&gt; https://www.contoso.com/campaign
 Feature flag off       HTTP 200  pool-web      ← :8100 (pool-flag-off)
 Feature flag on        HTTP 200  pool-canary   ← :8100 (pool-flag-on)
 Mobile                 HTTP 200  pool-mobile
-WAF block (UA)         HTTP 403</code></pre>
+WAF block (UA)         HTTP 403
+Round Robin (:8110)    HTTP 200  pool-rr-a     ← または pool-rr-b
+RR slow (:8120)        HTTP 200  pool-fast     ← または pool-slow (3 秒)
+Least conn (:8130)     HTTP 200  pool-fast     ← または pool-slow (3 秒)</code></pre>
 <p class="note">上は <code>test.sh</code> の出力の例です。Canary の行は、8080 番の振り分け (90:10) の 1 回分なので、pool-web と pool-canary のどちらにもなります。</p>
 <h4>優先度ベース (ポート 8090) の確認</h4>
 <p>8090 番は、VM 2 の <code>pool-canary</code> (Primary) を優先し、止まると VM 1 の <code>pool-web</code> (Standby) に切り替わります。<code>canary-check.sh</code> は応答ヘッダーの <code>x-backend-pool</code> (VM 上のプロセス名) を数えるため、Primary は <code>pool-canary</code>、Standby は <code>pool-web</code> と表示されます。</p>
@@ -391,6 +400,17 @@ curl -s -D - -o /dev/null -H "X-Feature: new" http://&lt;フロントエンド I
 X-Feature: other  x-backend-pool: pool-web     (pool-flag-off、オフ)
 X-Feature: new    x-backend-pool: pool-canary  (pool-flag-on、オン)</code></pre>
 <p class="note">ポート 80 には機能フラグのルールがありません。必ず 8100 番を使います。クライアントが選ぶ方式で、ランダムには分けないため、A/B テストではありません (統計的な A/B テストは #27 で扱います)。</p>
+<h4>サーバー選択 (ポート 8110 / 8120 / 8130)</h4>
+<p>この 3 つのポートで、1 つのプールの中でゲートウェイがサーバーをどう選ぶか、1 台が詰まったとき (hot spot) に何が起きるかを見せます。8110 は速い 2 台の Round Robin です。8120 は <code>pool-slow</code> (3 秒待つ) と <code>pool-fast</code> の Round Robin で、約半分の要求が待たされます。8130 は同じ 2 台の Least Connections で、新しい要求は遅いサーバーを避けます。<code>x-backend-pool</code> には応答したサーバーが出ます。</p>
+<pre><code>FRONTEND=&lt;フロントエンド IP&gt;:8110 ./lb-check.sh /app/home 100 6
+FRONTEND=&lt;フロントエンド IP&gt;:8120 ./lb-check.sh /app/home 100 6
+FRONTEND=&lt;フロントエンド IP&gt;:8130 ./lb-check.sh /app/home 100 6</code></pre>
+<table><thead><tr><th scope="col">ポート</th><th scope="col">振り分け (100 件、同時 6 件)</th><th scope="col">全体の所要時間</th></tr></thead><tbody>
+<tr><td>8110</td><td><code>pool-rr-a</code> と <code>pool-rr-b</code> が約半分ずつ</td><td>短い</td></tr>
+<tr><td>8120</td><td><code>pool-slow</code> と <code>pool-fast</code> が約半分ずつ</td><td>長い。約 25 秒以上</td></tr>
+<tr><td>8130</td><td><code>pool-slow</code> が 10 件以下</td><td>8120 より明らかに短い</td></tr>
+</tbody></table>
+<p class="note">Least Connections と Round Robin の差は、遅いサーバーに前の要求が残っている間にだけ出ます。そのため <code>lb-check.sh</code> とシミュレーターのテスト要求は、同時に 6 件を保って送ります (1 件ずつ送る <code>canary-check.sh</code> では差が出ません)。ポートは 1 つずつ試してください。8120 と 8130 は同じ 2 台を使います。3 秒の遅延はプローブのタイムアウト (20 秒) より短いため、遅いサーバーも正常のままです。応答しなくなったサーバーは、どちらのアルゴリズムでもプローブで外れます。Cookie によるアフィニティが有効だと Least Connections は使われないため、<code>hs-8086</code> では無効にしています。</p>
 <h3>4.3 ポータルでヘッダーベースのルールを手動で作る (チュートリアルの手順)</h3>
 <p>Microsoft Learn の <a href="https://learn.microsoft.com/ja-jp/azure/application-gateway/configure-advanced-routing-rule">チュートリアル: Azure ポータルで Application Gateway の Advanced Rules を使ってヘッダーベースのルーティングを設定する</a> の手順です。このデモは <code>deploy.sh</code> が作るため、通常は不要です。ポータルの操作を確かめるときに使います。</p>
 <p class="note">ポータルの「アプリケーション ゲートウェイの作成」では Advanced ルールを設定できません。基本ルールで作成した後に、基本ルールを Advanced に変更します。</p>
@@ -466,6 +486,7 @@ if (req.method === &quot;OPTIONS&quot; &amp;&amp; req.headers[&quot;access-contr
 <tr><td>8</td><td>カナリア (ポート 8080)</td><td>「カナリア (ポート 8080)」→ 重み付けの予測 (90:10)</td><td><code>FRONTEND=&lt;IP&gt;:8080 ./canary-check.sh /app/home 100</code> → pool-web 約 90 件、pool-canary 約 10 件 (実機確認: 91 / 9)</td></tr>
 <tr><td>9</td><td>優先度ベース (ポート 8090)</td><td>「優先度 (ポート 8090)」→ Primary (VM 2) が正常なら Primary、停止していれば Standby (VM 1)</td><td><code>FRONTEND=&lt;IP&gt;:8090 ./canary-check.sh /app/home 100</code> → 正常時は pool-canary (VM 2)。VM 2 の <code>agw-pool@pool-canary</code> を止めて 2〜3 分後は pool-web (VM 1)。確認後は起動して戻す</td></tr>
 <tr><td>10</td><td>機能フラグ (オフ / オン)</td><td>「機能フラグ (オフ)」「機能フラグ (オン)」→ オフは pool-flag-off (VM 1 の pool-web)、オンは pool-flag-on (VM 2 の pool-canary)</td><td><code>curl -H "X-Feature: new" http://&lt;IP&gt;:8100/</code> → pool-canary。ヘッダーなし、または別の値 → pool-web</td></tr>
+<tr><td>11</td><td>サーバー選択 (ポート 8110 / 8120 / 8130)</td><td>「Round Robin (ポート 8110)」「Round Robin 遅いサーバーあり (ポート 8120)」「Least Connections (ポート 8130)」→ テスト要求で、サーバーごとの件数と平均の時間、全体の所要時間を見る</td><td><code>FRONTEND=&lt;IP&gt;:8130 ./lb-check.sh /app/home 100 6</code> → pool-slow は 10 件以下。8120 では約半分で、所要時間がずっと長い</td></tr>
 </tbody></table>
 <p class="note">カナリアは、ポート 8080 の全リクエストを pool-web 90% / pool-canary 10% に振り分けます (高度なルール <code>canary-split</code>)。件数が少ないと期待値から外れるため、100 件以上で確認してください。</p>
 </section>
