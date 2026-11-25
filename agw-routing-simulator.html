@@ -364,13 +364,14 @@ function validateConfig(c) {
   if (c.waf && c.waf.blockedUA !== undefined && !(Array.isArray(c.waf.blockedUA) && c.waf.blockedUA.every((x) => typeof x === "string"))) e.push(L("waf.blockedUA は文字列の配列です", "waf.blockedUA must be an array of strings"));
   if (!Array.isArray(c.rules)) return e.concat(L("rules は配列です", "rules must be an array"));
   if (c.rules.length > LIMITS.rules) e.push(L(`ルールは ${LIMITS.rules} 件までです`, `At most ${LIMITS.rules} rules`));
+  // Priorities only need to be unique inside one routing map, as on the real gateway (advancedRoutingMap1 and flagMap).
   const prios = new Set();
   c.rules.forEach((r, i) => {
     const at = `rules[${i}]${r && r.name ? ` (${r.name})` : ""}`;
     if (r && r.map !== undefined && r.map !== 80 && r.map !== 8100) e.push(L(`${at}: map は 80 (既定) か 8100 (機能フラグ) です`, `${at}: map must be 80 (default) or 8100 (feature flag)`));
     if (!r || typeof r.name !== "string" || !r.name.trim()) e.push(L(`${at}: name が必要です`, `${at}: name is required`));
     if (!Number.isInteger(r && r.priority) || r.priority < 1) e.push(L(`${at}: priority は 1 以上の整数です`, `${at}: priority must be an integer of 1 or more`));
-    else if (prios.has(r.priority)) e.push(L(`${at}: priority ${r.priority} が重複しています`, `${at}: priority ${r.priority} is used twice`)); else prios.add(r.priority);
+    else if (prios.has(`${ruleMap(r)}/${r.priority}`)) e.push(L(`${at}: priority ${r.priority} が重複しています`, `${at}: priority ${r.priority} is used twice`)); else prios.add(`${ruleMap(r)}/${r.priority}`);
     if (!r || !Array.isArray(r.conditions) || r.conditions.length === 0) { e.push(L(`${at}: conditions が必要です`, `${at}: conditions is required`)); return; }
     if (r.conditions.length > LIMITS.conds) e.push(L(`${at}: 条件は ${LIMITS.conds} 個までです`, `${at}: at most ${LIMITS.conds} conditions`));
     const t = r.target || {};
