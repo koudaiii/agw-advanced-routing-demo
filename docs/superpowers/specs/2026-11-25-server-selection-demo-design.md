@@ -57,7 +57,7 @@
 
 ### ゲートウェイ (`deploy/main.bicep`)
 
-- フロントエンド ポート 8110 / 8120 / 8130、リスナー、要求ルーティング ルールを 3 組追加する。条件で振り分ける必要がないため、ルールは Basic (マップなし) にする。Microsoft Learn には、Basic のルールでもサーバー選択を使えると書かれている。公開 API 仕様で Least Connections を参照できる場所も、Basic を含む要求ルーティング ルールだけである (後述)。
+- フロントエンド ポート 8110 / 8120 / 8130、リスナー、要求ルーティング ルールを 3 組追加する。条件で振り分ける必要がないため、ルールは Basic (マップなし) にする。Microsoft Learn には、Basic のルールでもサーバー選択を使えると書かれている。サーバー選択はプール側の設定なので、ルールの種類には左右されない (後述)。
 - バックエンド プール `pool-rr` (2 台、8087)、`pool-rr-slow` (2 台、8086)、`pool-lc` (2 台、8086) を追加する。
 - バックエンド設定 `hs-8086` と `hs-8087` を追加する。既存と同じく Cookie によるアフィニティは無効にする。Least Connections はアフィニティが有効だと使われないため。プローブは既存の `/healthz` (間隔 30 秒、タイムアウト 20 秒、異常のしきい値 3) を使う。
 - `pool-lc` のサーバー選択を Least Connections にする。`pool-rr` と `pool-rr-slow` は既定の Round Robin のままにする。
@@ -118,29 +118,26 @@ Least Connections の差は、遅いサーバーに接続がたまっている�
 
 VM の設定は、最初の起動時に cloud-init で入るだけである。そのため、既存の VM には新しいプロセスが入らない。この変更は、新しく作った環境だけを対象にする。今の検証環境は `deploy/cleanup.sh` で消してから `deploy/deploy.sh` で作り直す。(作業する人の判断: 検証環境は一時的なものなので)
 
-## ARM での Least Connections の指定 (調査結果と進め方)
+## ARM での Least Connections の指定 (確認済み)
 
-2026-11-25 に調べた結果は次のとおり。
+2026-11-25 に、検証環境のポータルで `pool-flag-off` のサーバー選択を Least Connections に変え、変更前後のゲートウェイの定義を比べた。差分は次の 1 か所だけだった。API バージョン 2026-03-01 / 2026-05-01 / 2026-07-01 のどれで読んでも同じである。
 
-- Microsoft Learn には「サーバー選択のアルゴリズムはプールに属する」とだけ書かれている。
-- 公開 API 仕様 (azure-rest-api-specs の 2026-05-01) では、Least Connections はゲートウェイ全体の `loadDistributionPolicies` に定義する。その中で対象のプールを指定し、要求ルーティング ルールか、パス ルールから `loadDistributionPolicy` で参照する。プール自体には、アルゴリズムの項目がない。
-- このリポジトリで使っている高度なルールのプレビュー項目 (`backendAddressPoolsAndSettings` など) も、公開仕様に載っていない。つまり、プレビューでの正しい書き方は公開仕様だけでは確定できない。
-- 検証環境のゲートウェイを 2026-07-01 で読むと、`loadDistributionPolicies` は空の配列で存在する。プールとバックエンド設定には、アルゴリズムの項目が現れない。
+```text
+backendAddressPools[pool-flag-off].properties.serverSelectionAlgorithm : (なし) -> LeastConnections
+```
 
-参照はルールごとなので、8130 のルールだけが Least Connections を参照すれば、8120 には影響しない。
+- サーバー選択は、バックエンド プールの `serverSelectionAlgorithm` で指定する。Microsoft Learn の「アルゴリズムはプールに属する」という説明と一致する。
+- この項目は公開 API 仕様にも、Bicep の型定義にも載っていない。そのため Bicep では、既存のプレビュー項目と同じく BCP037 の警告が出る。
+- ゲートウェイ全体の `loadDistributionPolicies` は変わらなかった。使わない。
+- `pool-lc` に `serverSelectionAlgorithm: 'LeastConnections'` を書く。`pool-rr` と `pool-rr-slow` には書かない。既定の Round Robin になる。
+- 確認は、実際にデプロイし、実機で差が出るかで行う。`az deployment group validate` は知らない項目を無視することがあるため使わない。
 
-進め方は次の順にする。
-
-1. Basic のルールから、`loadDistributionPolicy` で Least Connections の設定を参照する。
-2. 1 が拒否されるか、実機で差が出ない場合は、プレビューの項目 (プールの関連付けの中など) を試す。
-3. どちらも使えない場合の扱いは、ユーザーと決める (未決)。
-
-`az deployment group validate` は、知らない項目を無視することがあるため、確認には使えない。実際にデプロイし、実機で差が出るかで確かめる。
+検証のために `pool-flag-off` に入れた Least Connections は、Bicep にない設定である。サーバーが 1 台なので動きは変わらない。次の再デプロイで消える。
 
 ## Issue の分け方
 
 1. バックエンドの遅延と新しいプロセス (server.js、pools.conf、cloud-init)。
-2. ゲートウェイの 3 ポート (main.bicep)。1 に依存する。ARM の書き方の確認を含む。
+2. ゲートウェイの 3 ポート (main.bicep)。1 に依存する。
 3. テスト要求の送り方と応答時間 (シミュレーターのテスト要求、CLI スクリプト)。
 4. シミュレーターの 3 ポート対応 (プリセット、名前の対応、構成図、負荷分散欄)。
 5. ドキュメント (README、ガイド、スキル、英語版と日本語版)。2〜4 に依存する。
