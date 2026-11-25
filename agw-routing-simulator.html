@@ -468,6 +468,11 @@ const SERVER_SELECT_PORTS = {
   8130: { pool: "pool-lc", algo: "lc", servers: ["pool-slow", "pool-fast"] },
 };
 const algoName = (a) => (a === "lc" ? "Least Connections" : "Round Robin");
+// Pool selection ports (#93): the candidate pools of canaryMap (8080) and priorityMap (8090), as in deploy/main.bicep.
+const POOL_SELECT_PORTS = {
+  8080: { map: "canaryMap", kind: "weighted", pools: [{ id: "pool-web", weight: 90, vm: 1 }, { id: "pool-canary", weight: 10, vm: 2 }] },
+  8090: { map: "priorityMap", kind: "priority", pools: [{ id: "pool-primary", priority: 1, vm: 2 }, { id: "pool-standby", priority: 2, vm: 1 }] },
+};
 // Priority-based (8090): Primary = VM 2 (process pool-canary), Standby = VM 1 (process pool-web)
 const PRIORITY_COLOR = { "pool-primary": "#b45309", "pool-standby": "#475569" };
 const PRIORITY_NAME_ON_8090 = { "pool-canary": "pool-primary", "pool-web": "pool-standby" };
@@ -800,19 +805,36 @@ function renderDiagram() {
 
 // Server selection ports (#84): one gateway pool with two servers. Lists both servers; `answered` (the process name
 // from x-backend-pool) is marked. With no `answered` (the prediction), neither is marked: one request can reach either.
+// One candidate row: `attr` is "server" or "pool"; the answered row is filled with its color and marked.
+function candidateRow(attr, id, hit, color, text) {
+  return el("li", { [`data-${attr}`]: id, "data-answered": hit ? "true" : "false", style: `display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;${hit ? `background:${color};color:#fff;font-weight:700` : "border:1px solid var(--line)"}` },
+    el("span", { "aria-hidden": "true", text: hit ? "●" : "○" }),
+    el("span", { class: "mono", text: id }),
+    el("span", { text }),
+    hit ? el("span", { text: L("← この応答", "← this response") }) : null);
+}
+function candidateBlock(label, name, note, rows) {
+  return el("div", { class: "card stack", style: "gap:6px" },
+    el("p", { style: "margin:0" }, el("span", { text: label }), el("b", { class: "mono", text: name }), el("span", { text: ` (${note})` })),
+    el("ul", { style: "list-style:none;margin:0;padding:0;display:grid;gap:4px" }, rows));
+}
 function serverSelectBlock(port, answered) {
   const sp = SERVER_SELECT_PORTS[port];
-  const rows = sp.servers.map((id) => {
-    const si = SERVER_INFO[id], hit = id === answered;
-    return el("li", { "data-server": id, "data-answered": hit ? "true" : "false", style: `display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;${hit ? `background:${si.color};color:#fff;font-weight:700` : "border:1px solid var(--line)"}` },
-      el("span", { "aria-hidden": "true", text: hit ? "●" : "○" }),
-      el("span", { class: "mono", text: id }),
-      el("span", { text: `VM ${si.vm} :${si.port} ${si.label}` }),
-      hit ? el("span", { text: L("← この応答", "← this response") }) : null);
-  });
-  return el("div", { class: "card stack", style: "gap:6px" },
-    el("p", { style: "margin:0" }, el("span", { text: L("バックエンド プール: ", "Backend pool: ") }), el("b", { class: "mono", text: sp.pool }), el("span", { text: ` (${algoName(sp.algo)})` })),
-    el("ul", { style: "list-style:none;margin:0;padding:0;display:grid;gap:4px" }, rows));
+  return candidateBlock(L("バックエンド プール: ", "Backend pool: "), sp.pool, algoName(sp.algo), sp.servers.map((id) => {
+    const si = SERVER_INFO[id];
+    return candidateRow("server", id, id === answered, si.color, `VM ${si.vm} :${si.port} ${si.label}`);
+  }));
+}
+// Pool selection ports (#93): lists the candidate pools with their weight or priority. `answered` is the gateway pool
+// name (after gatewayPoolName); with no `answered` (the prediction), no pool is marked.
+function poolSelectBlock(port, answered) {
+  const ps = POOL_SELECT_PORTS[port];
+  const note = ps.kind === "weighted" ? L("重み付け", "weighted") : L("優先度、最小正常割合 60%", "priority, minimum healthy 60%");
+  return candidateBlock(L("ルーティング マップ: ", "Routing map: "), ps.map, note, ps.pools.map((c) => {
+    const p = pool(c.id);
+    const val = ps.kind === "weighted" ? L(`重み ${c.weight}`, `weight ${c.weight}`) : L(`優先度 ${c.priority}`, `priority ${c.priority}`);
+    return candidateRow("pool", c.id, c.id === answered, p.color, `${val} · VM ${c.vm}`);
+  }));
 }
 function backendPage(p, method, path, query, headers, instance, heading) {
   const dl = el("dl", {},
@@ -835,8 +857,8 @@ function renderSim() {
   const out = $("simOut"); out.replaceChildren();
   const d = state.ev.d, r = state.sent;
   if (d.kind === "waf") { out.append(statusBlock(403, "Forbidden", L("WAF がブロックしたため、バックエンドには届きません。", "WAF blocked the request, so it does not reach a backend."))); return; }
-  if (d.kind === "weighted") { out.append(statusBlock("—", "", L("ポート 8080 の重み付けのため、1 件では pool-web か pool-canary のどちらかに確率で決まります。100 件の割合は canary-check.sh で確認します。", "Port 8080 is weighted, so a single request lands on pool-web or pool-canary by chance. Check the ratio of 100 requests with canary-check.sh."))); return; }
-  if (d.kind === "priority") { out.append(statusBlock("—", "", L("ポート 8090 は優先度ベース。Primary (VM 2) が正常なら Primary、停止していれば Standby (VM 1) に届きます。テスト要求で件数を送って確認します。", "Port 8090 is priority-based. The request reaches Primary (VM 2) while it is healthy, and Standby (VM 1) when it is stopped. Use the test requests to count."))); return; }
+  if (d.kind === "weighted") { out.append(poolSelectBlock(8080, null), statusBlock("—", "", L("ポート 8080 の重み付けのため、1 件では pool-web か pool-canary のどちらかに確率で決まります。100 件の割合は canary-check.sh で確認します。", "Port 8080 is weighted, so a single request lands on pool-web or pool-canary by chance. Check the ratio of 100 requests with canary-check.sh."))); return; }
+  if (d.kind === "priority") { out.append(poolSelectBlock(8090, null), statusBlock("—", "", L("ポート 8090 は優先度ベース。Primary (VM 2) が正常なら Primary、停止していれば Standby (VM 1) に届きます。テスト要求で件数を送って確認します。", "Port 8090 is priority-based. The request reaches Primary (VM 2) while it is healthy, and Standby (VM 1) when it is stopped. Use the test requests to count."))); return; }
   if (d.kind === "server") {
     const sp = SERVER_SELECT_PORTS[d.port];
     const slow = sp.servers.includes("pool-slow")
@@ -887,6 +909,7 @@ function renderLive() {
     const hs = Object.entries(b.headers || {}).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : v]);
     const serverPort = SERVER_SELECT_PORTS[Number(l.port)] ? Number(l.port) : null;
     if (serverPort) out.append(serverSelectBlock(serverPort, b.pool));
+    if (POOL_SELECT_PORTS[Number(l.port)]) out.append(poolSelectBlock(Number(l.port), gatewayPoolName(b.pool, l.port, l.path)));
     out.append(backendPage(pool(gatewayPoolName(b.pool, l.port, l.path)), b.method || "", b.path || "", new URLSearchParams(b.query || {}).toString(), hs, b.instance || "",
       serverPort ? L("この応答を返したサーバー", "Server that answered this request") : null));
   } else {
