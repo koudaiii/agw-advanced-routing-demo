@@ -44,8 +44,8 @@ On success the last lines include `Done. Frontend: http://<IP>/`. `deploy.sh` do
 - Creates the resource group `rg-agw-advrouting-demo`
 - Deploys `main.bicep`:
   - VNet (`appgw` 192.168.0.0/24, `backend` 192.168.1.0/24), backend NSG, NAT gateway (StandardV2, attached to the backend subnet)
-  - Backend VM 1 (Ubuntu 24.04, static IP 192.168.1.10, five Node.js processes on ports 8080–8083 and 8085)
-  - Canary VM 2 (static IP 192.168.1.11, `pool-canary` on port 8080)
+  - Backend VM 1 (Ubuntu 24.04, static IP 192.168.1.10, seven Node.js processes on ports 8080–8083, 8085, 8086 (`pool-slow`, 3 s), and 8087 (`pool-rr-a`))
+  - Canary VM 2 (static IP 192.168.1.11, `pool-canary` on port 8080, `pool-fast` on 8086, `pool-rr-b` on 8087)
   - WAF policy (Prevention, DRS 2.1, custom rules `BlockDemoIp` and `BlockDemoUA`)
   - Application Gateway (WAF_v2) with seven listeners. Four have an advanced rule and its own map; three (8110–8130) have a Basic rule for server selection:
 

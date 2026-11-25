@@ -41,7 +41,7 @@ https://learn.microsoft.com/ja-jp/azure/application-gateway/advanced-rules
 | `backend/pools.conf` | VM1 (バックエンド) のプロセス名・ポート・表示名・色・遅延。7 プロセス (ポート 8080–8083、8085。サーバー選択用に、3 秒遅れる `pool-slow` 8086 と `pool-rr-a` 8087) |
 | `backend/pools-canary.conf` | VM2 のプロセス (`pool-canary` 8080。サーバー選択用に `pool-fast` 8086 と `pool-rr-b` 8087) |
 | `deploy/deploy.sh` | リソースグループを作成し、`deploy/main.bicep` をデプロイ。SSH 鍵がなければ生成 |
-| `deploy/main.bicep` | VNet、バックエンド VM 1 (5 プール)、カナリア VM 2 (`pool-canary`、8080)、WAF ポリシー、App Gateway、NAT Gateway、7 つのリスナーを作成。4 つは高度なルールとマップ: `rule1` / `advancedRoutingMap1` (ポート 80)、`rule-canary` / `canaryMap` (ポート 8080)、`rule-priority` / `priorityMap` (ポート 8090)、`rule-flag` / `flagMap` (ポート 8100)。3 つはサーバー選択用の Basic のルール: `rule-rr` (ポート 8110)、`rule-rr-slow` (ポート 8120)、`rule-lc` (ポート 8130) |
+| `deploy/main.bicep` | VNet、バックエンド VM 1 (7 プロセス: ポート 8080–8083、8085、8086、8087)、VM 2 (3 プロセス: `pool-canary` 8080、`pool-fast` 8086、`pool-rr-b` 8087)、WAF ポリシー、App Gateway、NAT Gateway、7 つのリスナーを作成。4 つは高度なルールとマップ: `rule1` / `advancedRoutingMap1` (ポート 80)、`rule-canary` / `canaryMap` (ポート 8080)、`rule-priority` / `priorityMap` (ポート 8090)、`rule-flag` / `flagMap` (ポート 8100)。3 つはサーバー選択用の Basic のルール: `rule-rr` (ポート 8110)、`rule-rr-slow` (ポート 8120)、`rule-lc` (ポート 8130) |
 | `deploy/make-cloud-init.sh` / `cloud-init.yaml` | バックエンド VM 1 の初期化データ (`backend/server.js` を埋め込み) |
 | `deploy/cloud-init-canary.yaml` | カナリア VM 2 の初期化データ (`backend/pools-canary.conf` から生成) |
 | `deploy/canary-check.sh` | 指定した URI に 100 回連続で送り、x-backend-pool でプール別の件数と割合を表示。カナリアは `FRONTEND=<IP>:8080` |

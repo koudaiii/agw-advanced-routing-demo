@@ -175,9 +175,9 @@ svg .l{text-anchor:start}
 <table><thead><tr><th scope="col">Part</th><th scope="col">Role</th><th scope="col">What it is</th></tr></thead><tbody>
 <tr><td>Simulator</td><td>Shows the evaluation order of the rules, AND/OR, and where WAF sits. Generates the curl command that sends the same request to the real gateway, or sends it directly</td><td>Standalone HTML (evaluates in the browser)</td></tr>
 <tr><td>Application Gateway</td><td>Port 80: listener → WAF → advanced routing map (<code>advancedRoutingMap1</code>) → backend pool or redirect. Port 8080: <code>rule-canary</code> → <code>canaryMap</code> (weighted, pool-web 90% / pool-canary 10%). Port 8090: <code>rule-priority</code> → <code>priorityMap</code> (priority-based). Port 8100: <code>rule-flag</code> → <code>flagMap</code> (feature flag)</td><td>WAF_v2, capacity 1</td></tr>
-<tr><td>Backend</td><td>Shows which pool answered and the request headers it received</td><td>VM 1: five Node.js processes (ports 8080–8083, 8085). VM 2: canary (port 8080)</td></tr>
+<tr><td>Backend</td><td>Shows which pool answered and the request headers it received</td><td>VM 1: seven Node.js processes (ports 8080–8083, 8085, and 8086 / 8087 for server selection). VM 2: three (the canary on 8080, and 8086 / 8087 for server selection)</td></tr>
 </tbody></table>
-<p class="note">The five pools of VM 1 are different ports on the same VM. The canary (pool-canary) is on VM 2: it answers differently from pool-web (VM 1, port 8080) on the same port, so it needs its own IP address. Whether VM 2 could use a different port instead has not been tested.</p>
+<p class="note">The processes of VM 1 are different ports on the same VM. The canary (pool-canary) is on VM 2: it answers differently from pool-web (VM 1, port 8080) on the same port, so it needs its own IP address. Whether VM 2 could use a different port instead has not been tested.</p>
 </section>
 
 <section id="prereq"><h2>2. Prerequisites</h2><ul>
@@ -273,7 +273,7 @@ http
 curl -i -H "X-Tenant-Id: customer-1024" http://localhost:8082/app/dashboard</code></pre>
 
 <h3>3.5 Putting it on the VMs (cloud-init + systemd)</h3>
-<p><code>deploy/make-cloud-init.sh</code> generates one bootstrap file per VM (<code>deploy.sh</code> runs it). Its arguments are the input (pool definitions) and the output file.</p><ul><li><code>cloud-init.yaml</code>: for VM 1. The five pools of <code>backend/pools.conf</code> (ports 8080–8083, 8085)</li><li><code>cloud-init-canary.yaml</code>: for VM 2 (canary). <code>pool-canary</code> (port 8080) from <code>backend/pools-canary.conf</code></li></ul><p>Both do these three things.</p><ol>
+<p><code>deploy/make-cloud-init.sh</code> generates one bootstrap file per VM (<code>deploy.sh</code> runs it). Its arguments are the input (pool definitions) and the output file.</p><ul><li><code>cloud-init.yaml</code>: for VM 1. The seven processes of <code>backend/pools.conf</code> (ports 8080–8083, 8085, 8086, 8087)</li><li><code>cloud-init-canary.yaml</code>: for VM 2 (canary). <code>pool-canary</code> (port 8080), <code>pool-fast</code> (8086), and <code>pool-rr-b</code> (8087) from <code>backend/pools-canary.conf</code></li></ul><p>Both do these three things.</p><ol>
 <li>Install Node.js and put <code>server.js</code> in <code>/opt/agw-demo/</code> (embedded as base64)</li>
 <li>Create the template unit <code>agw-pool@.service</code> (<code>DynamicUser=yes</code> runs it without a dedicated user)</li>
 <li>Create <code>/etc/agw-demo/&lt;pool&gt;.env</code> per pool and run <code>systemctl enable --now agw-pool@&lt;pool&gt;</code></li></ol>
@@ -293,8 +293,8 @@ DynamicUser=yes</code></pre>
 <h3>4.1 Resources that are created</h3>
 <table><thead><tr><th scope="col">Resource</th><th scope="col">Details</th></tr></thead><tbody>
 <tr><td>VNet / subnets</td><td><code>appgw</code> 192.168.0.0/24 (Application Gateway only), <code>backend</code> 192.168.1.0/24 (with an NSG)</td></tr>
-<tr><td>Backend VM 1</td><td>Static IP 192.168.1.10. Five Node.js processes (ports 8080–8083, 8085). cloud-init installs <code>server.js</code></td></tr>
-<tr><td>Canary VM 2</td><td>Static IP 192.168.1.11. One Node.js process (<code>pool-canary</code>, port 8080)</td></tr>
+<tr><td>Backend VM 1</td><td>Static IP 192.168.1.10. Seven Node.js processes (ports 8080–8083, 8085, 8086, 8087). cloud-init installs <code>server.js</code></td></tr>
+<tr><td>Canary VM 2</td><td>Static IP 192.168.1.11. Three Node.js processes (<code>pool-canary</code> 8080, <code>pool-fast</code> 8086, <code>pool-rr-b</code> 8087)</td></tr>
 <tr><td>WAF policy</td><td>Prevention, DRS 2.1. Custom rules <code>BlockDemoIp</code> (source IP) and <code>BlockDemoUA</code> (blocks requests whose User-Agent contains <code>agw-block-demo</code>)</td></tr>
 <tr><td>NAT gateway</td><td>Attached to the backend subnet (StandardV2, with its own StandardV2 public IP). Used for the VMs' outbound traffic (apt and so on). The VMs have no public IP and the subnet is private (no default outbound IP)</td></tr>
 <tr><td>Application Gateway (WAF_v2)</td><td>Listeners <code>listener-http</code> (:80), <code>listener-canary</code> (:8080), <code>listener-priority</code> (:8090), <code>listener-flag</code> (:8100). Rules <code>rule1</code> (Advanced, :80, map <code>advancedRoutingMap1</code>), <code>rule-canary</code> (Advanced, :8080, map <code>canaryMap</code>), <code>rule-priority</code> (Advanced, :8090, map <code>priorityMap</code>), <code>rule-flag</code> (Advanced, :8100, map <code>flagMap</code>)</td></tr>

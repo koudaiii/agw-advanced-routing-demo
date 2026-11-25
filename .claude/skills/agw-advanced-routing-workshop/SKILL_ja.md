@@ -38,7 +38,7 @@ cd deploy
 
 - `make-cloud-init.sh` で 2 つの初期化ファイルを生成 (`backend/server.js` を埋め込み): `cloud-init.yaml` (バックエンド VM 1) と `cloud-init-canary.yaml` (カナリア VM 2、`backend/pools-canary.conf`)
 - リソースグループ `rg-agw-advrouting-demo` を作成
-- `main.bicep` をデプロイ: VNet (`appgw` 192.168.0.0/24 / `backend` 192.168.1.0/24)、バックエンド NSG、バックエンド VM 1 (Ubuntu 24.04、固定 IP 192.168.1.10、Node.js プロセス 5 つ = ポート 8080–8083、8085)、カナリア VM 2 (固定 IP 192.168.1.11、`pool-canary` をポート 8080)、WAF_v2 ポリシー (Prevention、DRS 2.1、カスタムルール `BlockDemoIp` と `BlockDemoUA`)、NAT Gateway (StandardV2、backend サブネットに関連付け)、Application Gateway、Advanced routing map (`advancedRoutingMap1`、ポート 80 の条件セット 5 つとルール 5 つ、既定 pool-web)、マップ `canaryMap` (ポート 8080、既定は pool-canary、ルール `canary-split` で pool-web 90 / pool-canary 10、条件セット `cs-canary-split` は全パス一致)、`rule1` (Advanced、ポート 80)、`rule-canary` (Advanced、ポート 8080、マップ `canaryMap`)。
+- `main.bicep` をデプロイ: VNet (`appgw` 192.168.0.0/24 / `backend` 192.168.1.0/24)、バックエンド NSG、バックエンド VM 1 (Ubuntu 24.04、固定 IP 192.168.1.10、Node.js プロセス 7 つ = ポート 8080–8083、8085、8086 (`pool-slow`、3 秒)、8087 (`pool-rr-a`))、カナリア VM 2 (固定 IP 192.168.1.11、`pool-canary` をポート 8080、`pool-fast` を 8086、`pool-rr-b` を 8087)、WAF_v2 ポリシー (Prevention、DRS 2.1、カスタムルール `BlockDemoIp` と `BlockDemoUA`)、NAT Gateway (StandardV2、backend サブネットに関連付け)、Application Gateway、Advanced routing map (`advancedRoutingMap1`、ポート 80 の条件セット 5 つとルール 5 つ、既定 pool-web)、マップ `canaryMap` (ポート 8080、既定は pool-canary、ルール `canary-split` で pool-web 90 / pool-canary 10、条件セット `cs-canary-split` は全パス一致)、`rule1` (Advanced、ポート 80)、`rule-canary` (Advanced、ポート 8080、マップ `canaryMap`)。
 
 ゲートウェイのバックエンドが Healthy になるまで数分かかることがあります。確認:
 
