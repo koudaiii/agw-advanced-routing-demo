@@ -85,7 +85,7 @@ svg .l{text-anchor:start}
 <figure class="diagram">
 <svg viewBox="0 0 960 460" role="img" aria-labelledby="dg-t dg-d">
 <title id="dg-t">Overall architecture of the demo environment</title>
-<desc id="dg-d">Simulator, demo client, public IP (listeners :80 / :8080 / :8090 / :8100), WAF, one routing map per port (advancedRoutingMap1 / canaryMap / priorityMap / flagMap), VM 1 (pool-web, pool-partner, pool-tenant, pool-api-v2, pool-mobile, pool-standby, pool-flag-off) and VM 2 (pool-canary, pool-primary, pool-flag-on)</desc>
+<desc id="dg-d">Simulator, demo client, public IP (listeners :80 / :8080 / :8090 / :8100), WAF, one routing map per port (advancedRoutingMap1 / canaryMap / priorityMap / flagMap), VM 1 (pool-web, pool-partner, pool-tenant, pool-api-v2, pool-mobile, pool-standby, pool-flag-off) and VM 2 (pool-canary, pool-primary, pool-flag-on). The server selection ports 8110 / 8120 / 8130 are not drawn</desc>
 <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="ink"/></marker></defs>
 <rect x="10" y="20" width="190" height="110" rx="8" class="box"/>
 <text x="105" y="46" class="h">Simulator</text>
@@ -169,12 +169,13 @@ svg .l{text-anchor:start}
 <text x="10" y="318" class="l">Stop pool-canary on VM 2 and port 8090 switches to Standby (VM 1).</text>
 <text x="10" y="336" class="l">Port 8080: pool-web (VM 1) 90% and pool-canary (VM 2) 10%.</text>
 <text x="10" y="354" class="l">Port 8100 (feature flag): X-Feature: new → pool-flag-on (VM 2), otherwise pool-flag-off (VM 1).</text>
+<text x="10" y="372" class="l">Not drawn: ports 8110 / 8120 / 8130 (server selection, Basic rules; see 4.1).</text>
 </svg>
 <figcaption>Figure 1. Architecture. VM 1 and VM 2 are drawn as separate frames. Solid lines are real traffic; dashed lines show what the operator does.</figcaption>
 </figure>
 <table><thead><tr><th scope="col">Part</th><th scope="col">Role</th><th scope="col">What it is</th></tr></thead><tbody>
-<tr><td>Simulator</td><td>Shows the evaluation order of the rules, AND/OR, and where WAF sits. Generates the curl command that sends the same request to the real gateway, or sends it directly</td><td>Standalone HTML (evaluates in the browser)</td></tr>
-<tr><td>Application Gateway</td><td>Port 80: listener → WAF → advanced routing map (<code>advancedRoutingMap1</code>) → backend pool or redirect. Port 8080: <code>rule-canary</code> → <code>canaryMap</code> (weighted, pool-web 90% / pool-canary 10%). Port 8090: <code>rule-priority</code> → <code>priorityMap</code> (priority-based). Port 8100: <code>rule-flag</code> → <code>flagMap</code> (feature flag)</td><td>WAF_v2, capacity 1</td></tr>
+<tr><td>Simulator</td><td>Shows the evaluation order of the rules, AND/OR, and where WAF sits. Generates the curl command that sends the same request to the real gateway, or sends it directly. Test requests send many at once and count where they land</td><td>Standalone HTML (evaluates in the browser)</td></tr>
+<tr><td>Application Gateway</td><td>Port 80: listener → WAF → advanced routing map (<code>advancedRoutingMap1</code>) → backend pool or redirect. Port 8080: <code>rule-canary</code> → <code>canaryMap</code> (weighted, pool-web 90% / pool-canary 10%). Port 8090: <code>rule-priority</code> → <code>priorityMap</code> (priority-based). Port 8100: <code>rule-flag</code> → <code>flagMap</code> (feature flag). Ports 8110 / 8120 / 8130: Basic rules, each with one pool of two servers (server selection)</td><td>WAF_v2, capacity 1</td></tr>
 <tr><td>Backend</td><td>Shows which pool answered and the request headers it received</td><td>VM 1: seven Node.js processes (ports 8080–8083, 8085, and 8086 / 8087 for server selection). VM 2: three (the canary on 8080, and 8086 / 8087 for server selection)</td></tr>
 </tbody></table>
 <p class="note">The processes of VM 1 are different ports on the same VM. The canary (pool-canary) is on VM 2: it answers differently from pool-web (VM 1, port 8080) on the same port, so it needs its own IP address. Whether VM 2 could use a different port instead has not been tested.</p>
@@ -473,6 +474,9 @@ function cors(res) {
 // at the top of createServer:
 cors(res);
 if (req.method === "OPTIONS" &amp;&amp; req.headers["access-control-request-method"]) { res.writeHead(204); return res.end(); }</code></pre>
+
+<h3>5.3 Test requests (many requests at once)</h3>
+<p>"Send test requests" sends the selected request to its port the given number of times (100 by default), keeping 6 open at a time, and shows under "Real response" which pool or server answered each one, the average time per pool, and the total time. Use it for the ports where one request says little: the canary (8080), priority-based selection (8090), and server selection (8110 / 8120 / 8130). Only the port of the preset is used; the path is <code>/app/home</code> and no custom header is sent. Pressing the button again cancels the requests not yet sent. A request with no answer within 10 seconds counts as failed.</p>
 </section>
 
 <section id="demo"><h2>6. Running the demo (example: 15 minutes)</h2>
@@ -495,7 +499,7 @@ if (req.method === "OPTIONS" &amp;&amp; req.headers["access-control-request-meth
 <section id="trouble"><h2>7. Troubleshooting</h2>
 <p>Check with <code>deploy/test.sh</code> and <code>deploy/canary-check.sh</code>. To find a cause, read the output of <code>deploy.sh</code>.</p>
 <table><thead><tr><th scope="col">Symptom</th><th scope="col">What to check</th></tr></thead><tbody>
-<tr><td><code>test.sh</code> returns 502</td><td>The backends are not healthy yet. Right after a deployment, cloud-init (package download and start) takes a few minutes. Wait and run <code>./test.sh</code> again. If it stays, run <code>deploy.sh</code> again</td></tr>
+<tr><td><code>test.sh</code> returns 502</td><td>The backends are not healthy yet. Right after a deployment, cloud-init (package download and start) takes a few minutes. Wait and run <code>./test.sh</code> again. If it stays, run <code>deploy.sh</code> again (the VMs are not recreated unless their bootstrap data changed)</td></tr>
 <tr><td><code>deploy.sh</code> fails in preflight validation</td><td>Read the <code>message</code> of <code>InnerErrors</code> in the output. Example: <code>ApplicationGatewayAdvancedRoutingRuleMustReference</code> means an advanced rule needs a <code>backendAddressPool</code> (or <code>backendAddressPoolsAndSettings</code>). <code>ApplicationGatewayAdvancedRoutingMapMustSpecifyAdvancedRoutingRules</code> means a map has no rule</td></tr>
 <tr><td><code>deploy.sh</code> fails with <code>PropertyChangeNotAllowed</code> (<code>osProfile.customData</code>)</td><td>The bootstrap data (cloud-init) of an existing VM changed, for example after editing <code>backend/server.js</code> or a pool definition. Recreate the VM: delete VM 1 or VM 2 (or the resource group), then run <code>deploy.sh</code> again</td></tr>
 <tr><td>The port 80 results of <code>test.sh</code> are not what you expect</td><td>Is <code>rule1</code> Advanced (as right after the deployment)? The conditions and priorities are in <code>advancedRoutingConditionSets</code> and <code>advancedRoutingMaps</code> of <code>deploy/main.bicep</code></td></tr>
@@ -516,7 +520,11 @@ if (req.method === "OPTIONS" &amp;&amp; req.headers["access-control-request-meth
 </section>
 
 <section id="cleanup"><h2>9. Cleanup</h2>
-<p>After the demo, delete the whole resource group. The gateway (WAF_v2) and the backend VMs are billed while they run. Deleting the resource group removes everything that was created.</p>
-<pre><code>az group delete -n rg-agw-advrouting-demo --yes --no-wait</code></pre>
+<p>After the demo, delete the whole resource group: the gateway (WAF_v2) and the backend VMs are billed while they run. <code>deploy/cleanup.sh</code> lists the resources, asks for the group name, and deletes the group in the background.</p>
+<pre><code>cd deploy
+./cleanup.sh             # asks for the group name, then deletes
+./cleanup.sh --dry-run   # lists the resources only
+./cleanup.sh --yes       # no prompt
+az group exists -n rg-agw-advrouting-demo   # false when the deletion is done</code></pre>
 </section>
 </main></body></html>

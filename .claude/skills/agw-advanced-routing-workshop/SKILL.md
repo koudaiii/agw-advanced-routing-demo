@@ -118,7 +118,7 @@ curl -i http://<FRONTEND>/app/home                        # → 200 (for compari
 
 The simulator predicts the same result with the "WAF block" preset. `BlockDemoIp` (198.51.100.0/24, by source IP) is also in the template; source IPs differ per environment, so the demo uses the User-Agent rule.
 
-## 5. Canary, priority-based selection, and feature flag
+## 5. Canary, priority-based selection, feature flag, and server selection
 
 ### Canary (port 8080)
 
@@ -153,7 +153,7 @@ The weights are expected values. With few requests the counts drift from 90 / 10
 | State | Expected | How |
 |---|---|---|
 | Normal | All 100 requests to `pool-primary` (VM 2, process `pool-canary`) | `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100` |
-| VM 2 stopped | After about 2–3 minutes, all 100 to `pool-standby` (VM 1, process `pool-web`) | Stop with the command below, wait 2–3 minutes |
+| `pool-canary` stopped | After about 2–3 minutes, all 100 to `pool-standby` (VM 1, process `pool-web`) | Stop with the command below, wait 2–3 minutes |
 | Restored | All 100 back to `pool-primary` | Start with the command below, wait 2–3 minutes |
 
 ```bash
@@ -260,7 +260,7 @@ cd deploy && ./cleanup.sh --yes       # deletes without the prompt (needed when 
 | WAF runs before routing | advanced-rules | "WAF block" |
 | Regular expressions (RE2) and path normalization | advanced-rules: Path, pattern matching | "Encoded path" |
 | Weighted distribution (canary 90:10) | advanced-load-balancing: Weighted distribution | Port 8080, `canaryMap`, `canary-check.sh` |
-| Priority-based selection and minimum healthy percentage | advanced-load-balancing: Priority-based selection | Port 8090, `priorityMap`, stop and start VM 2 |
+| Priority-based selection and minimum healthy percentage | advanced-load-balancing: Priority-based selection | Port 8090, `priorityMap`, stop and start `pool-canary` on VM 2 |
 | Header-based feature flag | advanced-rules: Use cases | Port 8100, `flagMap` |
 | Server selection (RR, WRR, Least Connections) | advanced-load-balancing: Server selection | Ports 8110 / 8120 / 8130 with `lb-check.sh`, and the "Load distribution" section of the simulator (8120 / 8130 presets) |
 
