@@ -1041,7 +1041,7 @@ function validateDist(d) {
   if (!d || typeof d !== "object") return [L("分散設定がオブジェクトではありません", "The distribution settings are not an object")];
   if (d.mode !== "weighted" && d.mode !== "priority") e.push(L('mode は "weighted" か "priority" です', 'mode must be "weighted" or "priority"'));
   if (!Number.isInteger(d.minHealthy) || d.minHealthy < 0 || d.minHealthy > 100) e.push(L("最小正常割合は 0〜100 の整数です", "Minimum healthy must be an integer from 0 to 100"));
-  if (!Number.isInteger(d.concurrency) || d.concurrency < 1 || d.concurrency > DIST_MAX.concurrency) e.push(L(`同時処理数は 1〜${DIST_MAX.concurrency} の整数です`, `Concurrency must be an integer from 1 to ${DIST_MAX.concurrency}`));
+  if (!Number.isInteger(d.concurrency) || d.concurrency < 1 || d.concurrency > DIST_MAX.concurrency) e.push(L(`同時に送る利用者数は 1〜${DIST_MAX.concurrency} の整数です`, `Concurrent users must be an integer from 1 to ${DIST_MAX.concurrency}`));
   if (!Array.isArray(d.pools) || d.pools.length < 1 || d.pools.length > DIST_MAX.pools) return e.concat(L(`プールは 1〜${DIST_MAX.pools} 個です`, `There must be 1 to ${DIST_MAX.pools} pools`));
   const ids = new Set(), prios = new Set();
   d.pools.forEach((p, i) => {
