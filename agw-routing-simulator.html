@@ -797,7 +797,23 @@ function renderDiagram() {
   $("summary").textContent = summary;
 }
 
-function backendPage(p, method, path, query, headers, instance) {
+// Server selection ports (#84): one gateway pool with two servers. Lists both servers; `answered` (the process name
+// from x-backend-pool) is marked. With no `answered` (the prediction), neither is marked: one request can reach either.
+function serverSelectBlock(port, answered) {
+  const sp = SERVER_SELECT_PORTS[port];
+  const rows = sp.servers.map((id) => {
+    const si = SERVER_INFO[id], hit = id === answered;
+    return el("li", { "data-server": id, "data-answered": hit ? "true" : "false", style: `display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;${hit ? `background:${si.color};color:#fff;font-weight:700` : "border:1px solid var(--line)"}` },
+      el("span", { "aria-hidden": "true", text: hit ? "●" : "○" }),
+      el("span", { class: "mono", text: id }),
+      el("span", { text: `VM ${si.vm} :${si.port} ${si.label}` }),
+      hit ? el("span", { text: L("← この応答", "← this response") }) : null);
+  });
+  return el("div", { class: "card stack", style: "gap:6px" },
+    el("p", { style: "margin:0" }, el("span", { text: L("バックエンド プール: ", "Backend pool: ") }), el("b", { class: "mono", text: sp.pool }), el("span", { text: ` (${algoName(sp.algo)})` })),
+    el("ul", { style: "list-style:none;margin:0;padding:0;display:grid;gap:4px" }, rows));
+}
+function backendPage(p, method, path, query, headers, instance, heading) {
   const dl = el("dl", {},
     el("dt", { text: L("インスタンス", "Instance") }), el("dd", { text: instance }),
     el("dt", { text: "Method" }), el("dd", { text: method }),
@@ -807,7 +823,7 @@ function backendPage(p, method, path, query, headers, instance) {
   const rows = headers.slice().sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) =>
     el("tr", { class: GW.has(k) ? "gw" : null }, el("th", { scope: "row", text: k }), el("td", {}, String(v), GW.has(k) ? el("span", { class: "sr-only", text: L(" (Application Gateway が付与)", " (added by Application Gateway)") }) : null)));
   return el("div", { class: "page", role: "group", "aria-label": L(`${p.id} が返すページ`, `Page returned by ${p.id}`) },
-    el("div", { class: "ph", style: `background:${p.color}` }, el("p", { text: L("この応答を返したバックエンド プール", "Backend pool that answered this request") }), el("p", { class: "pn", text: p.id }), el("p", { text: p.label })),
+    el("div", { class: "ph", style: `background:${p.color}` }, el("p", { text: heading || L("この応答を返したバックエンド プール", "Backend pool that answered this request") }), el("p", { class: "pn", text: p.id }), el("p", { text: p.label })),
     dl, el("table", {}, el("caption", { text: L("受信したリクエスト ヘッダー", "Request headers received") }), el("tbody", {}, rows)),
     el("p", { class: "note", style: "padding-inline:18px", text: L("黄色の行は Application Gateway が付与・書き換えたヘッダーです。", "Highlighted rows are headers that Application Gateway added or rewrote.") }));
 }
@@ -827,6 +843,7 @@ function renderSim() {
     const how = sp.algo === "lc"
       ? L("Least Connections は、開いている接続が少ないサーバーを選ぶので、新しい要求は遅いサーバーを避けます。", "Least Connections picks the server with fewer open connections, so new requests avoid the slow server.")
       : L("Round Robin は、サーバーの状態を見ずに交互に配ります。", "Round Robin hands requests to the servers in turn, whatever their state.");
+    out.append(serverSelectBlock(d.port, null));
     out.append(statusBlock("—", "", L(`ポート ${d.port} は ${sp.pool} (${algoName(sp.algo)})。${how}${slow} 1 件ではどちらに届くかは決まりません。テスト要求で件数と時間を確かめます (8120 と 8130 は同時に試さないでください)。`, `Port ${d.port} uses ${sp.pool} (${algoName(sp.algo)}). ${how}${slow} A single request can reach either server. Use the test requests to see the counts and the time (do not test 8120 and 8130 at the same time).`)));
     return;
   }
@@ -867,7 +884,10 @@ function renderLive() {
   const b = l.body;
   if (b && b.pool) {
     const hs = Object.entries(b.headers || {}).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : v]);
-    out.append(backendPage(pool(gatewayPoolName(b.pool, l.port, l.path)), b.method || "", b.path || "", new URLSearchParams(b.query || {}).toString(), hs, b.instance || ""));
+    const serverPort = SERVER_SELECT_PORTS[Number(l.port)] ? Number(l.port) : null;
+    if (serverPort) out.append(serverSelectBlock(serverPort, b.pool));
+    out.append(backendPage(pool(gatewayPoolName(b.pool, l.port, l.path)), b.method || "", b.path || "", new URLSearchParams(b.query || {}).toString(), hs, b.instance || "",
+      serverPort ? L("この応答を返したサーバー", "Server that answered this request") : null));
   } else {
     out.append(statusBlock(l.status, l.statusText || "", l.pool ? `x-backend-pool: ${l.pool}${l.rawPool && l.rawPool !== l.pool ? L(` (VM のプロセス: ${l.rawPool})`, ` (process on the VM: ${l.rawPool})`) : ""}` : L("x-backend-pool ヘッダーなし (デモ用バックエンドではないか、CORS の Expose-Headers 未設定)", "No x-backend-pool header (not the demo backend, or CORS Expose-Headers is missing)")));
   }
