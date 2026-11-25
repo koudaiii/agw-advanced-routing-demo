@@ -28,13 +28,14 @@ SERVER_B64="$(base64 < "$HERE/../backend/server.js" | tr -d '\n')"
   echo "      DynamicUser=yes"
   echo "      [Install]"
   echo "      WantedBy=multi-user.target"
-  grep -v '^#' "$CONF" | while IFS='|' read -r name port label color; do
+  grep -v '^#' "$CONF" | while IFS='|' read -r name port label color delay; do
     echo "  - path: /etc/agw-demo/$name.env"
     echo "    content: |"
     echo "      POOL_NAME=$name"
     echo "      PORT=$port"
     echo "      POOL_LABEL=\"$label\""
     echo "      POOL_COLOR=\"$color\""
+    echo "      DELAY_MS=${delay:-0}"
   done
   echo "runcmd:"
   echo "  - systemctl daemon-reload"

@@ -1,6 +1,8 @@
 // Demo backend for Azure Application Gateway Advanced Routing.
 // Zero dependencies (Node.js 18+). One process = one backend pool.
 //   POOL_NAME=pool-tenant POOL_LABEL="Tenant" POOL_COLOR="#0f766e" PORT=8082 node server.js
+//   DELAY_MS=3000 makes every normal request wait that long before answering (a slow server, #81).
+//   /healthz and CORS preflights are never delayed.
 // GET /healthz          -> 200 "ok" (App Gateway health probe)
 // GET /...?format=json  -> JSON echo (or Accept: application/json)
 // GET /...              -> HTML page showing which pool answered and what it received
@@ -13,6 +15,8 @@ const POOL_NAME = process.env.POOL_NAME || "pool-web";
 const POOL_LABEL = process.env.POOL_LABEL || POOL_NAME;
 const POOL_COLOR = /^#[0-9a-fA-F]{6}$/.test(process.env.POOL_COLOR || "") ? process.env.POOL_COLOR : "#334155";
 const PORT = Number(process.env.PORT || 8080);
+// Delay in ms for normal requests. Anything that is not a whole number of 0 or more counts as 0.
+const DELAY_MS = /^\d+$/.test(process.env.DELAY_MS || "") ? Number(process.env.DELAY_MS) : 0;
 const HOST = os.hostname();
 // CORS so the standalone simulator (agw-routing-simulator.html) can call the gateway directly.
 // Default "*" (demo backend, no credentials). Set ALLOW_ORIGIN="" to disable, or to one origin.
@@ -117,13 +121,15 @@ http
     }
     const s = snapshot(req);
     const wantsJson = s.query.format === "json" || /application\/json/.test(req.headers.accept || "");
-    res.setHeader("x-backend-pool", POOL_NAME);
-    res.setHeader("cache-control", "no-store");
-    if (wantsJson) {
-      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-      return res.end(JSON.stringify(s, null, 2));
-    }
-    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    res.end(page(s));
+    setTimeout(() => {
+      res.setHeader("x-backend-pool", POOL_NAME);
+      res.setHeader("cache-control", "no-store");
+      if (wantsJson) {
+        res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+        return res.end(JSON.stringify(s, null, 2));
+      }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(page(s));
+    }, DELAY_MS);
   })
   .listen(PORT, () => console.log(`${POOL_NAME} listening on :${PORT}`));
