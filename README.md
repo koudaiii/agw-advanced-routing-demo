@@ -48,6 +48,7 @@ The diagrams are from Microsoft Learn: [Advanced load balancing on Azure Applica
 | `deploy/canary-check.sh` | Sends 100 consecutive requests to one URI and prints the count and share per pool from `x-backend-pool`. For the canary use `FRONTEND=<IP>:8080` |
 | `deploy/lb-check.sh` | Sends N requests to one URI, 6 at a time by default, and prints the count, share, and average time per server, then the total time. For server selection use `FRONTEND=<IP>:8110`, `:8120`, or `:8130` |
 | `deploy/test.sh` | Sends the simulator's scenarios to the real gateway with curl and lists which pool answered. |
+| `.github/workflows/pages.yml` / `.github/pages/build.sh` | Publishes only the build guide to GitHub Pages. The simulator is not published, because it can send many requests to any URL; links to it point to its file in this repository. Needs Settings → Pages → Source: "GitHub Actions" |
 
 ## Steps
 
