@@ -314,7 +314,10 @@ test("the other RE2 flags (?m) and (?s) are accepted too", { skip }, async () =>
   assert.deepEqual(await saveRules(pathRule("(?is)^/APP")), []);
 });
 
-for (const [lang, text] of [["en", "Round Robin hands requests to the healthy servers in turn."], ["ja", "Round Robin は、正常なサーバーに順番に配ります。"]]) {
+for (const [lang, text] of [
+  ["en", "Round Robin sends requests to each healthy server in turn. It does not look at response time or open connections."],
+  ["ja", "Round Robin は、正常なサーバーに順番に配ります。応答時間や接続数は見ません。"],
+]) {
   test(`Round Robin is described as taking turns among healthy servers (${lang})`, { skip }, async () => {
     await open(lang);
     const prediction = await page(`t.preset("8120"); await t.send(); return t.prediction();`);
