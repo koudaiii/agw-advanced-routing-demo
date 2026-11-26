@@ -284,6 +284,35 @@ test("a live response on 8090 shows x-backend-pool as it is", { skip }, async (t
   } finally { g8090.close(); }
 });
 
+// A stand-in gateway on a fixed local port that always answers with x-backend-pool: `answer`. Resolves to null when the port is in use.
+async function standIn(port, answer) {
+  const srv = http.createServer((req, res) => {
+    res.setHeader("access-control-allow-origin", "*");
+    res.setHeader("access-control-allow-headers", "*");
+    res.setHeader("access-control-expose-headers", "x-backend-pool");
+    if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
+    res.setHeader("x-backend-pool", answer);
+    res.setHeader("content-type", "application/json");
+    res.end("{}");
+  });
+  return new Promise((r) => { srv.once("error", () => r(null)); srv.listen(port, "127.0.0.1", () => r(srv)); });
+}
+
+// The gateway pool names come back as they are: 8100 flag on matches the prediction, 8090 test requests count pool-primary (#131).
+test("live 8100 pool-flag-on matches the prediction, and 8090 test requests count pool-primary", { skip }, async (t) => {
+  const g8100 = await standIn(8100, "pool-flag-on"), g8090 = await standIn(8090, "pool-primary");
+  if (!g8100 || !g8090) { g8100?.close(); g8090?.close(); t.skip("port 8100 or 8090 is in use"); return; }
+  try {
+    await open("en");
+    const badge = await page(`t.set("backendUrl", "http://127.0.0.1:8100"); await t.wait(300); t.preset("^Feature flag \\\\(on\\\\)$"); await t.send();
+      for (let i = 0; i < 30 && !t.$("matchBadge").textContent; i++) await t.wait(100);
+      return t.$("matchBadge").textContent;`);
+    assert.equal(badge, "Matches the prediction");
+    const result = await page(`t.preset("port 8090"); await t.testRequests(6); return t.$("testResult").textContent;`);
+    assert.match(result, /pool-primary: 6 \(100%\)/);
+  } finally { g8100.close(); g8090.close(); }
+});
+
 // Review checks for the rule editor, the diagram, and the prediction text (#123).
 // Opens [Edit rules (JSON)], changes the configuration with `edit` (source of a function), saves, and reports the errors.
 const saveRules = (edit) => page(`t.$("editJson").click(); const c = JSON.parse(t.$("jsonText").value); (${edit})(c);

@@ -193,7 +193,7 @@ resource nic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
   ]
 }
 
-// ---------- Backend VM (6 Node.js pools, see cloud-init.yaml) ----------
+// ---------- Backend VM 1 (9 Node.js processes, see backend/pools.conf and cloud-init.yaml) ----------
 
 resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
   name: vmName
@@ -242,7 +242,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
   }
 }
 
-// ---------- Canary backend VM (new version; serves pool-canary on 8080, see cloud-init-canary.yaml) ----------
+// ---------- VM 2 (5 Node.js processes: pool-canary 8080, pool-fast 8086, pool-rr-b 8087, pool-primary 8088, pool-flag-on 8089; see cloud-init-canary.yaml) ----------
 
 resource canaryNic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
   name: '${canaryVmName}-nic'
