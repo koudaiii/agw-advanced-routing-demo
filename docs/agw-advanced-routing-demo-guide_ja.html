@@ -218,7 +218,7 @@ svg .l{text-anchor:start}
 
 <section id="prereq"><h2>2. 前提条件</h2><ul>
 <li>Azure サブスクリプションと、リソース グループを作成できる権限</li>
-<li>Azure CLI (<code>az login</code> 済み)。高度なルールは CLI (2.87.0 時点) では作れないため、ガイドのデプロイは Bicep で行う (Bicep は <code>az</code> に同梱)</li>
+<li>Azure CLI (<code>az login</code> 済み)。ガイドのデプロイは、<code>deploy.sh</code> から Bicep で行う (Bicep は <code>az</code> に同梱)。Advanced routing の CLI コマンド (<code>az network application-gateway advanced-routing-set</code> / <code>advanced-routing-map</code>) は Azure CLI 2.92.0 以降で使える。5.1 では、これらで実機を確認する</li>
 <li>bash 環境 (Azure Cloud Shell で可)。SSH 鍵 (<code>~/.ssh/id_ed25519.pub</code>) がなければ <code>deploy.sh</code> が自動作成</li>
 <li>WAF_v2 の Application Gateway は稼働時間で課金されます。デモ後は<a href="#cleanup">後片付け</a>を実施してください</li></ul>
 </section>
@@ -483,7 +483,12 @@ curl -H "X-App-Version: none" http://&lt;FRONTEND-IP&gt;/    # 既定のプー�
 <li>シミュレーターでシナリオを選び [要求を送信] → 経路図・ルールごとの一致/不一致・応答 (模擬) を説明</li>
 <li>「同じ要求を curl で送る」をコピーし、<code>&lt;FRONTEND-IP&gt;</code> を実際の IP に置き換えて実行</li>
 <li>実機の応答ヘッダー <code>x-backend-pool</code>、またはブラウザーで開いたページの色・プール名が、シミュレーターの「応答」と一致することを見せる</li></ol>
-<p>シミュレーターのルールと <code>deploy.sh</code> のルールは同じ定義です。ルールを変える場合は、シミュレーターの [JSON] 表示と <code>deploy/main.bicep</code> の定義を見比べて両方をそろえます。Azure CLI 2.87.0 には advanced-routing のコマンドがないため、実機側はポータルの [ルール] 画面で確認します。</p>
+<p>シミュレーターのルールと <code>deploy.sh</code> のルールは同じ定義です。ルールを変える場合は、シミュレーターの [JSON] 表示と <code>deploy/main.bicep</code> の定義を見比べて両方をそろえます。実機側は、Azure CLI 2.92.0 以降の Advanced routing のコマンドで確認します。マップの一覧、マップのルールの一覧、条件セットの中身を表示します。ポータルの [ルール] 画面でも同じ設定を確認できます。</p>
+<pre><code>RG=rg-agw-advrouting-demo
+AGW=$(az network application-gateway list -g $RG --query "[0].name" -o tsv)
+az network application-gateway advanced-routing-map list -g $RG --gateway-name $AGW -o table
+az network application-gateway advanced-routing-map rule list -g $RG --gateway-name $AGW --map-name advancedRoutingMap1 -o table
+az network application-gateway advanced-routing-set show -g $RG --gateway-name $AGW -n cs-tenant</code></pre>
 
 <h3>5.2 シミュレーターから実機へ直接送信する (ブラウザーの制約)</h3>
 <p>単体 HTML 版 <a href="../agw-routing-simulator.html?lang=ja"><code>agw-routing-simulator.html</code></a> は、画面上部の「ゲートウェイ URL」が空ならオフラインでシミュレーションし、URL を入れると実機に要求を送って「予測」と「実機の応答」を並べて表示します (予測と一致 / 不一致も表示)。ファイルをローカルで開けば (file://) http のゲートウェイにも送れます。ブラウザーの制約は次のとおりです。</p>

@@ -21,7 +21,8 @@ az account show --query "{sub:name, id:id, user:user.name}" -o table   # 対象�
 az provider show -n Microsoft.Network --query registrationState -o tsv   # Registered であること
 ```
 
-- Azure CLI 2.87.0 には `az network application-gateway advanced-routing-*` のコマンドが **ありません**。そのため、デプロイは Bicep (`deploy/main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。Bicep は `az bicep version` で確認します。ARM の検証は 2026-05-01 と 2026-07-01 でも通りますが、高度なルールの新しい機能は見つかりませんでした。
+- デプロイは、`deploy.sh` から Bicep (`deploy/main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。Bicep は `az bicep version` で確認します。ARM の検証は 2026-05-01 と 2026-07-01 でも通りますが、高度なルールの新しい機能は見つかりませんでした。
+- Advanced routing の CLI コマンド (`az network application-gateway advanced-routing-set` / `advanced-routing-map`、Core、GA) は、Azure CLI 2.92.0 以降で使えます。デプロイしたマップ、ルール、条件セットの確認に使います (ガイドの 5.1)。
 - SSH 鍵 (`~/.ssh/id_ed25519.pub`) がなければ、`deploy.sh` が生成します。
 - パラメーターは不要です。
 - 重み付けと優先度ベースのプール選択は、Advanced load balancing の機能です。高度なルールでは、機能の登録なしで動きます (2026-11-20 に実機で確認)。
