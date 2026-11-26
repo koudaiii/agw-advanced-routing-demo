@@ -426,7 +426,7 @@ FRONTEND=&lt;フロントエンド IP&gt;:8090 ./canary-check.sh /app/home 100  
 <pre><code>正常時   100 件すべて pool-canary (Primary = VM 2)
 停止後   100 件すべて pool-web    (Standby = VM 1)
 復旧後   100 件すべて pool-canary (Primary = VM 2)</code></pre>
-<p class="note">停止後の切り替えには約 2〜3 分かかります。直後に確認すると、まだ pool-canary が返ることがあります。pool-canary を止めている間は、8080 番のカナリアと 8100 番のフラグ オンも影響を受けるため、確認後は起動して戻してください。</p>
+<p class="note">停止後の切り替えには約 2〜3 分かかります。直後に確認すると、まだ pool-canary が返ることがあります。このプロセス (VM 2 の 8080 番) は、8080 番の pool-canary と 8100 番の pool-flag-on の唯一のサーバーでもあります。停止中は、ポート 8080 の約 10% と、ポート 8100 の X-Feature: new の要求も失敗します。確認が終わったらすぐ復帰してください。(重み付けはプールの正常性を見ないため、8080 番で pool-canary が選ばれた要求は失敗します。8 章を参照。)停止中は <code>test.sh</code> の 8080 番と 8100 番の結果が失敗することがあるため、<code>test.sh</code> は復帰後に実行してください。</p>
 <h4>機能フラグ (ポート 8100) の確認</h4>
 <p>8100 番では、クライアントがヘッダーでフラグをオンにします。<code>flagMap</code> は、ヘッダー <code>X-Feature: new</code> の要求を <code>pool-flag-on</code> (VM 2 の 8080 番) に送り、それ以外は既定の <code>pool-flag-off</code> (VM 1 の 8080 番) に送ります。<code>x-backend-pool</code> はプロセス名なので、オフは <code>pool-web</code>、オンは <code>pool-canary</code> と表示されます。</p>
 <pre><code>curl -s -D - -o /dev/null http://&lt;フロントエンド IP&gt;:8100/ | grep -i x-backend-pool
@@ -528,7 +528,7 @@ if (req.method === &quot;OPTIONS&quot; &amp;&amp; req.headers[&quot;access-contr
 <tr><td>6</td><td>WAF はルーティングより前</td><td>「WAF ブロック」→ 全ルール未評価、403</td><td><code>curl -i -A agw-block-demo http://&lt;IP&gt;/app/home</code> → 403 (User-Agent の WAF ルール)</td></tr>
 <tr><td>7</td><td>User-Agent による振り分け</td><td>「モバイル」→ pool-mobile (ブラウザーは User-Agent を送れないため、実機の応答は既定の pool-web になる)</td><td><code>curl -i -A "Mozilla/5.0 (iPhone; ...)" http://&lt;IP&gt;/app/home</code> → pool-mobile</td></tr>
 <tr><td>8</td><td>カナリア (ポート 8080)</td><td>「カナリア (ポート 8080)」→ 重み付けの予測 (90:10)</td><td><code>FRONTEND=&lt;IP&gt;:8080 ./canary-check.sh /app/home 100</code> → pool-web 約 90 件、pool-canary 約 10 件 (実機確認: 91 / 9)</td></tr>
-<tr><td>9</td><td>優先度ベース (ポート 8090)</td><td>「優先度 (ポート 8090)」→ Primary (VM 2) が正常なら Primary、停止していれば Standby (VM 1)</td><td><code>FRONTEND=&lt;IP&gt;:8090 ./canary-check.sh /app/home 100</code> → 正常時は pool-canary (VM 2)。VM 2 の <code>agw-pool@pool-canary</code> を止めて 2〜3 分後は pool-web (VM 1)。確認後は起動して戻す</td></tr>
+<tr><td>9</td><td>優先度ベース (ポート 8090)</td><td>「優先度 (ポート 8090)」→ Primary (VM 2) が正常なら Primary、停止していれば Standby (VM 1)</td><td><code>FRONTEND=&lt;IP&gt;:8090 ./canary-check.sh /app/home 100</code> → 正常時は pool-canary (VM 2)。VM 2 の <code>agw-pool@pool-canary</code> を止めて 2〜3 分後は pool-web (VM 1)。停止中は、ポート 8080 の約 10% と、ポート 8100 の X-Feature: new の要求も失敗します。確認が終わったらすぐ復帰してください</td></tr>
 <tr><td>10</td><td>機能フラグ (オフ / オン)</td><td>「機能フラグ (オフ)」「機能フラグ (オン)」→ オフは pool-flag-off (VM 1 の pool-web)、オンは pool-flag-on (VM 2 の pool-canary)</td><td><code>curl -H "X-Feature: new" http://&lt;IP&gt;:8100/</code> → pool-canary。ヘッダーなし、または別の値 → pool-web</td></tr>
 <tr><td>11</td><td>サーバー選択 (ポート 8110 / 8120 / 8130)</td><td>「Round Robin (ポート 8110)」「Round Robin 遅いサーバーあり (ポート 8120)」「Least Connections (ポート 8130)」→ テスト要求で、サーバーごとの件数と平均の時間、全体の所要時間を見る</td><td><code>FRONTEND=&lt;IP&gt;:8130 ./lb-check.sh /app/home 100 6</code> → pool-slow は 10 件以下。8120 では約半分で、所要時間がずっと長い</td></tr>
 </tbody></table>
@@ -544,6 +544,7 @@ if (req.method === &quot;OPTIONS&quot; &amp;&amp; req.headers[&quot;access-contr
 <tr><td><code>test.sh</code> のポート 80 の結果が想定と違う</td><td><code>rule1</code> が Advanced で作られているか (デプロイ直後の状態)。条件・優先度の定義は <code>deploy/main.bicep</code> の <code>advancedRoutingConditionSets</code> と <code>advancedRoutingMaps</code> を見る</td></tr>
 <tr><td>8080 の割合が 90:10 にならない</td><td>件数が少ないと期待値から外れる。<code>./canary-check.sh /app/home 100</code> で 100 件以上確認する。マップ <code>canaryMap</code> のルール <code>canary-split</code> の重みを確認する (ポータルで変更した場合は、<code>deploy.sh</code> で定義に戻る)</td></tr>
 <tr><td>8080 が全件 pool-canary になる</td><td>ルール <code>canary-split</code> が一致していない (条件セット <code>cs-canary-split</code> のパス条件)。マップの既定 (pool-canary) だけが使われている状態</td></tr>
+<tr><td>pool-canary の停止中に、8080 番の一部と、8100 番の機能フラグ オン (<code>X-Feature: new</code>) の要求が失敗する</td><td>VM 2 の <code>agw-pool@pool-canary</code> が止まっていないか (4.2 節)。このプロセスは pool-canary (8080) と pool-flag-on (8100) の唯一のサーバー。起動して 2〜3 分待つ</td></tr>
 <tr><td>本文のない POST が 403 になる</td><td>既知の問題: DRS のマネージドルールが、本文のない POST を遮断する (本文付きの POST や GET / PUT は通る)。原因のルール ID は未特定。テストは GET で送る</td></tr>
 <tr><td>正規表現が一致しない</td><td>RE2 非対応の構文 (先読み・後方参照など) を使っていないか。シミュレーターと実機で結果が違う場合は実機の結果が正</td></tr>
 <tr><td>シミュレーターと実機で結果が違う</td><td>(1) ブラウザーは User-Agent を送れない (「モバイル」「WAF ブロック」は <code>curl -A</code> で確認)。(2) 送信元 IP は、ゲートウェイが見ている値 (<code>X-Forwarded-For</code>) を使う。(3) ルールの定義 (シミュレーターの JSON と <code>deploy/main.bicep</code>) を比較する</td></tr>

@@ -236,6 +236,17 @@ test("a saved port-8100 rule named A/B test is kept", { skip }, async () => {
   assert.deepEqual(await savedRules(), ["A/B test (variant B)"]);
 });
 
+// Stopping pool-canary for the 8090 check also breaks 8080 and 8100: the note says so (#119).
+for (const [lang, note] of [
+  ["en", "While it is stopped, about 10% of requests on port 8080 and requests on port 8100 with X-Feature: new also fail."],
+  ["ja", "停止中は、ポート 8080 の約 10% と、ポート 8100 の X-Feature: new の要求も失敗します。"],
+]) {
+  test(`the note on stopping pool-canary says what else fails (${lang})`, { skip }, async () => {
+    await open(lang);
+    assert.ok((await page(`return document.body.textContent;`)).includes(note));
+  });
+}
+
 test("no JavaScript errors", { skip }, () => {
   assert.deepEqual(pageErrors, []);
 });
