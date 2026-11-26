@@ -64,7 +64,7 @@ FRONTEND=<frontend IP>:8080 ./canary-check.sh /app/home 100   # 100 requests to 
 
 Deployment takes about 15–20 minutes, because creating and updating an Application Gateway is slow. Open `http://<frontend IP>/app/home` in a browser to see the page of the pool that answered. To add headers, use curl or a browser extension such as ModHeader.
 
-Deployment uses Bicep (`main.bicep`, ARM API `Microsoft.Network/applicationGateways@2026-03-01`). Azure CLI 2.87.0 has no advanced-routing commands (such as `az network application-gateway advanced-routing-map`), so the gateway cannot be created with the CLI.
+Deployment uses Bicep (`main.bicep`, ARM API `Microsoft.Network/applicationGateways@2026-03-01`). The advanced routing commands (`az network application-gateway advanced-routing-set` / `advanced-routing-map`) are available in Azure CLI 2.92.0 and later. Use them to check the deployed rules (see section 5.1 of the guide).
 
 ## The listeners
 

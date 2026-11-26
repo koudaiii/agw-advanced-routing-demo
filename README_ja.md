@@ -64,7 +64,7 @@ FRONTEND=<フロントエンド IP>:8080 ./canary-check.sh /app/home 100   # ポ
 
 デプロイには 15〜20 分ほどかかります (Application Gateway の作成と更新に時間がかかるため)。ブラウザーで `http://<フロントエンド IP>/app/home` を開くと、応答したプールのページが表示されます。ヘッダーを付ける場合は、curl かブラウザー拡張 (ModHeader など) を使います。
 
-デプロイは Bicep (`main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。Azure CLI 2.87.0 には advanced-routing 用のコマンド (`az network application-gateway advanced-routing-map` など) がないため、CLI ではゲートウェイを作れません。
+デプロイは Bicep (`main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。Advanced routing の CLI コマンド (`az network application-gateway advanced-routing-set` / `advanced-routing-map`) は、Azure CLI 2.92.0 以降で使えます。デプロイしたルールの確認に使います (ガイドの 5.1 を参照)。
 
 ## リスナー
 

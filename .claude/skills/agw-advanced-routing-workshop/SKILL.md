@@ -26,7 +26,8 @@ az account show --query "{sub:name, id:id, user:user.name}" -o table   # is this
 az provider show -n Microsoft.Network --query registrationState -o tsv   # must be Registered
 ```
 
-- Azure CLI 2.87.0 has **no** `az network application-gateway advanced-routing-*` commands, so the deployment uses Bicep (`deploy/main.bicep`, ARM API `Microsoft.Network/applicationGateways@2026-03-01`). Check Bicep with `az bicep version`. ARM validation also passes with 2026-05-01 and 2026-07-01; no new advanced-rule feature was found there.
+- The deployment uses Bicep through `deploy.sh` (`deploy/main.bicep`, ARM API `Microsoft.Network/applicationGateways@2026-03-01`). Check Bicep with `az bicep version`. ARM validation also passes with 2026-05-01 and 2026-07-01; no new advanced-rule feature was found there.
+- The advanced routing CLI commands (`az network application-gateway advanced-routing-set` / `advanced-routing-map`, Core, GA) are available in Azure CLI 2.92.0 and later. Use them to check the deployed maps, rules, and condition sets (guide section 5.1).
 - `deploy.sh` generates an SSH key (`~/.ssh/id_ed25519.pub`) when there is none.
 - No parameters are needed.
 - Weighted and priority-based pool selection are Advanced load balancing features. In an advanced rule they work without any feature registration (confirmed on the real gateway on 2026-11-20).

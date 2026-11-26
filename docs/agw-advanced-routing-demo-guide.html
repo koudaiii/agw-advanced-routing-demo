@@ -218,7 +218,7 @@ svg .l{text-anchor:start}
 
 <section id="prereq"><h2>2. Prerequisites</h2><ul>
 <li>An Azure subscription and permission to create a resource group</li>
-<li>Azure CLI (signed in with <code>az login</code>). The CLI (2.87.0) cannot create advanced rules, so this guide deploys with Bicep (Bicep comes with <code>az</code>)</li>
+<li>Azure CLI (signed in with <code>az login</code>). This guide deploys with Bicep through <code>deploy.sh</code> (Bicep comes with <code>az</code>). The advanced routing commands (<code>az network application-gateway advanced-routing-set</code> / <code>advanced-routing-map</code>) are available in Azure CLI 2.92.0 and later; section 5.1 uses them to check the gateway</li>
 <li>A bash environment (Azure Cloud Shell works). <code>deploy.sh</code> creates an SSH key (<code>~/.ssh/id_ed25519.pub</code>) when there is none</li>
 <li>A WAF_v2 Application Gateway is billed while it runs. Do the <a href="#cleanup">cleanup</a> after the demo</li></ul>
 </section>
@@ -484,7 +484,12 @@ curl -H "X-App-Version: none" http://&lt;FRONTEND-IP&gt;/    # default pool</cod
 <li>Pick a scenario in the simulator and select [Send request] → explain the route diagram, the match / no match per rule, and the simulated response</li>
 <li>Copy "Send the same request with curl", replace <code>&lt;FRONTEND-IP&gt;</code> with the real IP, and run it</li>
 <li>Show that the real <code>x-backend-pool</code> header, or the color and pool name of the page opened in a browser, equals the simulator's "Response"</li></ol>
-<p>The simulator's rules and the rules that <code>deploy.sh</code> creates are the same definitions. When you change a rule, compare the simulator's [JSON] view with <code>deploy/main.bicep</code> and change both. Azure CLI 2.87.0 has no advanced-routing commands, so check the real gateway on the portal's [Rules] page.</p>
+<p>The simulator's rules and the rules that <code>deploy.sh</code> creates are the same definitions. When you change a rule, compare the simulator's [JSON] view with <code>deploy/main.bicep</code> and change both. To check the real gateway, use the advanced routing commands of Azure CLI 2.92.0 or later: list the maps, list the rules of a map, and show a condition set. The portal's [Rules] page shows the same settings.</p>
+<pre><code>RG=rg-agw-advrouting-demo
+AGW=$(az network application-gateway list -g $RG --query "[0].name" -o tsv)
+az network application-gateway advanced-routing-map list -g $RG --gateway-name $AGW -o table
+az network application-gateway advanced-routing-map rule list -g $RG --gateway-name $AGW --map-name advancedRoutingMap1 -o table
+az network application-gateway advanced-routing-set show -g $RG --gateway-name $AGW -n cs-tenant</code></pre>
 
 <h3>5.2 Sending from the simulator to the real gateway (browser limits)</h3>
 <p>The standalone page <a href="../agw-routing-simulator.html?lang=en"><code>agw-routing-simulator.html</code></a> simulates offline while "Gateway URL" at the top is empty. With a URL, it sends the request to the real gateway and shows the prediction next to the real response (and whether they match). Opened as a local file (file://), it can also send to an http gateway. The browser sets these limits.</p>
