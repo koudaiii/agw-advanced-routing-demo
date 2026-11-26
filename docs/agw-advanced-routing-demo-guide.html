@@ -83,41 +83,48 @@ svg .l{text-anchor:start}
 <section id="arch"><h2>1. Architecture</h2>
 
 <figure class="diagram">
-<svg viewBox="0 0 960 460" role="img" aria-labelledby="dg-t dg-d">
+<svg viewBox="0 0 960 716" role="img" aria-labelledby="dg-t dg-d">
 <title id="dg-t">Overall architecture of the demo environment</title>
-<desc id="dg-d">Simulator, demo client, public IP (listeners :80 / :8080 / :8090 / :8100), WAF, one routing map per port (advancedRoutingMap1 / canaryMap / priorityMap / flagMap), VM 1 (pool-web, pool-partner, pool-tenant, pool-api-v2, pool-mobile, pool-standby, pool-flag-off) and VM 2 (pool-canary, pool-primary, pool-flag-on). The server selection ports 8110 / 8120 / 8130 are not drawn</desc>
+<desc id="dg-d">Simulator, demo client, public IP (listeners :80 / :8080 / :8090 / :8100 / :8110 / :8120 / :8130), WAF, one routing map per advanced rule (advancedRoutingMap1 / canaryMap / priorityMap / flagMap) and one Basic rule per server selection port (rule-rr / rule-rr-slow / rule-lc), VM 1 (pool-web, pool-partner, pool-tenant, pool-api-v2, pool-mobile, pool-standby, pool-flag-off, pool-slow, pool-rr-a) and VM 2 (pool-canary, pool-primary, pool-flag-on, pool-fast, pool-rr-b)</desc>
 <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="ink"/></marker></defs>
 <rect x="10" y="20" width="190" height="110" rx="8" class="box"/>
 <text x="105" y="46" class="h">Simulator</text>
 <text x="105" y="66">(front end / standalone HTML)</text>
 <text x="105" y="88">Rule evaluation, route diagram</text>
 <text x="105" y="106">Test requests (to the real gateway)</text>
-<rect x="10" y="180" width="190" height="80" rx="8" class="box"/>
-<text x="105" y="206" class="h">Demo client</text>
-<text x="105" y="226">curl / browser</text>
-<text x="105" y="244">(source IP)</text>
-<path d="M105 130 V175" class="ln dash" marker-end="url(#ar)" stroke-dasharray="6 5"/>
-<text x="113" y="158" class="l">copy the curl command</text>
-<rect x="250" y="20" width="160" height="240" rx="8" class="box"/>
+<rect x="10" y="260" width="190" height="80" rx="8" class="box"/>
+<text x="105" y="286" class="h">Demo client</text>
+<text x="105" y="306">curl / browser</text>
+<text x="105" y="324">(source IP)</text>
+<path d="M105 130 V255" class="ln dash" marker-end="url(#ar)" stroke-dasharray="6 5"/>
+<text x="113" y="196" class="l">copy the curl command</text>
+<rect x="250" y="20" width="160" height="390" rx="8" class="box"/>
 <text x="330" y="44" class="h">Public IP</text>
 <text x="330" y="64">Application Gateway</text>
 <text x="330" y="92">Listener :80 (Basic)</text>
 <text x="330" y="110">Listener :8080 (Basic)</text>
 <text x="330" y="128">Listener :8090 (Basic)</text>
 <text x="330" y="146">Listener :8100 (Basic)</text>
-<text x="330" y="170" class="h">Advanced rules</text>
-<text x="330" y="190">rule1 → :80</text>
-<text x="330" y="208">rule-canary → :8080</text>
-<text x="330" y="226">rule-priority → :8090</text>
-<text x="330" y="244">rule-flag → :8100</text>
-<path d="M200 210 H245" class="ln" marker-end="url(#ar)"/>
-<rect x="450" y="70" width="120" height="110" rx="8" class="box"/>
-<text x="510" y="96" class="h">WAF</text>
-<text x="510" y="116">Policy enabled</text>
-<text x="510" y="134">BlockDemoIp</text>
-<text x="510" y="152">BlockDemoUA</text>
-<text x="510" y="170">(before routing)</text>
-<path d="M410 125 H445" class="ln" marker-end="url(#ar)"/>
+<text x="330" y="164">Listener :8110 (Basic)</text>
+<text x="330" y="182">Listener :8120 (Basic)</text>
+<text x="330" y="200">Listener :8130 (Basic)</text>
+<text x="330" y="232" class="h">Advanced rules</text>
+<text x="330" y="252">rule1 → :80</text>
+<text x="330" y="270">rule-canary → :8080</text>
+<text x="330" y="288">rule-priority → :8090</text>
+<text x="330" y="306">rule-flag → :8100</text>
+<text x="330" y="338" class="h">Basic rules</text>
+<text x="330" y="358">rule-rr → :8110</text>
+<text x="330" y="376">rule-rr-slow → :8120</text>
+<text x="330" y="394">rule-lc → :8130</text>
+<path d="M200 300 H245" class="ln" marker-end="url(#ar)"/>
+<rect x="450" y="260" width="120" height="110" rx="8" class="box"/>
+<text x="510" y="286" class="h">WAF</text>
+<text x="510" y="306">Policy enabled</text>
+<text x="510" y="324">BlockDemoIp</text>
+<text x="510" y="342">BlockDemoUA</text>
+<text x="510" y="360">(before routing)</text>
+<path d="M410 315 H445" class="ln" marker-end="url(#ar)"/>
 <rect x="600" y="10" width="150" height="70" rx="8" class="box"/>
 <text x="675" y="30" class="h">Routing map :80</text>
 <text x="675" y="50">advancedRoutingMap1</text>
@@ -134,11 +141,26 @@ svg .l{text-anchor:start}
 <text x="675" y="300" class="h">flagMap :8100</text>
 <text x="675" y="320">flag-on (X-Feature: new)</text>
 <text x="675" y="338">default: pool-flag-off</text>
-<path d="M570 125 L600 45" class="ln" marker-end="url(#ar)"/>
-<path d="M570 125 H600" class="ln" marker-end="url(#ar)"/>
-<path d="M570 125 L600 225" class="ln" marker-end="url(#ar)"/>
-<path d="M570 125 L600 315" class="ln" marker-end="url(#ar)"/>
-<rect x="800" y="10" width="150" height="250" rx="8" class="box" style="fill:none;stroke-dasharray:6 4"/>
+<rect x="600" y="370" width="150" height="70" rx="8" class="box"/>
+<text x="675" y="390" class="h">Basic rule :8110</text>
+<text x="675" y="410">pool-rr</text>
+<text x="675" y="428">Round Robin</text>
+<rect x="600" y="460" width="150" height="70" rx="8" class="box"/>
+<text x="675" y="480" class="h">Basic rule :8120</text>
+<text x="675" y="500">pool-rr-slow</text>
+<text x="675" y="518">Round Robin</text>
+<rect x="600" y="550" width="150" height="70" rx="8" class="box"/>
+<text x="675" y="570" class="h">Basic rule :8130</text>
+<text x="675" y="590">pool-lc</text>
+<text x="675" y="608">Least Connections</text>
+<path d="M570 315 L600 45" class="ln" marker-end="url(#ar)"/>
+<path d="M570 315 L600 135" class="ln" marker-end="url(#ar)"/>
+<path d="M570 315 L600 225" class="ln" marker-end="url(#ar)"/>
+<path d="M570 315 H600" class="ln" marker-end="url(#ar)"/>
+<path d="M570 315 L600 405" class="ln" marker-end="url(#ar)"/>
+<path d="M570 315 L600 495" class="ln" marker-end="url(#ar)"/>
+<path d="M570 315 L600 585" class="ln" marker-end="url(#ar)"/>
+<rect x="800" y="10" width="150" height="322" rx="8" class="box" style="fill:none;stroke-dasharray:6 4"/>
 <text x="875" y="30" class="h">VM 1</text>
 <text x="875" y="46">192.168.1.10</text>
 <text x="875" y="70" class="m">pool-web :8080</text>
@@ -150,26 +172,39 @@ svg .l{text-anchor:start}
 <text x="875" y="198">← :8090 Standby</text>
 <text x="875" y="220" class="m">pool-flag-off :8080</text>
 <text x="875" y="238">← :8100 flag off</text>
-<rect x="800" y="280" width="150" height="170" rx="8" class="box" style="fill:none;stroke-dasharray:6 4"/>
-<text x="875" y="300" class="h">VM 2</text>
-<text x="875" y="316">192.168.1.11</text>
-<text x="875" y="342" class="m">pool-canary :8080</text>
-<text x="875" y="364" class="m">pool-primary :8080</text>
-<text x="875" y="382">← :8090 Primary</text>
-<text x="875" y="404" class="m">pool-flag-on :8080</text>
-<text x="875" y="422">← :8100 flag on</text>
-<path d="M750 45 C775 45,775 120,800 120" class="ln" marker-end="url(#ar)"/>
-<path d="M750 135 C775 135,775 70,800 70" class="ln" marker-end="url(#ar)"/>
-<path d="M750 135 C775 135,775 342,800 342" class="ln" marker-end="url(#ar)"/>
-<path d="M750 225 C775 225,775 180,800 180" class="ln" marker-end="url(#ar)"/>
-<path d="M750 225 C775 225,775 364,800 364" class="ln" marker-end="url(#ar)"/>
-<path d="M750 315 C775 315,775 220,800 220" class="ln" marker-end="url(#ar)"/>
-<path d="M750 315 C775 315,775 404,800 404" class="ln" marker-end="url(#ar)"/>
-<text x="10" y="300" class="l">Solid line: traffic. Dashed line: what the operator does.</text>
-<text x="10" y="318" class="l">Stop pool-canary on VM 2 and port 8090 switches to Standby (VM 1).</text>
-<text x="10" y="336" class="l">Port 8080: pool-web (VM 1) 90% and pool-canary (VM 2) 10%.</text>
-<text x="10" y="354" class="l">Port 8100 (feature flag): X-Feature: new → pool-flag-on (VM 2), otherwise pool-flag-off (VM 1).</text>
-<text x="10" y="372" class="l">Not drawn: ports 8110 / 8120 / 8130 (server selection, Basic rules; see 4.1).</text>
+<text x="875" y="260" class="m">pool-slow :8086</text>
+<text x="875" y="278">← :8120 / :8130 slow</text>
+<text x="875" y="300" class="m">pool-rr-a :8087</text>
+<text x="875" y="318">← :8110</text>
+<rect x="800" y="352" width="150" height="234" rx="8" class="box" style="fill:none;stroke-dasharray:6 4"/>
+<text x="875" y="372" class="h">VM 2</text>
+<text x="875" y="388">192.168.1.11</text>
+<text x="875" y="412" class="m">pool-canary :8080</text>
+<text x="875" y="434" class="m">pool-primary :8080</text>
+<text x="875" y="452">← :8090 Primary</text>
+<text x="875" y="474" class="m">pool-flag-on :8080</text>
+<text x="875" y="492">← :8100 flag on</text>
+<text x="875" y="514" class="m">pool-fast :8086</text>
+<text x="875" y="532">← :8120 / :8130 fast</text>
+<text x="875" y="554" class="m">pool-rr-b :8087</text>
+<text x="875" y="572">← :8110</text>
+<path d="M750 45 C775 45,775 110,800 110" class="ln" marker-end="url(#ar)"/>
+<path d="M750 135 C775 135,775 66,800 66" class="ln" marker-end="url(#ar)"/>
+<path d="M750 135 C775 135,775 408,800 408" class="ln" marker-end="url(#ar)"/>
+<path d="M750 225 C775 225,775 176,800 176" class="ln" marker-end="url(#ar)"/>
+<path d="M750 225 C775 225,775 430,800 430" class="ln" marker-end="url(#ar)"/>
+<path d="M750 315 C775 315,775 216,800 216" class="ln" marker-end="url(#ar)"/>
+<path d="M750 315 C775 315,775 470,800 470" class="ln" marker-end="url(#ar)"/>
+<path d="M750 405 C775 405,775 296,800 296" class="ln" marker-end="url(#ar)"/>
+<path d="M750 405 C775 405,775 550,800 550" class="ln" marker-end="url(#ar)"/>
+<path d="M750 495 C775 495,775 256,800 256" class="ln" marker-end="url(#ar)"/>
+<path d="M750 495 C775 495,775 510,800 510" class="ln" marker-end="url(#ar)"/>
+<path d="M750 585 C775 585,775 256,800 256" class="ln" marker-end="url(#ar)"/>
+<path d="M750 585 C775 585,775 510,800 510" class="ln" marker-end="url(#ar)"/>
+<text x="10" y="648" class="l">Solid line: traffic. Dashed line: what the operator does.</text>
+<text x="10" y="666" class="l">Port 8080: pool-web (VM 1) 90% and pool-canary (VM 2) 10%. Stop pool-canary on VM 2 and port 8090 switches to Standby (VM 1).</text>
+<text x="10" y="684" class="l">Port 8100 (feature flag): X-Feature: new → pool-flag-on (VM 2), otherwise pool-flag-off (VM 1).</text>
+<text x="10" y="702" class="l">Ports 8110–8130 (server selection): one pool with two servers, one per VM. pool-slow waits 3 s before every answer.</text>
 </svg>
 <figcaption>Figure 1. Architecture. VM 1 and VM 2 are drawn as separate frames. Solid lines are real traffic; dashed lines show what the operator does.</figcaption>
 </figure>
