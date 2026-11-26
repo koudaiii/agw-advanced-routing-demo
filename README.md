@@ -40,10 +40,10 @@ The diagrams are from Microsoft Learn: [Advanced load balancing on Azure Applica
 | `tests/simulator.test.mjs` | Browser tests for the simulator (see Tests) |
 | `docs/agw-advanced-routing-demo-guide.html` | Build guide (English). Japanese: `docs/agw-advanced-routing-demo-guide_ja.html` |
 | `backend/server.js` | Dependency-free Node.js backend. Returns which pool answered and the request headers it received (the `X-Forwarded-*` headers added by Application Gateway are highlighted) as HTML or JSON. The pool name is also in the `x-backend-pool` response header. CORS is enabled (`ALLOW_ORIGIN`, default `*`) |
-| `backend/pools.conf` | Process name, port, label, color, and delay for VM 1. Seven processes (ports 8080–8083, 8085, and for server selection `pool-slow` 8086 with a 3 s delay and `pool-rr-a` 8087) |
-| `backend/pools-canary.conf` | Processes for VM 2 (`pool-canary` 8080, and for server selection `pool-fast` 8086 and `pool-rr-b` 8087) |
+| `backend/pools.conf` | Process name, port, label, color, and delay for VM 1. Nine processes (ports 8080–8083, 8085; for server selection `pool-slow` 8086 with a 3 s delay and `pool-rr-a` 8087; `pool-standby` 8088 for priority and `pool-flag-off` 8089 for the feature flag) |
+| `backend/pools-canary.conf` | Processes for VM 2 (`pool-canary` 8080; for server selection `pool-fast` 8086 and `pool-rr-b` 8087; `pool-primary` 8088 for priority and `pool-flag-on` 8089 for the feature flag) |
 | `deploy/deploy.sh` | Creates the resource group and deploys `deploy/main.bicep`. Generates an SSH key if there is none |
-| `deploy/main.bicep` | VNet, backend VM 1 (seven processes: ports 8080–8083, 8085, 8086, 8087), VM 2 (three processes: `pool-canary` 8080, `pool-fast` 8086, `pool-rr-b` 8087), NAT gateway, WAF policy, Application Gateway, and seven listeners. Four have an advanced rule and its own routing map: `rule1` / `advancedRoutingMap1` (port 80), `rule-canary` / `canaryMap` (port 8080), `rule-priority` / `priorityMap` (port 8090), `rule-flag` / `flagMap` (port 8100). Three have a Basic rule for server selection: `rule-rr` (port 8110), `rule-rr-slow` (port 8120), `rule-lc` (port 8130) |
+| `deploy/main.bicep` | VNet, backend VM 1 (nine processes: ports 8080–8083, 8085–8089), VM 2 (five processes: `pool-canary` 8080, `pool-fast` 8086, `pool-rr-b` 8087, `pool-primary` 8088, `pool-flag-on` 8089), NAT gateway, WAF policy, Application Gateway, and seven listeners. Four have an advanced rule and its own routing map: `rule1` / `advancedRoutingMap1` (port 80), `rule-canary` / `canaryMap` (port 8080), `rule-priority` / `priorityMap` (port 8090), `rule-flag` / `flagMap` (port 8100). Three have a Basic rule for server selection: `rule-rr` (port 8110), `rule-rr-slow` (port 8120), `rule-lc` (port 8130) |
 | `deploy/make-cloud-init.sh` / `cloud-init.yaml` | Bootstrap data for backend VM 1 (embeds `backend/server.js`). Installs Node.js 26 (current LTS) from NodeSource |
 | `deploy/nodesource-repo.gpg.key` | Signing key of the NodeSource apt repository, embedded in both bootstrap files. Fingerprint `6F71 F525 2828 41EE DAF8 51B4 2F59 B5F9 9B1B E0B4` |
 | `deploy/cloud-init-canary.yaml` | Bootstrap data for canary VM 2 (generated from `backend/pools-canary.conf`) |
@@ -101,15 +101,15 @@ client --:8080--> listener-canary --> rule-canary (Advanced)
 
 ### Priority-based selection (port 8090)
 
-The rule `rule-priority` (Advanced, priority 300) uses the map `priorityMap`. In the map, the rule `priority-split` matches every path and uses `pool-primary` (VM 2, port 8080, priority 1). When the healthy servers of `pool-primary` fall below the minimum healthy percentage of 60%, it switches to `pool-standby` (VM 1, port 8080, priority 2). The default target is `pool-standby`. Each pool has one server, so the switch is for the whole pool.
+The rule `rule-priority` (Advanced, priority 300) uses the map `priorityMap`. In the map, the rule `priority-split` matches every path and uses `pool-primary` (VM 2, port 8088, priority 1). When the healthy servers of `pool-primary` fall below the minimum healthy percentage of 60%, it switches to `pool-standby` (VM 1, port 8088, priority 2). The default target is `pool-standby`. Each pool has one server, so the switch is for the whole pool.
 
 - Check: `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100`
-- Stop and restore by hand: `az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"` stops VM 2's process. The switch takes about 2–3 minutes. `systemctl start agw-pool@pool-canary` restores it, and requests go to `pool-primary` again. The same process is also the only server of `pool-canary` (8080) and `pool-flag-on` (8100). While it is stopped, about 10% of requests on port 8080 and requests on port 8100 with `X-Feature: new` also fail. Restore it as soon as the check is done.
+- Stop and restore by hand: `az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-primary"` stops the `pool-primary` process on VM 2. The switch takes about 2–3 minutes. `systemctl start agw-pool@pool-primary` restores it, and requests go to `pool-primary` again. The process serves port 8090 only, so the other ports are not affected.
 - The simulator's "Test requests" button sends the request in the form (method, path, query, and headers, the same as "Send request") the chosen number of times and counts which pool answered, using the Primary / Standby names. The results appear under "Real response". A request with no response within 10 seconds is counted as failed.
 
 ### Feature flag (port 8100)
 
-The client turns the flag on with a header. Requests with `X-Feature: new` go to `pool-flag-on` (VM 2 port 8080). Everything else goes to the default `pool-flag-off` (VM 1 port 8080). Check: `curl -H "X-Feature: new" http://<FRONTEND-IP>:8100/`. Header values are case-sensitive: `X-Feature: NEW` goes to `pool-flag-off` (checked on the real gateway on 2026-11-26).
+The client turns the flag on with a header. Requests with `X-Feature: new` go to `pool-flag-on` (VM 2 port 8089). Everything else goes to the default `pool-flag-off` (VM 1 port 8089). Check: `curl -H "X-Feature: new" http://<FRONTEND-IP>:8100/`. Header values are case-sensitive: `X-Feature: NEW` goes to `pool-flag-off` (checked on the real gateway on 2026-11-26).
 
 This is not an A/B test: the client chooses, and there is no random split. A statistical A/B test is tracked in issue #27.
 
@@ -137,7 +137,7 @@ FRONTEND=<IP>:8130 ./lb-check.sh /app/home 100 6   # pool-slow 10 or fewer, tota
 - The algorithm is set on the pool: `serverSelectionAlgorithm: 'LeastConnections'` on `pool-lc`. This preview property is not in the public API spec or the Bicep types. It was found by changing a pool in the portal and comparing the gateway before and after (`docs/superpowers/specs/2026-11-25-server-selection-demo-design.md`).
 - Processes are added at first boot (cloud-init). An environment deployed before this change needs `./cleanup.sh` and `./deploy.sh` again.
 
-`pool-primary`, `pool-standby`, `pool-flag-off`, and `pool-flag-on` are gateway pools that point at the existing processes, so the `x-backend-pool` header shows the process name: `pool-canary` for VM 2 and `pool-web` for VM 1.
+`pool-primary` / `pool-standby` (port 8088) and `pool-flag-on` / `pool-flag-off` (port 8089) have their own processes with the same names, so the `x-backend-pool` header shows the gateway pool name. Stopping one of them does not affect the other ports.
 
 ## Tests
 
