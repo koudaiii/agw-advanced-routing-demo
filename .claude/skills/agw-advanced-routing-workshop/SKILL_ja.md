@@ -279,3 +279,18 @@ cd deploy && ./cleanup.sh --yes       # 確認なしで削除 (端末がない�
 - `agw-routing-simulator.html`: 予測と実機の応答の比較、テスト要求、負荷分散シミュレーション (英語 / 日本語)
 - `docs/agw-advanced-routing-demo-guide.html` (英語)、`docs/agw-advanced-routing-demo-guide_ja.html` (日本語): 参加者向けガイド
 - `README.md` (英語)、`README_ja.md` (日本語)
+
+## 参考文献
+
+このスキルに書いた事実の根拠にした公式ページです。プレビューの動きが変わったように見えるときは、これらを確認してください。
+
+- [Azure Application Gateway の高度なルーティング規則 (プレビュー)](https://learn.microsoft.com/azure/application-gateway/advanced-rules): 階層 (マップ、ルール、条件セット、条件)、条件の種類、上限、RE2 の正規表現
+- [Azure Application Gateway における高度な負荷分散 (プレビュー)](https://learn.microsoft.com/azure/application-gateway/advanced-load-balancing): 重み付けと優先度ベースのプール選択、Round Robin / Weighted Round Robin / Least Connections、制約 (最大 5 プール、v2 SKU、Basic・Advanced ルールとマップの既定アクション)、重み付けはプールの正常性を見ないこと
+- [Azure Application Gateway バックエンド設定の構成](https://learn.microsoft.com/azure/application-gateway/configuration-http-settings): Cookie によるアフィニティ (有効だと Least Connections は使われない) と Dedicated Backend Connection
+- [Microsoft.Network/applicationGateways (Bicep / ARM テンプレートのリファレンス)](https://learn.microsoft.com/azure/templates/microsoft.network/applicationgateways): `deploy/main.bicep` で使うプロパティ (`cookieBasedAffinity`、`dedicatedBackendConnection` など)
+- [チュートリアル: Azure portal でヘッダーベースのルーティングを構成する](https://learn.microsoft.com/azure/application-gateway/configure-advanced-routing-rule): ポータルで高度なルールを手動で作る手順
+- [az network application-gateway advanced-routing-map](https://learn.microsoft.com/cli/azure/network/application-gateway/advanced-routing-map?view=azure-cli-latest): 高度なルーティング マップの一覧と管理
+- [az network application-gateway advanced-routing-map rule](https://learn.microsoft.com/cli/azure/network/application-gateway/advanced-routing-map/rule?view=azure-cli-latest): マップのルールの一覧と管理
+- [az network application-gateway advanced-routing-set](https://learn.microsoft.com/cli/azure/network/application-gateway/advanced-routing-set?view=azure-cli-latest): 条件セットの表示と管理
+- [Azure CLI リリース ノート (2026 年 11 月 3 日、バージョン 2.92.0)](https://learn.microsoft.com/cli/azure/release-notes-azure-cli?view=azure-cli-latest#november-03,-2026): Advanced routing のコマンドが Azure CLI 2.92.0 で追加されたこと
+- [Azure Application Gateway のバックエンドの正常性に関する問題のトラブルシューティング](https://learn.microsoft.com/troubleshoot/azure/application-gateway/application-gateway-backend-health-troubleshooting#backend-health-status-unhealthy): 502 の応答と異常なバックエンド

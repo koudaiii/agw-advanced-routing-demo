@@ -78,7 +78,7 @@ svg .l{text-anchor:start}
 <nav aria-label="Contents"><h2>Contents</h2><ol>
 <li><a href="#arch">Architecture</a></li><li><a href="#prereq">Prerequisites</a></li><li><a href="#backend">How the backend is built</a></li>
 <li><a href="#agw">Building the Application Gateway</a></li><li><a href="#front">Using the simulator as the front end</a></li>
-<li><a href="#demo">Running the demo</a></li><li><a href="#trouble">Troubleshooting</a></li><li><a href="#notes">Limits and notes</a></li><li><a href="#cleanup">Cleanup</a></li></ol></nav>
+<li><a href="#demo">Running the demo</a></li><li><a href="#trouble">Troubleshooting</a></li><li><a href="#notes">Limits and notes</a></li><li><a href="#cleanup">Cleanup</a></li><li><a href="#refs">References</a></li></ol></nav>
 
 <section id="arch"><h2>1. Architecture</h2>
 
@@ -567,5 +567,19 @@ if (req.method === "OPTIONS" &amp;&amp; req.headers["access-control-request-meth
 ./cleanup.sh --dry-run   # lists the resources only
 ./cleanup.sh --yes       # no prompt
 az group exists -n rg-agw-advrouting-demo   # false when the deletion is done</code></pre>
+</section>
+<section id="refs"><h2>10. References</h2>
+<p>The official Microsoft Learn pages behind this guide. When this guide and a page disagree, the page is right; preview features change.</p>
+<ul>
+<li><a href="https://learn.microsoft.com/azure/application-gateway/advanced-rules">Advanced routing rules on Azure Application Gateway (Preview)</a>: hierarchy (map, rules, condition sets, conditions), condition types, limits, and RE2 regular expressions (sections 1, 4, and 8)</li>
+<li><a href="https://learn.microsoft.com/azure/application-gateway/advanced-load-balancing">Advanced load balancing on Azure Application Gateway (Preview)</a>: weighted and priority-based pool selection, Round Robin / Weighted Round Robin / Least Connections, the limits (up to five pools, v2 SKUs, Basic and Advanced rules and a map's default action), and that weighted distribution does not look at pool health (sections 4.2 and 8)</li>
+<li><a href="https://learn.microsoft.com/azure/application-gateway/configuration-http-settings">Azure Application Gateway backend settings configuration</a>: cookie-based affinity (Least Connections is not applied while it is on) and Dedicated Backend Connection</li>
+<li><a href="https://learn.microsoft.com/azure/templates/microsoft.network/applicationgateways">Microsoft.Network/applicationGateways (Bicep / ARM template reference)</a>: properties used in <code>deploy/main.bicep</code>, such as <code>cookieBasedAffinity</code> and <code>dedicatedBackendConnection</code></li>
+<li><a href="https://learn.microsoft.com/azure/application-gateway/configure-advanced-routing-rule">Tutorial: Configure header-based routing with the Azure portal</a>: creating an advanced rule by hand in the portal (section 4.3)</li>
+<li><a href="https://learn.microsoft.com/cli/azure/network/application-gateway/advanced-routing-map?view=azure-cli-latest">az network application-gateway advanced-routing-map</a>: list and manage advanced routing maps (section 5.1)</li>
+<li><a href="https://learn.microsoft.com/cli/azure/network/application-gateway/advanced-routing-map/rule?view=azure-cli-latest">az network application-gateway advanced-routing-map rule</a>: list and manage the rules of a map (section 5.1)</li>
+<li><a href="https://learn.microsoft.com/cli/azure/network/application-gateway/advanced-routing-set?view=azure-cli-latest">az network application-gateway advanced-routing-set</a>: show and manage condition sets (section 5.1)</li>
+<li><a href="https://learn.microsoft.com/cli/azure/release-notes-azure-cli?view=azure-cli-latest#november-03,-2026">Azure CLI release notes (November 03, 2026, version 2.92.0)</a>: the advanced routing commands were added in Azure CLI 2.92.0 (section 2)</li>
+<li><a href="https://learn.microsoft.com/troubleshoot/azure/application-gateway/application-gateway-backend-health-troubleshooting#backend-health-status-unhealthy">Troubleshoot backend health issues in Azure Application Gateway</a>: 502 responses and unhealthy backends (section 7)</li></ul>
 </section>
 </main></body></html>
