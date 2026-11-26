@@ -897,7 +897,7 @@ function renderSim() {
       ? L(" pool-slow は毎回 3 秒待ってから応答します。", " pool-slow waits 3 s before every answer.") : "";
     const how = sp.algo === "lc"
       ? L("Least Connections は、開いている接続が少ないサーバーを選ぶので、新しい要求は遅いサーバーを避けます。", "Least Connections picks the server with fewer open connections, so new requests avoid the slow server.")
-      : L("Round Robin は、正常なサーバーに順番に配ります。", "Round Robin hands requests to the healthy servers in turn.");
+      : L("Round Robin は、正常なサーバーに順番に配ります。応答時間や接続数は見ません。", "Round Robin sends requests to each healthy server in turn. It does not look at response time or open connections.");
     out.append(serverSelectBlock(d.port, null));
     out.append(statusBlock("—", "", L(`ポート ${d.port} は ${sp.pool} (${algoName(sp.algo)})。${how}${slow} 1 件ではどちらに届くかは決まりません。テスト要求で件数と時間を確かめます (8120 と 8130 は同時に試さないでください)。`, `Port ${d.port} uses ${sp.pool} (${algoName(sp.algo)}). ${how}${slow} A single request can reach either server. Use the test requests to see the counts and the time (do not test 8120 and 8130 at the same time).`)));
     return;
