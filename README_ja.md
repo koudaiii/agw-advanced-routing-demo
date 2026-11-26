@@ -29,7 +29,7 @@
 ![バックエンドプール内で Round Robin、Weighted Round Robin、Least Connections を比較する図](https://learn.microsoft.com/azure/application-gateway/media/advanced-load-distribution/server-selection.png)
 
 **読み方**: 一致したルールのプールは、次の 2 つの方式のどちらかで選ばれます。
-- **重み付け (Weighted)**: 重みの比率で振り分けます (例: 重み 8 と 2 なら 80% / 20%)。プールが異常でも、設定した割合は変わりません。
+- **重み付け (Weighted)**: 重みの比率で振り分けます (例: 重み 8 と 2 なら 80% / 20%)。プールが異常でも、設定した割合は変わりません。そのため、正常なサーバーがないプールに送られた要求は失敗します。
 - **優先度 (Priority)**: 優先度 1 のプールが最小正常割合を満たす間は、そこに送ります。満たさなければ、優先度 2 のスタンバイに切り替えます。
 
 ## このリポジトリの内容
@@ -104,7 +104,7 @@ client --:8080--> listener-canary --> rule-canary (Advanced)
 ルール `rule-priority` (Advanced、優先度 300) がマップ `priorityMap` を使います。マップの中では、全パスに一致するルール `priority-split` が `pool-primary` (VM 2 の 8080 番、優先度 1) に送ります。`pool-primary` の正常なサーバーが最小正常割合 60% を下回ると、`pool-standby` (VM 1 の 8080 番、優先度 2) に切り替えます。既定の振り分け先は `pool-standby` です。各プールは 1 台なので、切り替えはプール全体の単位です。
 
 - 確認: `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100`
-- 停止と復旧 (手動): `az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"` で VM 2 のプロセスを止めます。切り替わるまで約 2〜3 分かかります。`systemctl start agw-pool@pool-canary` で戻すと、また `pool-primary` に送られます。
+- 停止と復旧 (手動): `az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"` で VM 2 のプロセスを止めます。切り替わるまで約 2〜3 分かかります。`systemctl start agw-pool@pool-canary` で戻すと、また `pool-primary` に送られます。このプロセスは `pool-canary` (8080) と `pool-flag-on` (8100) の唯一のサーバーでもあります。停止中は、ポート 8080 の約 10% と、ポート 8100 の `X-Feature: new` の要求も失敗します。確認が終わったらすぐ復帰してください。
 - シミュレーターの「テスト要求」は、入力欄の要求 (メソッド、パス、クエリ、ヘッダー。「要求を送信」と同じ) を件数分送り、どのプールに届いたかを Primary / Standby の名前で数えます。結果は「実機の応答」に表示します。10 秒以内に応答がない要求は、失敗として数えます。
 
 ### 機能フラグ (ポート 8100)

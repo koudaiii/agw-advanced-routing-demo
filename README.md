@@ -29,7 +29,7 @@ The diagrams are from Microsoft Learn: [Advanced load balancing on Azure Applica
 ![Diagram comparing Round Robin, Weighted Round Robin, and Least Connections inside a backend pool](https://learn.microsoft.com/azure/application-gateway/media/advanced-load-distribution/server-selection.png)
 
 **How to read it**: the pools of the matched rule are chosen in one of two ways.
-- **Weighted**: traffic is split by the ratio of the weights (weights 8 and 2 give 80% / 20%). The configured shares stay the same even when a pool is unhealthy.
+- **Weighted**: traffic is split by the ratio of the weights (weights 8 and 2 give 80% / 20%). The configured shares stay the same even when a pool is unhealthy, so requests sent to a pool with no healthy server fail.
 - **Priority**: requests go to the priority 1 pool while it meets the minimum healthy percentage. Otherwise the gateway switches to the priority 2 standby pool.
 
 ## What is in this repository
@@ -104,7 +104,7 @@ client --:8080--> listener-canary --> rule-canary (Advanced)
 The rule `rule-priority` (Advanced, priority 300) uses the map `priorityMap`. In the map, the rule `priority-split` matches every path and uses `pool-primary` (VM 2, port 8080, priority 1). When the healthy servers of `pool-primary` fall below the minimum healthy percentage of 60%, it switches to `pool-standby` (VM 1, port 8080, priority 2). The default target is `pool-standby`. Each pool has one server, so the switch is for the whole pool.
 
 - Check: `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100`
-- Stop and restore by hand: `az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"` stops VM 2's process. The switch takes about 2–3 minutes. `systemctl start agw-pool@pool-canary` restores it, and requests go to `pool-primary` again.
+- Stop and restore by hand: `az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"` stops VM 2's process. The switch takes about 2–3 minutes. `systemctl start agw-pool@pool-canary` restores it, and requests go to `pool-primary` again. The same process is also the only server of `pool-canary` (8080) and `pool-flag-on` (8100). While it is stopped, about 10% of requests on port 8080 and requests on port 8100 with `X-Feature: new` also fail. Restore it as soon as the check is done.
 - The simulator's "Test requests" button sends the request in the form (method, path, query, and headers, the same as "Send request") the chosen number of times and counts which pool answered, using the Primary / Standby names. The results appear under "Real response". A request with no response within 10 seconds is counted as failed.
 
 ### Feature flag (port 8100)
