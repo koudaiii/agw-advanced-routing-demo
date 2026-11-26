@@ -109,7 +109,7 @@ The rule `rule-priority` (Advanced, priority 300) uses the map `priorityMap`. In
 
 ### Feature flag (port 8100)
 
-The client turns the flag on with a header. Requests with `X-Feature: new` go to `pool-flag-on` (VM 2 port 8080). Everything else goes to the default `pool-flag-off` (VM 1 port 8080). Check: `curl -H "X-Feature: new" http://<FRONTEND-IP>:8100/`
+The client turns the flag on with a header. Requests with `X-Feature: new` go to `pool-flag-on` (VM 2 port 8080). Everything else goes to the default `pool-flag-off` (VM 1 port 8080). Check: `curl -H "X-Feature: new" http://<FRONTEND-IP>:8100/`. Header values are case-sensitive: `X-Feature: NEW` goes to `pool-flag-off` (checked on the real gateway on 2026-11-26).
 
 This is not an A/B test: the client chooses, and there is no random split. A statistical A/B test is tracked in issue #27.
 
