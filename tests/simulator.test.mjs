@@ -219,6 +219,23 @@ for (const lang of ["en", "ja"]) {
   });
 }
 
+// Saved settings load as they were saved: the page neither adds nor removes rules (#113).
+const savedRules = () => page(`t.$("editJson").click(); const names = JSON.parse(t.$("jsonText").value).rules.map((r) => r.name);
+  document.querySelector("dialog[open]")?.close(); return names;`);
+const BASE = { defaultPool: "pool-web", waf: { enabled: true, blocked: ["198.51.100.0/24"], blockedUA: ["agw-block-demo"] } };
+
+test("saved settings without a port-8100 rule load as saved", { skip }, async () => {
+  const rules = [{ name: "POST only", priority: 5, conditions: [{ type: "Method", values: ["POST"] }], target: { pool: "pool-api-v2" } }];
+  await open("en", { config: { ...BASE, rules } });
+  assert.deepEqual(await savedRules(), ["POST only"]);
+});
+
+test("a saved port-8100 rule named A/B test is kept", { skip }, async () => {
+  const rules = [{ map: 8100, name: "A/B test (variant B)", priority: 10, conditions: [{ type: "Header", name: "X-Variant", values: ["B"] }], target: { pool: "pool-flag-on" } }];
+  await open("en", { config: { ...BASE, rules } });
+  assert.deepEqual(await savedRules(), ["A/B test (variant B)"]);
+});
+
 test("no JavaScript errors", { skip }, () => {
   assert.deepEqual(pageErrors, []);
 });
