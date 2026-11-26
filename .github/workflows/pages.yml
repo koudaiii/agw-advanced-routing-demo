@@ -1,4 +1,4 @@
-# Publishes only the build guide to GitHub Pages. The simulator is left out on purpose (see .github/pages/build.sh).
+# Publishes only the build guide and the Ignite 2026 summary to GitHub Pages. The simulator is left out on purpose (see .github/pages/build.sh).
 # Needs Settings → Pages → Source: "GitHub Actions".
 name: Publish guide
 
@@ -8,6 +8,8 @@ on:
     paths:
       - docs/agw-advanced-routing-demo-guide.html
       - docs/agw-advanced-routing-demo-guide_ja.html
+      - docs/agw-ignite-2026-announcements.html
+      - docs/agw-ignite-2026-announcements_ja.html
       - .github/pages/**
       - .github/workflows/pages.yml
   workflow_dispatch:

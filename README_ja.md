@@ -4,6 +4,8 @@
 
 [Azure Application Gateway の高度なルーティング ルール (プレビュー)](https://learn.microsoft.com/ja-jp/azure/application-gateway/advanced-rules) と [高度な負荷分散 (プレビュー)](https://learn.microsoft.com/en-us/azure/application-gateway/advanced-load-balancing) のデモです。Bicep で実際のゲートウェイを作り、ブラウザーで動くシミュレーターで振り分けを予測して、実機の応答と比べます。
 
+発表の内容は、Microsoft Ignite 2026 の Application Gateway の発表まとめを参照してください: [Markdown](docs/agw-ignite-2026-announcements_ja.md) / [Web ページ](https://koudaiii.com/agw-advanced-routing-demo/agw-ignite-2026-announcements_ja.html)。
+
 ## 概念図
 
 図は Microsoft Learn の [Azure Application Gateway の高度なルーティングルール (プレビュー)](https://learn.microsoft.com/ja-jp/azure/application-gateway/advanced-rules) から引用しています。
@@ -39,6 +41,7 @@
 | `agw-routing-simulator.html` | 単体で動くシミュレーター。ゲートウェイ URL が空ならオフラインで動き、URL を入れると実機に要求を送って予測と比べます。ブラウザーの言語に合わせて日本語か英語で表示します |
 | `tests/simulator.test.mjs` | シミュレーターのブラウザー テスト (「テスト」を参照) |
 | `docs/agw-advanced-routing-demo-guide_ja.html` | 構築ガイド (日本語)。英語は `docs/agw-advanced-routing-demo-guide.html` |
+| `docs/agw-ignite-2026-announcements_ja.md` / `.html` | Microsoft Ignite 2026 の Application Gateway の発表まとめ (日本語)。デモ環境での検証結果を含みます。英語は `docs/agw-ignite-2026-announcements.md` / `.html` |
 | `backend/server.js` | 依存なしの Node.js バックエンド。どのプールが応答したかと、受信したリクエスト ヘッダー (Application Gateway が付けた `X-Forwarded-*` などを強調) を HTML か JSON で返します。プール名は応答ヘッダー `x-backend-pool` にも入ります。CORS 対応済み (`ALLOW_ORIGIN`、既定は `*`) |
 | `backend/pools.conf` | VM 1 のプロセス名・ポート・表示名・色・遅延。9 プロセス (ポート 8080–8083、8085。サーバー選択用に、3 秒遅れる `pool-slow` 8086 と `pool-rr-a` 8087。優先度用の `pool-standby` 8088 と機能フラグ用の `pool-flag-off` 8089) |
 | `backend/pools-canary.conf` | VM 2 のプロセス (`pool-canary` 8080。サーバー選択用に `pool-fast` 8086 と `pool-rr-b` 8087。優先度用の `pool-primary` 8088 と機能フラグ用の `pool-flag-on` 8089) |
@@ -50,7 +53,7 @@
 | `deploy/canary-check.sh` | 指定した URI に 100 回連続で送り、`x-backend-pool` からプール別の件数と割合を表示します。カナリアは `FRONTEND=<IP>:8080` |
 | `deploy/lb-check.sh` | 指定した URI に件数分 (既定は同時 6 件) 送り、サーバーごとの件数、割合、平均の時間と、全体の所要時間を表示します。サーバー選択は `FRONTEND=<IP>:8110`、`:8120`、`:8130` |
 | `deploy/test.sh` | シミュレーターのシナリオを curl で実機に送り、応答したプールを一覧表示します |
-| `.github/workflows/pages.yml` / `.github/pages/build.sh` | 構築ガイドだけを GitHub Pages で公開します。シミュレーターは任意の URL に多数の要求を送れるため公開せず、シミュレーターへのリンクはこのリポジトリ内のファイルを指します。トップ ページ (`index.html`) は英語ガイドのコピーで、日本語のブラウザーでは日本語ガイドを開きます。Settings → Pages → Source を「GitHub Actions」にする必要があります。「Deploy from a branch」にすると、シミュレーターを含むリポジトリ全体が公開されます |
+| `.github/workflows/pages.yml` / `.github/pages/build.sh` | 構築ガイドと Ignite 2026 の発表まとめだけを GitHub Pages で公開します。シミュレーターは任意の URL に多数の要求を送れるため公開せず、シミュレーターへのリンクはこのリポジトリ内のファイルを指します。トップ ページ (`index.html`) は英語ガイドのコピーで、日本語のブラウザーでは日本語ガイドを開きます。Settings → Pages → Source を「GitHub Actions」にする必要があります。「Deploy from a branch」にすると、シミュレーターを含むリポジトリ全体が公開されます |
 
 ## 手順
 

@@ -4,6 +4,8 @@ English | [日本語](README_ja.md)
 
 A demo of [Azure Application Gateway advanced routing rules (preview)](https://learn.microsoft.com/en-us/azure/application-gateway/advanced-rules) and [advanced load balancing (preview)](https://learn.microsoft.com/en-us/azure/application-gateway/advanced-load-balancing). It deploys a real gateway with Bicep and ships a browser simulator that predicts each routing decision and compares it with the live response.
 
+For what was announced, see the summary of the Application Gateway announcements at Microsoft Ignite 2026: [Markdown](docs/agw-ignite-2026-announcements.md) / [web page](https://koudaiii.com/agw-advanced-routing-demo/agw-ignite-2026-announcements.html).
+
 ## Concepts
 
 The diagrams are from Microsoft Learn: [What is Azure Application Gateway advanced routing rules (Preview)?](https://learn.microsoft.com/en-us/azure/application-gateway/advanced-rules)
@@ -39,6 +41,7 @@ The diagrams are from Microsoft Learn: [Advanced load balancing on Azure Applica
 | `agw-routing-simulator.html` | Standalone simulator. Offline when the gateway URL is empty; with a URL it sends the request to the real gateway and compares the answer with its prediction. Shows English or Japanese from the browser language |
 | `tests/simulator.test.mjs` | Browser tests for the simulator (see Tests) |
 | `docs/agw-advanced-routing-demo-guide.html` | Build guide (English). Japanese: `docs/agw-advanced-routing-demo-guide_ja.html` |
+| `docs/agw-ignite-2026-announcements.md` / `.html` | Summary of the Application Gateway announcements at Microsoft Ignite 2026 (English), with the demo environment's results. Japanese: `docs/agw-ignite-2026-announcements_ja.md` / `.html` |
 | `backend/server.js` | Dependency-free Node.js backend. Returns which pool answered and the request headers it received (the `X-Forwarded-*` headers added by Application Gateway are highlighted) as HTML or JSON. The pool name is also in the `x-backend-pool` response header. CORS is enabled (`ALLOW_ORIGIN`, default `*`) |
 | `backend/pools.conf` | Process name, port, label, color, and delay for VM 1. Nine processes (ports 8080–8083, 8085; for server selection `pool-slow` 8086 with a 3 s delay and `pool-rr-a` 8087; `pool-standby` 8088 for priority and `pool-flag-off` 8089 for the feature flag) |
 | `backend/pools-canary.conf` | Processes for VM 2 (`pool-canary` 8080; for server selection `pool-fast` 8086 and `pool-rr-b` 8087; `pool-primary` 8088 for priority and `pool-flag-on` 8089 for the feature flag) |
@@ -50,7 +53,7 @@ The diagrams are from Microsoft Learn: [Advanced load balancing on Azure Applica
 | `deploy/canary-check.sh` | Sends 100 consecutive requests to one URI and prints the count and share per pool from `x-backend-pool`. For the canary use `FRONTEND=<IP>:8080` |
 | `deploy/lb-check.sh` | Sends N requests to one URI, 6 at a time by default, and prints the count, share, and average time per server, then the total time. For server selection use `FRONTEND=<IP>:8110`, `:8120`, or `:8130` |
 | `deploy/test.sh` | Sends the simulator's scenarios to the real gateway with curl and lists which pool answered. |
-| `.github/workflows/pages.yml` / `.github/pages/build.sh` | Publishes only the build guide to GitHub Pages. The simulator is not published, because it can send many requests to any URL; links to it point to its file in this repository. The top page (`index.html`) is a copy of the English guide; it opens the Japanese guide in a Japanese browser. Needs Settings → Pages → Source: "GitHub Actions"; with "Deploy from a branch", the whole repository, including the simulator, would be published |
+| `.github/workflows/pages.yml` / `.github/pages/build.sh` | Publishes only the build guide and the Ignite 2026 summary to GitHub Pages. The simulator is not published, because it can send many requests to any URL; links to it point to its file in this repository. The top page (`index.html`) is a copy of the English guide; it opens the Japanese guide in a Japanese browser. Needs Settings → Pages → Source: "GitHub Actions"; with "Deploy from a branch", the whole repository, including the simulator, would be published |
 
 ## Steps
 

@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="ja" dir="ltr">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<script>
+// Language: ?lang=ja|en wins; otherwise Japanese only when the browser language is ja*. This file is the "ja" version.
+(function(){var me="ja",other="agw-ignite-2026-announcements.html";
+var q=new URLSearchParams(location.search).get("lang"),chosen=q==="ja"||q==="en";
+var want=chosen?q:((navigator.language||"en").toLowerCase().indexOf("ja")===0?"ja":"en");
+if(want!==me)location.replace(other+(chosen?"?lang="+q:"")+location.hash)})();
+</script>
+<title>Microsoft Ignite 2026：Azure Application Gateway の発表まとめ</title>
+<style>
+/* Blog theme (colors and typefaces of the Jekyll blog-theme) */
+:root{
+  --bg:#faf8f3;--fg:#191919;--muted:rgba(25,25,25,.66);
+  --line:rgba(25,25,25,.30);--line-soft:rgba(25,25,25,.16);
+  --soft:#f1ece2;--card:#fffdf8;--code:#f1ece2;
+  --accent:#7d5a4c;--accent-hi:#a4614f;--logo:#5c4f43;
+  --note:#f5ead6;--note-line:#d6bb8d;
+  --sans:"Segoe Sans","Segoe UI Variable Text","Segoe UI",Arial,"Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;
+  --serif:"Segoe Serif",Georgia,"Yu Mincho","YuMincho","Hiragino Mincho ProN",serif;
+  --g1:linear-gradient(118deg,#85939f 0%,#5e8aa3 30%,#658da5 45%,#919597 68%,#d6bb8d 100%);
+  --g3:linear-gradient(135deg,#efe4d2 0%,#d6bb8d 45%,#a89f92 100%);
+}
+html{background:var(--bg);color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.75;font-size:15px;-webkit-font-smoothing:antialiased}
+main{max-inline-size:980px;margin-inline:auto;padding-block:48px 96px;padding-inline:clamp(28px,7vw,96px)}
+header{position:relative;padding-block-start:28px}
+header::before{content:"";position:absolute;inset-block-start:0;inset-inline:0;block-size:6px;border-radius:999px;background:var(--g1)}
+.eyebrow{color:var(--logo);font-size:13px;letter-spacing:.04em;margin:0}
+h1{font:400 clamp(28px,4vw,38px)/1.25 var(--serif);letter-spacing:-.02em;margin-block:8px 14px}
+h2{font:400 24px/1.35 var(--serif);letter-spacing:.01em;margin-block:56px 14px;padding-block-end:8px;border-block-end:1px solid var(--line)}
+h3{font:400 18px/1.45 var(--serif);margin-block:30px 8px}
+.lead{font-size:16px;margin-block:0 10px}
+.meta{color:var(--muted);font-size:13px}
+nav{background:var(--soft);border:0;border-radius:16px;padding:6px 24px 16px;margin-block-start:28px}
+nav h2{border:0;margin-block:14px 0 4px;font-size:17px}
+nav ol{columns:2;margin-block:6px}
+a{color:var(--accent);text-underline-offset:3px}
+a:hover{color:var(--accent-hi)}
+code{font-family:ui-monospace,SFMono-Regular,Consolas,"BIZ UDGothic",monospace;font-size:.9em;background:var(--soft);padding-inline:5px;border-radius:4px}
+pre{background:var(--code);border:0;border-radius:12px;padding:16px 20px;overflow-x:auto;font-size:12.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all}
+pre code{background:none;padding:0;font-size:inherit}
+table{border-collapse:collapse;inline-size:100%;margin-block:14px;font-size:14px}
+th,td{border-block-end:1px solid var(--line-soft);padding:8px 10px;text-align:start;vertical-align:top}
+thead th{border-block-end:1px solid var(--line);font-weight:600;color:var(--logo)}
+.note{background:var(--note);border-inline-start:3px solid var(--note-line);padding:10px 16px;border-radius:0 12px 12px 0;font-size:14px}
+.diagram{margin:20px 0}
+.diagram svg{inline-size:100%;block-size:auto;background:var(--card);border:1px solid var(--line-soft);border-radius:16px}
+.diagram figcaption{font-size:13px;color:var(--muted);margin-block-start:8px}
+.box{fill:var(--bg);stroke:var(--logo);stroke-width:1.3}
+.ln{stroke:var(--accent);stroke-width:2;fill:none}
+.dash{stroke-dasharray:6 5;stroke:var(--muted)}
+.ink{fill:var(--accent)}
+svg text{fill:var(--fg);text-anchor:middle;font-size:12px;font-family:var(--sans)}
+svg .h{font-weight:700;font-size:14px}
+svg .m{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+svg .l{text-anchor:start}
+@media (max-width:600px){
+  main{padding-inline:16px}
+  nav ol{columns:1}
+  h2{margin-block:44px 12px}
+}
+@media print{body{font-size:11pt}main{padding:0}nav{break-after:page}pre,table,figure{break-inside:avoid}a{color:inherit}header::before{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+.table-wrap{overflow-x:auto}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-block:18px 6px}
+.kpi{background:var(--soft);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+.kpi .num{font:400 26px/1.15 var(--serif);color:var(--logo)}
+.kpi .num small{font-size:14px;margin-inline-start:2px}
+.kpi .lbl{font-size:13px;color:var(--muted);line-height:1.5}
+@media (max-width:820px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style></head>
+<body><main>
+<header>
+<p class="meta"><a href="https://github.com/koudaiii/agw-advanced-routing-demo">GitHub: koudaiii/agw-advanced-routing-demo</a> ・ <a href="agw-ignite-2026-announcements.html?lang=en" lang="en" hreflang="en">English</a> | 日本語</p>
+<p class="eyebrow">Microsoft Ignite 2026 ・ Azure ネットワーク</p>
+<h1>Microsoft Ignite 2026：Azure Application Gateway の発表まとめ</h1>
+<p class="lead">2026年11月26日時点 ／ 対象：Azure Updates で製品「Application Gateway」、タグ「Microsoft Ignite」に該当する 2026 年の 5 件（すべて 2026年11月17日公開のパブリック プレビューで、Update Types に Microsoft Ignite と Feature を含む）</p>
+<p class="meta">関連: <a href="agw-advanced-routing-demo-guide_ja.html?lang=ja">デモ環境の構築ガイド</a> (Advanced routing と負荷分散を実機で試す手順)</p>
+</header>
+
+<nav aria-label="目次"><h2>目次</h2><ol>
+<li><a href="#s1">結論：振り分け・認証・データ保護をゲートウェイが引き受ける 5 機能</a></li><li><a href="#s2">全体像：5 機能はゲートウェイ内のどこに効くか</a></li><li><a href="#s3">1. Accelerated デプロイ層：新規 GW のスケールを速くする</a></li><li><a href="#s4">2. 高度なルーティング ルール：1 ルールで 5 種類の条件を組み合わせる</a></li><li><a href="#s5">3. 高度な負荷分散：プール間とプール内の 2 段階で配分を決める</a></li><li><a href="#s6">4. 集中型ユーザー認証 + JWT 検証：認証をアプリからゲートウェイへ移す</a></li><li><a href="#s7">5. Confidential Compute：復号後のデータも TEE の中で守る</a></li><li><a href="#s8">組み合わせの制約：設計前に確認する 4 点</a></li><li><a href="#s9">次の一手：シナリオ別に PoC を始める</a></li><li><a href="#s10">参考：同時期の関連アップデート（Ignite タグなし）</a></li><li><a href="#s11">デモ環境での検証：Advanced routing と負荷分散を実機で確認した結果</a></li><li><a href="#s12">情報源</a></li></ol></nav>
+
+<section id="s1"><h2>結論：振り分け・認証・データ保護をゲートウェイが引き受ける 5 機能</h2>
+<p>Ignite 2026 の Application Gateway の発表は、これまでアプリや周辺インフラで作り込んでいた判断をゲートウェイに寄せるものです。対象は「スケール基盤」「トラフィック制御」「アイデンティティ」「データ保護」の 4 領域で、計 5 件あります。</p>
+<p>ただし 5 件すべてパブリック プレビュー（SLA なし、本番利用は非推奨）です。「作成時にしか選べない」「ほかのプレビュー機能と併用できない」といった制約もあるため、制約を押さえたうえで PoC から始めるのが現実的です。</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">#</th><th scope="col">発表（Azure Update ID）</th><th scope="col">領域</th><th scope="col">何が変わるか</th><th scope="col">既存 GW への適用</th></tr></thead><tbody><tr><td>1</td><td>次世代エラスティック アーキテクチャ＝Accelerated デプロイ層（580428）</td><td>スケール基盤</td><td>プロビジョニング時間を最大 50%、オートスケール時間を最大 70% 短縮</td><td>不可（新規作成時に選択）</td></tr><tr><td>2</td><td>高度なルーティング ルール（579324）</td><td>トラフィック制御</td><td>Header / QueryString / ClientIP / Method / Path の条件で振り分け</td><td>可（Basic ルールを Advanced に更新）</td></tr><tr><td>3</td><td>高度な負荷分散（580423）</td><td>トラフィック制御</td><td>プール間は重み・優先度、プール内は重み付き RR・最小接続</td><td>可</td></tr><tr><td>4</td><td>集中型ユーザー認証 + JWT 検証（580418）</td><td>アイデンティティ</td><td>OIDC サインインと JWT 検証を 1 つのポリシーで複数 GW に適用</td><td>可</td></tr><tr><td>5</td><td>Confidential Compute（579649）</td><td>データ保護</td><td>データプレーンを TEE で動かし、復号後のデータも保護</td><td>不可（新規作成時に有効化）</td></tr></tbody></table></div>
+<div class="kpis" role="list"><div class="kpi" role="listitem"><span class="num">5<small>件</small></span><span class="lbl">すべてパブリック プレビュー<br>（2026年11月17日公開）</span></div><div class="kpi" role="listitem"><span class="num">50<small>%</small> / 70<small>%</small></span><span class="lbl">Accelerated 層の短縮率（最大）<br>プロビジョニング / オートスケール</span></div><div class="kpi" role="listitem"><span class="num">5<small>種類</small></span><span class="lbl">高度なルーティングの条件<br>Header・Query・ClientIP・Method・Path</span></div><div class="kpi" role="listitem"><span class="num">西 / 東</span><span class="lbl">日本の提供リージョン<br>Accelerated は西日本、Confidential は東日本</span></div></div>
+</section>
+<section id="s2"><h2>全体像：5 機能はゲートウェイ内のどこに効くか</h2>
+<p>#2〜#4 はリクエスト処理の各段に、#1 と #5 はゲートウェイの実行基盤そのものに効きます。</p>
+<pre><code>クライアント
+  │ HTTPS
+  ▼
+Application Gateway（Standard_v2 / WAF_v2）
+  ├─ ① リスナー ............ Advanced ルールは Basic リスナーのみ（マルチサイト非対応）
+  ├─ ② WAF ポリシー ........ ルーティング前に評価（GW / リスナー単位）
+  ├─ ③ ルーティング ルール .. 認証ポリシー（OIDC / JWT）をルール単位で関連付け【#4】
+  ├─ ④ Advanced routing map  優先度順に条件セット（AND）を評価【#2】
+  ├─ ⑤ プール選択 .......... 重み、または 優先度 + 最小正常割合【#3】
+  └─ ⑥ サーバー選択 ........ ラウンドロビン / 重み付き RR / 最小接続【#3】
+  ▼
+バックエンド プール
+
+実行基盤：Accelerated 層【#1】／ Confidential Compute（TEE）【#5】
+※ プレビュー期間中、Accelerated 層では #2〜#5 を含むほかのプレビュー機能を併用できない</code></pre>
+</section>
+<section id="s3"><h2>1. Accelerated デプロイ層：新規 GW のスケールを速くする</h2>
+<p>Application Gateway v2 の次世代アーキテクチャが、新しいデプロイ層「Accelerated（プレビュー）」として選べるようになりました。現行のデプロイ層と比べ、プロビジョニング時間を最大 50%、オートスケール時間を最大 70% 短縮します。1 分未満のスケールアウトと、より長い接続ドレインにも対応します。追加料金はなく、課金モデルは現行と同じです。</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">デプロイ層</th><th scope="col">位置づけ</th><th scope="col">向くケース</th></tr></thead><tbody><tr><td>Standard</td><td>現行の GA 基盤。パブリック フロントエンド IP が必須</td><td>一般的なワークロード、WAF が必要な場合</td></tr><tr><td>Network isolated</td><td>登録フラグなしでプライベート専用 GW を作成</td><td>パブリック IP 禁止、送信の強制トンネリング、送信 Deny All</td></tr><tr><td>Accelerated（プレビュー）</td><td>パブリック / プライベートのみ / 併用を登録なしで構成</td><td>急なトラフィック変動、スケール速度・上限を重視</td></tr></tbody></table></div>
+<h3>プレビュー中の制約</h3>
+<ul><li>デプロイ層は作成後に変更できない。既存 GW のインプレース移行もない（新規作成して構成を移す）</li><li>WAF 層、FIPS モード、TCP/TLS プロキシ、Private Link は非対応</li><li>現在プレビュー中のほかの機能（本書の #2〜#5 も該当）は併用できない</li><li>ゲートウェイ サブネットに空き IP を 10 個以上確保する。NSG でクライアントの IP 範囲からリスナー ポートへの受信を許可する</li><li>ゲートウェイ正常性ダッシュボード、証明書メタデータ取得 API、オンデマンドのバックエンド正常性、サブネット共有は利用できない</li><li>提供は 21 リージョン。日本は西日本のみで、東日本は対象外。ポータルではプレビュー用リンクから作成する</li></ul>
+<p class="note"><strong>注</strong>Learn の日本語版（2026年11月17日更新）は英語版（11月25日更新）より古く、リージョン一覧や制約の記述が一致しない。英語版を正として確認すること。</p>
+</section>
+<section id="s4"><h2>2. 高度なルーティング ルール：1 ルールで 5 種類の条件を組み合わせる</h2>
+<p>従来のパスベース中心のルーティングに、HTTP 要求の属性による条件分岐が加わりました。ルールは優先度の小さい順に評価され、最初に一致したルールの宛先（バックエンド プールまたはリダイレクト）へ送られます。どのルールにも一致しなければ既定のプールへ送られます。</p>
+<pre><code>Advanced routing map（GW あたり最大 100）
+  ├─ Advanced routing rule（マップあたり最大 100）... 優先度の小さい順に評価
+  │    ├─ 条件セット ... 条件は最大 5 個。すべて一致で成立（AND）
+  │    │    └─ 条件 ... 値は最大 5 個。いずれか一致で成立（OR）。値・正規表現は 128 文字まで
+  │    └─ 宛先 ... バックエンド プール + HTTP 設定（+ 書き換えセット）、またはリダイレクト
+  └─ 既定の宛先 ... どのルールにも一致しないときのプール + HTTP 設定（+ 書き換えセット）
+条件セットは GW あたり最大 10,000</code></pre>
+<div class="table-wrap"><table><thead><tr><th scope="col">条件の種類</th><th scope="col">一致方法</th><th scope="col">注意点</th></tr></thead><tbody><tr><td>Header</td><td>完全一致 / 正規表現</td><td>正規表現は RE2 互換のみ</td></tr><tr><td>QueryString</td><td>完全一致 / 正規表現</td><td>空値を指定できるのは QueryString のみ</td></tr><tr><td>ClientIP</td><td>IPv4 / IPv6</td><td>CIDR 表記で指定</td></tr><tr><td>Method</td><td>完全一致のみ</td><td>大文字で指定（GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, PATCH）</td></tr><tr><td>Path</td><td>完全一致 / 正規表現</td><td>URL デコード後に評価（<code>/foo%2Fbar</code> は <code>/foo/bar</code> として比較）</td></tr></tbody></table></div>
+<h3>条件の例（Learn の記載形式）</h3>
+<pre><code>{
+  "conditionType": "Header",
+  "propertyName": "X-Custom-Header",
+  "propertyValueMatcher": { "pattern": "^(customer-[0-9]+|partner-[a-z]+)$" }
+}</code></pre>
+<h3>制約・注意</h3>
+<ul><li>Basic リスナーのみ。マルチサイト リスナーと L4（TCP/TLS プロキシ）は非対応</li><li>WAF はルーティング前に評価される。WAF ポリシーは GW / リスナー単位で、ルール単位の関連付けはできない</li><li>書き換えセットはルーティング決定後、バックエンド送信前に適用される</li><li>ポータルの GW 作成ウィザードでは構成できない。作成後に既存の Basic ルールを Advanced に更新する</li><li>Advanced ルールの優先度は、通常のルーティング ルールの優先度とは別物</li></ul>
+<p class="note"><strong>情報の食い違い</strong>Learn の概要ページに「パブリック プレビュー中は Header 条件のみ」という一文が残っています。一方、同じページの条件一覧、Azure Update、製品ブログはいずれも 5 種類を明記しています。公開したデモ環境でも Header（正規表現）と Path の AND 条件などで動作を確認できたため、5 種類に対応していると判断しました。利用前にポータル / API で確認することを推奨します。</p>
+<p class="note"><strong>使いどころ</strong>A/B テスト・カナリア（ヘッダー）、API バージョニング（クエリ / ヘッダー）、マルチテナント（テナント ID ヘッダー）、読み書き分離（Method）、社内・パートナー経路（ClientIP）、モバイル分離（User-Agent）。</p>
+</section>
+<section id="s5"><h2>3. 高度な負荷分散：プール間とプール内の 2 段階で配分を決める</h2>
+<p>1 つのルールに複数のバックエンド プールを関連付け、まずプールを選び、次にプール内のサーバーを選びます。2 つの選択は独立しており、たとえば「プール間は重み付け、プール内は最小接続」と組み合わせられます。</p>
+<pre><code>要求
+  ▼
+① プール選択（1 ルールまたは既定アクションにつきプール最大 5 個。方式はどちらか一方）
+  ├─ 重み付け ... 0〜100 の整数で比率を指定（例：8:2 なら 80% / 20%）
+  └─ 優先度 ..... 1〜5。最小正常割合（0〜100%）を満たす最上位のプールへ
+  ▼
+② サーバー選択（プールごとに設定）
+  ├─ ラウンドロビン（既定）
+  ├─ 重み付きラウンドロビン ... 0〜100。IP / FQDN で登録したサーバーのみ
+  └─ 最小接続 ................. Cookie アフィニティ有効時は適用されない</code></pre>
+<h3>優先度フェイルオーバーの例（最小正常割合 60%、プライマリ 5 台・スタンバイ 4 台）</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">状況</th><th scope="col">プライマリの正常率</th><th scope="col">選ばれるプール</th></tr></thead><tbody><tr><td>プライマリが 1 台ダウン</td><td>80%（5 台中 4 台）</td><td>プライマリ</td></tr><tr><td>プライマリが 3 台ダウン</td><td>40%（5 台中 2 台）</td><td>スタンバイ（正常な 2 台が残っていても切り替わる）</td></tr></tbody></table></div>
+<p>どのプールも基準を満たさないときは最上位のプールへ送られます。上位プールが基準に戻ると、新しい要求は即座に戻ります（戻りの遅延は設定できない）。</p>
+<h3>設計時のハマりどころ</h3>
+<ul><li>重み付けはプールの正常性を見ない。正常なサーバーがないプールが選ばれると要求は失敗する。プールを外すときは重みを 0 にし、正常性で切り替えたいときは優先度を使う</li><li>Cookie アフィニティ有効時、重み付けではプール用 Cookie で既存セッションが固定される（重みの変更は新規セッションにのみ効く）。優先度ではプール用 Cookie を発行せず、切替時に次の要求から移動する</li><li>スケールアウト直後の新インスタンスはプローブに合格するまで異常扱い。正常率が一時的に下がり、意図しない切替が起こりうる（4 台から 8 台に増やすと一時的に 50%）</li><li>重み付きラウンドロビンは、NIC 関連付けの VM / VMSS を含むプールでは使えない</li><li>Basic SKU と L4（TCP/TLS プロキシ）は非対応。従来のパスベース ルールは 1 プールのまま。複数プールは Basic / Advanced ルール（と Advanced routing map の既定アクション）で構成する</li><li>専用バックエンド接続を有効にした HTTP 設定は、複数プールの構成に使えない</li><li>API バージョン 2026-03-01 以降が必要</li></ul>
+<p class="note"><strong>AI での使い方</strong>PTU（予約容量）のエンドポイントを優先度 1、従量課金のエンドポイントを優先度 2 のプールに置くと、予約側の正常率が基準を下回ったときだけ従量課金側へ流せます。クライアント側の変更は不要です。</p>
+</section>
+<section id="s6"><h2>4. 集中型ユーザー認証 + JWT 検証：認証をアプリからゲートウェイへ移す</h2>
+<p>認証ポリシーを 1 つ作り、複数の GW のルーティング ルールに関連付けられるようになりました。ブラウザー向けには OIDC によるユーザー サインイン、API 向けには JWT 検証を使います。</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">観点</th><th scope="col">ユーザー認証</th><th scope="col">JWT 検証</th></tr></thead><tbody><tr><td>主なクライアント</td><td>ブラウザー（対話型ユーザー）</td><td>API、サービス間、自動化</td></tr><tr><td>方式</td><td>OIDC 認可コード フロー</td><td>Bearer トークンの検証（署名・発行者・対象者・有効期限）</td></tr><tr><td>IdP へのリダイレクト</td><td>あり</td><td>なし</td></tr><tr><td>GW のセッション Cookie</td><td>あり（既定名 ApplicationGatewayUserSession、既定 7 日）</td><td>なし（毎回トークンを検証）</td></tr><tr><td>未認証時の動作</td><td>認証（推奨）/ 許可 / 拒否（401）</td><td>拒否（401）/ 許可（ID ヘッダーなしで転送）</td></tr><tr><td>バックエンドへのヘッダー</td><td><code>x-msft-entra-identity</code>（<code>&lt;tid&gt;:&lt;sub&gt;</code>）、取得できれば ID / アクセス トークン</td><td><code>x-msft-entra-identity</code>（<code>tenantId:oid</code>）</td></tr></tbody></table></div>
+<h3>前提条件</h3>
+<ul><li>Standard_v2 / WAF_v2。HTTPS リスナーが必須（HTTP リスナーは不可）</li><li>対象は Basic / Advanced ルール（パス条件付きの Advanced ルールを含む）。従来のパスベース ルールは対象外</li><li>1 つのルールに関連付けられる認証ポリシーは 1 つ。ポリシーはリージョン リソースで、GW と同じリージョンに作る</li><li>ユーザー認証：IdP は Microsoft Entra ID。クライアント シークレットは Key Vault に置き、各 GW のマネージド ID に読み取り権限を付与する。スコープは最大 10 個（既定は openid, profile, email）</li><li>JWT 検証：GW から Microsoft Entra のメタデータ エンドポイントへ TCP 443 で到達できること</li></ul>
+<h3>旧 JWT 検証プレビューの扱い</h3>
+<ul><li>今回の JWT 検証は、既存の JWT 検証プレビューの改訂版。旧プレビューは GA に進まず、廃止予定（正式な廃止通知は別途公開）</li><li>旧ポリシーは新しい集中型 JWT 検証が GA になるまで動作する。自動移行はない</li><li>新規構成は集中型ポリシーで行い、旧プレビューの利用者は再構成を計画する</li></ul>
+</section>
+<section id="s7"><h2>5. Confidential Compute：復号後のデータも TEE の中で守る</h2>
+<p>Application Gateway のデータプレーンをハードウェアの信頼された実行環境（TEE）で動かし、GW が復号して処理している間のデータまで保護します。TLS 終端、WAF、L7 ルーティング、L4 プロキシ、負荷分散、監視はそのまま使えます。</p>
+<pre><code>クライアント ──TLS──▶ Application Gateway（Confidential Compute）
+                        └─ TEE 内で TLS 終端 → WAF 検査 → ルーティング
+                           （メモリをハードウェアで暗号化、ハイパーバイザー・ホストから分離）
+                      ──TLS──▶ バックエンド（例：Confidential VM）</code></pre>
+<ul><li>Standard_v2 / WAF_v2 のアドオン。GW 作成時にのみ有効化できる（既存 GW には不可）</li><li>ポータルでは作成時にチェック ボックスを選択。API では <code>"enableConfidentialCompute": true</code>（API バージョン 2026-05-01 以降）</li><li>料金は「SKU の固定料金 + 容量ユニット + Confidential Compute アドオンの時間課金」</li><li>提供は 17 リージョン。日本は東日本のみで、西日本は対象外</li><li>アプリ コードの脆弱性や、侵害されたバックエンドからは守れない</li></ul>
+<div class="table-wrap"><table><thead><tr><th scope="col">Key Vault の種類</th><th scope="col">秘密鍵の扱い</th><th scope="col">保護の範囲</th></tr></thead><tbody><tr><td>Standard / Premium</td><td>GW が PFX を取得し、TEE 内で TLS 処理</td><td>秘密鍵とアプリ データを TEE で保護</td></tr><tr><td>Managed HSM</td><td>秘密鍵は HSM から出ず、暗号処理は HSM が担う</td><td>鍵は HSM、アプリ データは TEE で保護</td></tr></tbody></table></div>
+<p class="note"><strong>向くケース</strong>金融取引、医療情報、個人データ、知的財産を扱うワークロード。Confidential VM などで構成した機密バックエンドの保護を、アプリ配信層まで広げたい場合。</p>
+</section>
+<section id="s8"><h2>組み合わせの制約：設計前に確認する 4 点</h2>
+<ol><li>作成時にしか選べない：Accelerated 層と Confidential Compute。既存 GW で使うには新規作成と構成移行が必要</li><li>Accelerated は単独で試す：プレビュー中は WAF 層も、#2〜#5 を含むほかのプレビュー機能も併用できない</li><li>パスベース ルールは Advanced ルールへ：複数プールの負荷分散と認証ポリシーは従来のパスベース ルールでは使えない。Path 条件付きの Advanced ルールに置き換えると両方使える</li><li>日本リージョンが分かれる：Accelerated は西日本のみ、Confidential Compute は東日本のみ</li></ol>
+<div class="table-wrap"><table><thead><tr><th scope="col">機能</th><th scope="col">既存 GW に追加</th><th scope="col">WAF_v2 と併用</th><th scope="col">L4（TCP/TLS）プロキシ</th><th scope="col">従来のパスベース ルール</th><th scope="col">日本リージョン</th></tr></thead><tbody><tr><td>#1 Accelerated</td><td>×</td><td>×（WAF 層非対応）</td><td>×</td><td>―（層の機能）</td><td>西日本のみ</td></tr><tr><td>#2 高度なルーティング</td><td>○</td><td>○（WAF は GW / リスナー単位）</td><td>×</td><td>置き換え先</td><td>記載なし</td></tr><tr><td>#3 高度な負荷分散</td><td>○</td><td>○</td><td>×</td><td>×（1 プールのまま）</td><td>記載なし</td></tr><tr><td>#4 ユーザー認証 / JWT</td><td>○</td><td>○</td><td>―（HTTPS リスナーのみ）</td><td>×</td><td>記載なし</td></tr><tr><td>#5 Confidential Compute</td><td>×</td><td>○</td><td>○</td><td>―（基盤の機能）</td><td>東日本のみ</td></tr></tbody></table></div>
+</section>
+<section id="s9"><h2>次の一手：シナリオ別に PoC を始める</h2>
+<div class="table-wrap"><table><thead><tr><th scope="col">お客様の課題</th><th scope="col">試す機能</th><th scope="col">最初の一歩</th></tr></thead><tbody><tr><td>アクセス急増にスケールが追いつかない</td><td>#1</td><td>西日本で、WAF 不要のワークロードを新規 GW に載せてスケール時間を計測する</td></tr><tr><td>リリースを段階展開したい、AI の PTU を使い切りたい</td><td>#2 + #3</td><td>既存 GW の検証用 Basic ルールを Advanced に更新し、重み 90:10 と優先度での切替を試す</td></tr><tr><td>アプリごとの認証実装をやめたい</td><td>#4</td><td>ブラウザー アプリはユーザー認証、API は JWT 検証のポリシーを作り、複数 GW に関連付ける</td></tr><tr><td>処理中データの保護が要件（金融・医療など）</td><td>#5</td><td>東日本で Confidential Compute 付きの GW を新規作成し、Managed HSM の併用を検討する</td></tr><tr><td>旧 JWT 検証プレビューを使っている</td><td>#4</td><td>新しい集中型ポリシーへの再構成を計画し、廃止通知を確認する</td></tr></tbody></table></div>
+<p>いずれもプレビューのため、本番適用は GA と Learn の更新を確認してから判断してください。</p>
+</section>
+<section id="s10"><h2>参考：同時期の関連アップデート（Ignite タグなし）</h2>
+<ul><li>GA：WAF Insights for Azure Application Gateway（579280、2026年11月23日公開）</li><li>パブリック プレビュー：Application Gateway for Containers の Private ingress（576393）、MCP gateway（576388）、JWT validation（576382）</li><li>GA：Keyless TLS on Application Gateway with Azure Key Vault Managed HSM（577130）</li></ul>
+</section>
+<section id="s11"><h2>デモ環境での検証：Advanced routing と負荷分散を実機で確認した結果</h2>
+<ul><li>公開先：構築ガイド <a href="https://koudaiii.com/agw-advanced-routing-demo/">https://koudaiii.com/agw-advanced-routing-demo/</a> 、シミュレーターと Bicep 一式 <a href="https://github.com/koudaiii/agw-advanced-routing-demo">https://github.com/koudaiii/agw-advanced-routing-demo</a></li><li>構成：WAF_v2（容量 1）、Basic リスナー 7 つ（:80 / :8080 / :8090 / :8100 / :8110 / :8120 / :8130）、Advanced ルール 4 つと Basic ルール 3 つを Bicep でデプロイ</li><li>Advanced routing の CLI コマンド（<code>advanced-routing-set</code> / <code>advanced-routing-map</code>）は Azure CLI 2.92.0 以降で使える。デモは Bicep でデプロイし、実機の確認に CLI を使う</li><li>重み 90:10 のカナリア（100 件で 91 / 9）、ヘッダーによる機能フラグ（<code>X-Feature: new</code>）、最小正常割合 60% の優先度フェイルオーバーが動作した。プライマリ停止から切替まで約 2〜3 分</li><li>ヘッダーの値は大文字・小文字を区別した（<code>X-Feature: NEW</code> は既定のプールへ）</li><li>サーバー選択：3 秒かかるサーバーを含む 2 台に 100 件（同時 6 件）送ると、Round Robin は約半分が遅いサーバーに届き、Least Connections は 10 件以下だった</li><li>エンコード済みのパス（<code>/api%2Forders</code>）はデコード後に Path 条件で評価された</li><li>正規表現は RE2 互換のみ。先読みや後方参照は使えない</li></ul>
+</section>
+<section id="s12"><h2>情報源</h2>
+<h3>Azure Updates（いずれも 2026年11月17日公開）</h3>
+<ul><li>580428 Public Preview: Next-generation elastic architecture for Azure Application Gateway v2 — <a href="https://azure.microsoft.com/ja-jp/updates?id=580428">https://azure.microsoft.com/ja-jp/updates?id=580428</a></li><li>579324 Public Preview: Azure Application Gateway advanced routing rules — <a href="https://azure.microsoft.com/ja-jp/updates?id=579324">https://azure.microsoft.com/ja-jp/updates?id=579324</a></li><li>580423 Public Preview: Advanced load balancing in Azure Application Gateway — <a href="https://azure.microsoft.com/ja-jp/updates?id=580423">https://azure.microsoft.com/ja-jp/updates?id=580423</a></li><li>580418 Public Preview: Centralized user authentication + JWT validation for Azure Application Gateway — <a href="https://azure.microsoft.com/ja-jp/updates?id=580418">https://azure.microsoft.com/ja-jp/updates?id=580418</a></li><li>579649 Public Preview: Azure Application Gateway confidential compute support — <a href="https://azure.microsoft.com/ja-jp/updates?id=579649">https://azure.microsoft.com/ja-jp/updates?id=579649</a></li></ul>
+<h3>Microsoft Learn</h3>
+<ul><li>Application Gateway のデプロイ層（英語版） — <a href="https://learn.microsoft.com/en-us/azure/application-gateway/deployment-tier">https://learn.microsoft.com/en-us/azure/application-gateway/deployment-tier</a></li><li>高度なルーティング ルール — <a href="https://learn.microsoft.com/ja-jp/azure/application-gateway/advanced-rules">https://learn.microsoft.com/ja-jp/azure/application-gateway/advanced-rules</a></li><li>チュートリアル：Advanced ルールでヘッダーベースのルーティングを構成 — <a href="https://learn.microsoft.com/ja-jp/azure/application-gateway/configure-advanced-routing-rule">https://learn.microsoft.com/ja-jp/azure/application-gateway/configure-advanced-routing-rule</a></li><li>高度な負荷分散 — <a href="https://learn.microsoft.com/ja-jp/azure/application-gateway/advanced-load-balancing">https://learn.microsoft.com/ja-jp/azure/application-gateway/advanced-load-balancing</a></li><li>ユーザー認証 — <a href="https://learn.microsoft.com/ja-jp/azure/application-gateway/user-authentication">https://learn.microsoft.com/ja-jp/azure/application-gateway/user-authentication</a></li><li>JWT 検証 — <a href="https://learn.microsoft.com/ja-jp/azure/application-gateway/json-web-token-overview">https://learn.microsoft.com/ja-jp/azure/application-gateway/json-web-token-overview</a></li><li>Confidential Compute の概要 — <a href="https://learn.microsoft.com/ja-jp/azure/application-gateway/confidential-compute-overview">https://learn.microsoft.com/ja-jp/azure/application-gateway/confidential-compute-overview</a></li></ul>
+<h3>製品ブログ</h3>
+<ul><li>Redefining application load balancing in Azure Application Gateway（2026年11月11日） — <a href="https://techcommunity.microsoft.com/blog/AzureNetworkingBlog/redefining-application-load-balancing-in-azure-application-gateway/4572687">https://techcommunity.microsoft.com/blog/AzureNetworkingBlog/redefining-application-load-balancing-in-azure-application-gateway/4572687</a></li></ul>
+</section>
+<p class="meta">2026年11月26日時点の公開情報と検証に基づく。プレビュー機能の仕様は変わる可能性があります。</p>
+</main></body></html>

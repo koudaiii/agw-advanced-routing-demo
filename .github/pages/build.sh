@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds the GitHub Pages site: the two guide pages, with the English guide also as index.html.
+# Builds the GitHub Pages site: the two guide pages and the two Ignite 2026 summary pages,
+# with the English guide also as index.html.
 # The simulator is not published (it can send many requests to any URL), so links to it
 # are rewritten to its page in the repository, where readers can download it.
 set -euo pipefail
@@ -8,7 +9,8 @@ out="${1:?usage: build.sh <output dir>}"
 repo_file="https://github.com/koudaiii/agw-advanced-routing-demo/blob/main/agw-routing-simulator.html"
 
 rm -rf "$out" && mkdir -p "$out"
-for f in agw-advanced-routing-demo-guide.html agw-advanced-routing-demo-guide_ja.html; do
+for f in agw-advanced-routing-demo-guide.html agw-advanced-routing-demo-guide_ja.html \
+         agw-ignite-2026-announcements.html agw-ignite-2026-announcements_ja.html; do
   sed -E "s#\.\./agw-routing-simulator\.html(\?lang=(en|ja))?#${repo_file}#g" "docs/$f" > "$out/$f"
 done
 
