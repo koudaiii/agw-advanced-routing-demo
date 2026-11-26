@@ -40,10 +40,10 @@
 | `tests/simulator.test.mjs` | シミュレーターのブラウザー テスト (「テスト」を参照) |
 | `docs/agw-advanced-routing-demo-guide_ja.html` | 構築ガイド (日本語)。英語は `docs/agw-advanced-routing-demo-guide.html` |
 | `backend/server.js` | 依存なしの Node.js バックエンド。どのプールが応答したかと、受信したリクエスト ヘッダー (Application Gateway が付けた `X-Forwarded-*` などを強調) を HTML か JSON で返します。プール名は応答ヘッダー `x-backend-pool` にも入ります。CORS 対応済み (`ALLOW_ORIGIN`、既定は `*`) |
-| `backend/pools.conf` | VM 1 のプロセス名・ポート・表示名・色・遅延。7 プロセス (ポート 8080–8083、8085。サーバー選択用に、3 秒遅れる `pool-slow` 8086 と `pool-rr-a` 8087) |
-| `backend/pools-canary.conf` | VM 2 のプロセス (`pool-canary` 8080。サーバー選択用に `pool-fast` 8086 と `pool-rr-b` 8087) |
+| `backend/pools.conf` | VM 1 のプロセス名・ポート・表示名・色・遅延。9 プロセス (ポート 8080–8083、8085。サーバー選択用に、3 秒遅れる `pool-slow` 8086 と `pool-rr-a` 8087。優先度用の `pool-standby` 8088 と機能フラグ用の `pool-flag-off` 8089) |
+| `backend/pools-canary.conf` | VM 2 のプロセス (`pool-canary` 8080。サーバー選択用に `pool-fast` 8086 と `pool-rr-b` 8087。優先度用の `pool-primary` 8088 と機能フラグ用の `pool-flag-on` 8089) |
 | `deploy/deploy.sh` | リソース グループを作り、`deploy/main.bicep` をデプロイします。SSH 鍵がなければ生成します |
-| `deploy/main.bicep` | VNet、バックエンド VM 1 (7 プロセス: ポート 8080–8083、8085、8086、8087)、VM 2 (3 プロセス: `pool-canary` 8080、`pool-fast` 8086、`pool-rr-b` 8087)、NAT Gateway、WAF ポリシー、Application Gateway、7 つのリスナー。4 つは高度なルールと専用のマップを持ちます: `rule1` / `advancedRoutingMap1` (ポート 80)、`rule-canary` / `canaryMap` (ポート 8080)、`rule-priority` / `priorityMap` (ポート 8090)、`rule-flag` / `flagMap` (ポート 8100)。3 つはサーバー選択用の Basic のルールです: `rule-rr` (ポート 8110)、`rule-rr-slow` (ポート 8120)、`rule-lc` (ポート 8130) |
+| `deploy/main.bicep` | VNet、バックエンド VM 1 (9 プロセス: ポート 8080–8083、8085–8089)、VM 2 (5 プロセス: `pool-canary` 8080、`pool-fast` 8086、`pool-rr-b` 8087、`pool-primary` 8088、`pool-flag-on` 8089)、NAT Gateway、WAF ポリシー、Application Gateway、7 つのリスナー。4 つは高度なルールと専用のマップを持ちます: `rule1` / `advancedRoutingMap1` (ポート 80)、`rule-canary` / `canaryMap` (ポート 8080)、`rule-priority` / `priorityMap` (ポート 8090)、`rule-flag` / `flagMap` (ポート 8100)。3 つはサーバー選択用の Basic のルールです: `rule-rr` (ポート 8110)、`rule-rr-slow` (ポート 8120)、`rule-lc` (ポート 8130) |
 | `deploy/make-cloud-init.sh` / `cloud-init.yaml` | バックエンド VM 1 の初期化データ (`backend/server.js` を埋め込み)。NodeSource から Node.js 26 (現行の LTS) を入れる |
 | `deploy/nodesource-repo.gpg.key` | NodeSource の apt リポジトリの署名鍵。両方の初期化データに埋め込む。指紋 `6F71 F525 2828 41EE DAF8 51B4 2F59 B5F9 9B1B E0B4` |
 | `deploy/cloud-init-canary.yaml` | カナリア VM 2 の初期化データ (`backend/pools-canary.conf` から生成) |
@@ -101,15 +101,15 @@ client --:8080--> listener-canary --> rule-canary (Advanced)
 
 ### 優先度ベース (ポート 8090)
 
-ルール `rule-priority` (Advanced、優先度 300) がマップ `priorityMap` を使います。マップの中では、全パスに一致するルール `priority-split` が `pool-primary` (VM 2 の 8080 番、優先度 1) に送ります。`pool-primary` の正常なサーバーが最小正常割合 60% を下回ると、`pool-standby` (VM 1 の 8080 番、優先度 2) に切り替えます。既定の振り分け先は `pool-standby` です。各プールは 1 台なので、切り替えはプール全体の単位です。
+ルール `rule-priority` (Advanced、優先度 300) がマップ `priorityMap` を使います。マップの中では、全パスに一致するルール `priority-split` が `pool-primary` (VM 2 の 8088 番、優先度 1) に送ります。`pool-primary` の正常なサーバーが最小正常割合 60% を下回ると、`pool-standby` (VM 1 の 8088 番、優先度 2) に切り替えます。既定の振り分け先は `pool-standby` です。各プールは 1 台なので、切り替えはプール全体の単位です。
 
 - 確認: `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100`
-- 停止と復旧 (手動): `az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"` で VM 2 のプロセスを止めます。切り替わるまで約 2〜3 分かかります。`systemctl start agw-pool@pool-canary` で戻すと、また `pool-primary` に送られます。このプロセスは `pool-canary` (8080) と `pool-flag-on` (8100) の唯一のサーバーでもあります。停止中は、ポート 8080 の約 10% と、ポート 8100 の `X-Feature: new` の要求も失敗します。確認が終わったらすぐ復帰してください。
+- 停止と復旧 (手動): `az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-primary"` で VM 2 の `pool-primary` プロセスを止めます。切り替わるまで約 2〜3 分かかります。`systemctl start agw-pool@pool-primary` で戻すと、また `pool-primary` に送られます。このプロセスは 8090 番だけに使われているため、ほかのポートには影響しません。
 - シミュレーターの「テスト要求」は、入力欄の要求 (メソッド、パス、クエリ、ヘッダー。「要求を送信」と同じ) を件数分送り、どのプールに届いたかを Primary / Standby の名前で数えます。結果は「実機の応答」に表示します。10 秒以内に応答がない要求は、失敗として数えます。
 
 ### 機能フラグ (ポート 8100)
 
-クライアントがヘッダーでフラグをオンにします。`X-Feature: new` を付けた要求は `pool-flag-on` (VM 2 の 8080 番) に、それ以外は既定の `pool-flag-off` (VM 1 の 8080 番) に送ります。確認: `curl -H "X-Feature: new" http://<FRONTEND-IP>:8100/`。ヘッダーの値は大文字と小文字を区別します。`X-Feature: NEW` は `pool-flag-off` に送られます (2026-11-26 に実機で確認)。
+クライアントがヘッダーでフラグをオンにします。`X-Feature: new` を付けた要求は `pool-flag-on` (VM 2 の 8089 番) に、それ以外は既定の `pool-flag-off` (VM 1 の 8089 番) に送ります。確認: `curl -H "X-Feature: new" http://<FRONTEND-IP>:8100/`。ヘッダーの値は大文字と小文字を区別します。`X-Feature: NEW` は `pool-flag-off` に送られます (2026-11-26 に実機で確認)。
 
 クライアントが選ぶ方式で、ランダムには分けないため、A/B テストではありません。統計的な A/B テストは issue #27 で扱います。
 
@@ -137,7 +137,7 @@ FRONTEND=<IP>:8130 ./lb-check.sh /app/home 100 6   # pool-slow は 10 件以下�
 - アルゴリズムはプールに設定します: `pool-lc` の `serverSelectionAlgorithm: 'LeastConnections'`。このプレビューの項目は、公開 API 仕様にも Bicep の型定義にもありません。ポータルでプールを変更し、前後のゲートウェイを比べて見つけました (`docs/superpowers/specs/2026-11-25-server-selection-demo-design.md`)。
 - プロセスは最初の起動時 (cloud-init) に入ります。この変更より前にデプロイした環境は、`./cleanup.sh` の後に `./deploy.sh` で作り直してください。
 
-`pool-primary`、`pool-standby`、`pool-flag-off`、`pool-flag-on` は、既存のプロセスを指すゲートウェイのプールです。そのため `x-backend-pool` ヘッダーにはプロセス名が出ます: VM 2 は `pool-canary`、VM 1 は `pool-web` です。
+`pool-primary` / `pool-standby` (8088 番) と `pool-flag-on` / `pool-flag-off` (8089 番) には、同じ名前の専用プロセスがあります。そのため `x-backend-pool` ヘッダーにはゲートウェイのプール名が出ます。どれかを止めても、ほかのポートには影響しません。
 
 ## テスト
 

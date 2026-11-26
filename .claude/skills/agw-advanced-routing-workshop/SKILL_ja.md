@@ -40,8 +40,8 @@ cd deploy
 - リソース グループ `rg-agw-advrouting-demo` を作ります
 - `main.bicep` をデプロイします:
   - VNet (`appgw` 192.168.0.0/24、`backend` 192.168.1.0/24)、バックエンドの NSG、NAT Gateway (StandardV2、backend サブネットに関連付け)
-  - バックエンド VM 1 (Ubuntu 24.04、固定 IP 192.168.1.10、Node.js プロセス 7 つ: ポート 8080–8083、8085、8086 (`pool-slow`、3 秒)、8087 (`pool-rr-a`))
-  - カナリア VM 2 (固定 IP 192.168.1.11、`pool-canary` をポート 8080、`pool-fast` を 8086、`pool-rr-b` を 8087)
+  - バックエンド VM 1 (Ubuntu 24.04、固定 IP 192.168.1.10、Node.js プロセス 9 つ: ポート 8080–8083、8085、8086 (`pool-slow`、3 秒)、8087 (`pool-rr-a`)、8088 (`pool-standby`)、8089 (`pool-flag-off`))
+  - カナリア VM 2 (固定 IP 192.168.1.11、`pool-canary` をポート 8080、`pool-fast` を 8086、`pool-rr-b` を 8087、`pool-primary` を 8088、`pool-flag-on` を 8089)
   - WAF ポリシー (Prevention、DRS 2.1、カスタム ルール `BlockDemoIp` と `BlockDemoUA`)
   - Application Gateway (WAF_v2) とリスナー 7 つ。4 つは高度なルールと専用のマップを持ち、3 つ (8110〜8130) はサーバー選択用の Basic のルールです:
 
@@ -78,15 +78,15 @@ cd deploy && FRONTEND=<deploy.sh が表示した IP> ./test.sh
 | Encoded path | 200 pool-api-v2 | `/api%2Forders` はデコードしてから照合 |
 | Canary (:8080 90:10) | 200 pool-web または pool-canary | ポート 8080 全体を 90% / 10% で振り分け。1 件ではどちらか一方 |
 | Campaign | 302 (`https://www.contoso.com/campaign?campaign=...`) | キャンペーンの条件 (優先度 40) が一致 |
-| Feature flag off | 200 pool-web (`pool-flag-off`) | ポート 8100、`X-Feature: new` なし。`flagMap` の既定 |
-| Feature flag on | 200 pool-canary (`pool-flag-on`) | ポート 8100 で `X-Feature: new` あり。ルール `flag-on` (優先度 10) |
+| Feature flag off | 200 pool-flag-off | ポート 8100、`X-Feature: new` なし。`flagMap` の既定 |
+| Feature flag on | 200 pool-flag-on | ポート 8100 で `X-Feature: new` あり。ルール `flag-on` (優先度 10) |
 | Mobile | 200 pool-mobile | iPhone の User-Agent |
 | Round Robin (:8110) | 200 pool-rr-a または pool-rr-b | `pool-rr` の速い 2 台 |
 | RR slow (:8120) | 200 pool-fast、または 3 秒後に pool-slow | 遅いサーバーと速いサーバーの Round Robin |
 | Least conn (:8130) | 200 pool-fast、または 3 秒後に pool-slow | 1 件ではどちらにも届く。件数は `lb-check.sh` で見る |
 | WAF block (UA) | 403 | `curl -A agw-block-demo`。ルーティングの前に WAF が遮断 (`BlockDemoUA`) |
 
-`x-backend-pool` には、応答したプロセスの名前が出ます。ゲートウェイのプール `pool-primary` と `pool-flag-on` は VM 2 の `pool-canary` プロセスを、`pool-standby` と `pool-flag-off` は VM 1 の `pool-web` プロセスを指します。
+`x-backend-pool` には、応答したプロセスの名前が出ます。`pool-primary` / `pool-standby` (8088 番) と `pool-flag-on` / `pool-flag-off` (8089 番) には、ゲートウェイのプールと同じ名前の専用プロセスがあります。
 
 ## 4. ライブデモ
 
@@ -148,30 +148,30 @@ cd deploy && FRONTEND=<IP>      ./canary-check.sh /app/home 100   # → ポー�
 
 | 状態 | 期待 | 手順 |
 |---|---|---|
-| 正常 | 100 件すべて `pool-primary` (VM 2、プロセス `pool-canary`) | `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100` |
-| `pool-canary` 停止 | 約 2〜3 分後、100 件すべて `pool-standby` (VM 1、プロセス `pool-web`) | 下のコマンドで停止し、2〜3 分待つ |
+| 正常 | 100 件すべて `pool-primary` (VM 2 の 8088 番) | `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100` |
+| `pool-primary` 停止 | 約 2〜3 分後、100 件すべて `pool-standby` (VM 1 の 8088 番) | 下のコマンドで停止し、2〜3 分待つ |
 | 復旧 | 100 件すべて `pool-primary` に戻る | 下のコマンドで起動し、2〜3 分待つ |
 
 ```bash
-# 停止 (VM 2 の pool-canary)
-az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"
+# 停止 (VM 2 の pool-primary)
+az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-primary"
 # 復旧
-az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-canary"
+az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-primary"
 ```
 
-- VM 2 の `pool-canary` を止めないと、すべての要求が Primary に送られ続け、切り替えは見えません。
-- `agw-pool@pool-canary` (VM 2 の 8080 番) は、`pool-primary` (8090)、`pool-canary` (8080、重み 10)、`pool-flag-on` (8100) の唯一のサーバーです。停止中は、ポート 8080 の約 10% と、ポート 8100 の `X-Feature: new` の要求も失敗します。確認が終わったらすぐ復帰してください。重み付けはプールの正常性を見ないため、8080 番で `pool-canary` が選ばれた要求は失敗します。停止中は `test.sh` の 8080 番と 8100 番の結果が失敗し得るため、`test.sh` は復帰後に実行します。`pool-fast` と `pool-rr-b` (8086 / 8087 番) は別のプロセスなので影響しません。
+- VM 2 の `pool-primary` を止めないと、すべての要求が Primary に送られ続け、切り替えは見えません。
+- `agw-pool@pool-primary` (VM 2 の 8088 番) は 8090 番だけに使われているため、止めても 8080、8100、8110〜8130 番には影響しません。確認後は起動して戻してください。
 - シミュレーターの「テスト要求」は、入力欄の要求 (メソッド、パス、クエリ、ヘッダー。「要求を送信」と同じ) を件数分送ります。Primary / Standby を数えるには、先に「優先度 (ポート 8090)」のプリセットを選びます。送信中はボタンが「キャンセル」に変わります。結果は「実機の応答」に 50 件ずつ表示します。10 秒以内に応答がない要求は、失敗として数えます。
 
 ### 機能フラグ (ポート 8100)
 
-クライアントがヘッダーでフラグをオンにします。ルール `flag-on` (優先度 10) は、ヘッダー `X-Feature: new` の要求を `pool-flag-on` (VM 2 の 8080 番) に送ります。それ以外は、マップの既定 `pool-flag-off` (VM 1 の 8080 番) に送ります。
+クライアントがヘッダーでフラグをオンにします。ルール `flag-on` (優先度 10) は、ヘッダー `X-Feature: new` の要求を `pool-flag-on` (VM 2 の 8089 番) に送ります。それ以外は、マップの既定 `pool-flag-off` (VM 1 の 8089 番) に送ります。
 
 | 要求 | 期待 |
 |---|---|
-| `:8100/` (ヘッダーなし) | pool-web (`pool-flag-off`、オフ、既定) |
-| `:8100/` + `X-Feature: other` | pool-web (`pool-flag-off`、オフ、既定) |
-| `:8100/` + `X-Feature: new` | pool-canary (`pool-flag-on`、オン) |
+| `:8100/` (ヘッダーなし) | pool-flag-off (オフ、既定) |
+| `:8100/` + `X-Feature: other` | pool-flag-off (オフ、既定) |
+| `:8100/` + `X-Feature: new` | pool-flag-on (オン) |
 | `:80/` + `X-Feature: new` | pool-web (ポート 80 には機能フラグのルールがない) |
 
 ```bash
@@ -256,7 +256,7 @@ cd deploy && ./cleanup.sh --yes       # 確認なしで削除 (端末がない�
 | WAF はルーティングより前 | advanced-rules | 「WAF ブロック」 |
 | 正規表現 (RE2) とパスの正規化 | advanced-rules: Path, pattern matching | 「エンコード済みパス」 |
 | 重み付け (カナリア 90:10) | advanced-load-balancing: Weighted distribution | ポート 8080、`canaryMap`、`canary-check.sh` |
-| 優先度ベースと最小正常割合 | advanced-load-balancing: Priority-based selection | ポート 8090、`priorityMap`、VM 2 の `pool-canary` の停止と起動 |
+| 優先度ベースと最小正常割合 | advanced-load-balancing: Priority-based selection | ポート 8090、`priorityMap`、VM 2 の `pool-primary` の停止と起動 |
 | ヘッダーによる機能フラグ | advanced-rules: Use cases | ポート 8100、`flagMap` |
 | サーバー選択 (RR、WRR、Least Connections) | advanced-load-balancing: Server selection | ポート 8110 / 8120 / 8130 と `lb-check.sh`、シミュレーターの「負荷分散」セクション (8120 / 8130 のプリセット) |
 

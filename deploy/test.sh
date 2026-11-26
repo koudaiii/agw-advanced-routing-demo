@@ -36,6 +36,6 @@ run "Least conn (:8130)"   -A "$DESKTOP_UA" "http://$FRONTEND:8130/app/home"
 echo
 echo "Note: the canary splits all of port 8080 into pool-web 90% / pool-canary 10%. Check the ratio with FRONTEND=$FRONTEND:8080 ./canary-check.sh /app/home 100"
 echo "      WAF block (UA) is the 403 from the User-Agent WAF rule (BlockDemoUA). Reproduce it with curl -A agw-block-demo"
-echo "      The feature flag uses port 8100 (flagMap). The output shows the process name: flag off is pool-flag-off (pool-web on VM 1), flag on is pool-flag-on (pool-canary on VM 2)."
+echo "      The feature flag uses port 8100 (flagMap): flag off is pool-flag-off, flag on is pool-flag-on (dedicated processes on port 8089)."
 echo "      Ports 8110 / 8120 / 8130 show server selection; each shows the server that answered (pool-rr-a or pool-rr-b, pool-slow or pool-fast)."
 echo "      pool-slow waits 3 s on purpose. Count servers and time with FRONTEND=$FRONTEND:8130 ./lb-check.sh /app/home 100 6, one port at a time (8120 and 8130 share the same servers)."

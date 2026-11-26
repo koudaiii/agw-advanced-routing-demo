@@ -78,8 +78,24 @@ write_files:
       POOL_LABEL="Round Robin B"
       POOL_COLOR="#6d28d9"
       DELAY_MS=0
+  - path: /etc/agw-demo/pool-primary.env
+    content: |
+      POOL_NAME=pool-primary
+      PORT=8088
+      POOL_LABEL="Primary (priority 1)"
+      POOL_COLOR="#b45309"
+      DELAY_MS=0
+  - path: /etc/agw-demo/pool-flag-on.env
+    content: |
+      POOL_NAME=pool-flag-on
+      PORT=8089
+      POOL_LABEL="Feature flag on"
+      POOL_COLOR="#be185d"
+      DELAY_MS=0
 runcmd:
   - systemctl daemon-reload
   - systemctl enable --now agw-pool@pool-canary
   - systemctl enable --now agw-pool@pool-fast
   - systemctl enable --now agw-pool@pool-rr-b
+  - systemctl enable --now agw-pool@pool-primary
+  - systemctl enable --now agw-pool@pool-flag-on

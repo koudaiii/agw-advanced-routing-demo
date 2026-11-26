@@ -168,9 +168,9 @@ svg .l{text-anchor:start}
 <text x="875" y="114" class="m">pool-tenant :8082</text>
 <text x="875" y="136" class="m">pool-api-v2 :8083</text>
 <text x="875" y="158" class="m">pool-mobile :8085</text>
-<text x="875" y="180" class="m">pool-standby :8080</text>
+<text x="875" y="180" class="m">pool-standby :8088</text>
 <text x="875" y="198">← :8090 Standby</text>
-<text x="875" y="220" class="m">pool-flag-off :8080</text>
+<text x="875" y="220" class="m">pool-flag-off :8089</text>
 <text x="875" y="238">← :8100 flag off</text>
 <text x="875" y="260" class="m">pool-slow :8086</text>
 <text x="875" y="278">← :8120 / :8130 slow</text>
@@ -180,9 +180,9 @@ svg .l{text-anchor:start}
 <text x="875" y="372" class="h">VM 2</text>
 <text x="875" y="388">192.168.1.11</text>
 <text x="875" y="412" class="m">pool-canary :8080</text>
-<text x="875" y="434" class="m">pool-primary :8080</text>
+<text x="875" y="434" class="m">pool-primary :8088</text>
 <text x="875" y="452">← :8090 Primary</text>
-<text x="875" y="474" class="m">pool-flag-on :8080</text>
+<text x="875" y="474" class="m">pool-flag-on :8089</text>
 <text x="875" y="492">← :8100 flag on</text>
 <text x="875" y="514" class="m">pool-fast :8086</text>
 <text x="875" y="532">← :8120 / :8130 fast</text>
@@ -202,8 +202,8 @@ svg .l{text-anchor:start}
 <path d="M750 585 C775 585,775 256,800 256" class="ln" marker-end="url(#ar)"/>
 <path d="M750 585 C775 585,775 510,800 510" class="ln" marker-end="url(#ar)"/>
 <text x="10" y="648" class="l">Solid line: traffic. Dashed line: what the operator does.</text>
-<text x="10" y="666" class="l">Port 8080: pool-web (VM 1) 90% and pool-canary (VM 2) 10%. Stop pool-canary on VM 2 and port 8090 switches to Standby (VM 1).</text>
-<text x="10" y="684" class="l">Port 8100 (feature flag): X-Feature: new → pool-flag-on (VM 2), otherwise pool-flag-off (VM 1).</text>
+<text x="10" y="666" class="l">Port 8080: pool-web 90%, pool-canary 10%. Port 8090: stop pool-primary (VM 2 :8088) and it switches to pool-standby (VM 1).</text>
+<text x="10" y="684" class="l">Port 8100 (feature flag): X-Feature: new → pool-flag-on (VM 2 :8089), otherwise pool-flag-off (VM 1 :8089).</text>
 <text x="10" y="702" class="l">Ports 8110–8130 (server selection): one pool with two servers, one per VM. pool-slow waits 3 s before every answer.</text>
 </svg>
 <figcaption>Figure 1. Architecture. VM 1 and VM 2 are drawn as separate frames. Solid lines are real traffic; dashed lines show what the operator does.</figcaption>
@@ -211,7 +211,7 @@ svg .l{text-anchor:start}
 <table><thead><tr><th scope="col">Part</th><th scope="col">Role</th><th scope="col">What it is</th></tr></thead><tbody>
 <tr><td>Simulator</td><td>Shows the evaluation order of the rules, AND/OR, and where WAF sits. Generates the curl command that sends the same request to the real gateway, or sends it directly. Test requests send many at once and count where they land</td><td>Standalone HTML (evaluates in the browser)</td></tr>
 <tr><td>Application Gateway</td><td>Port 80: listener → WAF → advanced routing map (<code>advancedRoutingMap1</code>) → backend pool or redirect. Port 8080: <code>rule-canary</code> → <code>canaryMap</code> (weighted, pool-web 90% / pool-canary 10%). Port 8090: <code>rule-priority</code> → <code>priorityMap</code> (priority-based). Port 8100: <code>rule-flag</code> → <code>flagMap</code> (feature flag). Ports 8110 / 8120 / 8130: Basic rules, each with one pool of two servers (server selection)</td><td>WAF_v2, capacity 1</td></tr>
-<tr><td>Backend</td><td>Shows which pool answered and the request headers it received</td><td>VM 1: seven Node.js processes (ports 8080–8083, 8085, and 8086 / 8087 for server selection). VM 2: three (the canary on 8080, and 8086 / 8087 for server selection)</td></tr>
+<tr><td>Backend</td><td>Shows which pool answered and the request headers it received</td><td>VM 1: nine Node.js processes (ports 8080–8083, 8085, 8086 / 8087 for server selection, and 8088 / 8089 for priority and the feature flag). VM 2: five (the canary on 8080, 8086 / 8087, and 8088 / 8089)</td></tr>
 </tbody></table>
 <p class="note">The processes of VM 1 are different ports on the same VM. The canary (pool-canary) is on VM 2: it answers differently from pool-web (VM 1, port 8080) on the same port, so it needs its own IP address. Whether VM 2 could use a different port instead has not been tested.</p>
 </section>
@@ -246,16 +246,18 @@ pool-tenant|8082|Tenant|#0f766e|0
 pool-api-v2|8083|Orders API v2|#1d4ed8|0
 pool-mobile|8085|Mobile|#7e22ce|0
 pool-slow|8086|Slow server (3 s)|#b91c1c|3000
-pool-rr-a|8087|Round Robin A|#0e7490|0</code></pre>
+pool-rr-a|8087|Round Robin A|#0e7490|0
+pool-standby|8088|Standby (priority 2)|#475569|0
+pool-flag-off|8089|Feature flag off|#0369a1|0</code></pre>
 <p>The names and colors are the same as in the simulator's pool list, so the simulator's "Response" panel and the real page look alike.</p>
-<p><code>pools.conf</code> defines the Node.js processes on the VM and the ports they listen on. Ports 8090 and 8100 are listener ports of the Application Gateway; no backend process listens on them. Priority-based selection (8090) and the feature flag (8100) use the gateway pools below, which point at the existing processes on port 8080.</p>
+<p><code>pools.conf</code> defines the Node.js processes on the VM and the ports they listen on. Ports 8090 and 8100 are listener ports of the Application Gateway; no backend process listens on them. Priority-based selection (8090) and the feature flag (8100) have their own processes on ports 8088 and 8089, named like their gateway pools. VM 2 runs <code>pool-primary</code> (8088) and <code>pool-flag-on</code> (8089) from <code>backend/pools-canary.conf</code>. So stopping the primary affects port 8090 only, and <code>x-backend-pool</code> shows the gateway pool name.</p>
 <table><thead><tr><th scope="col">Gateway pool</th><th scope="col">Points at (VM and process)</th><th scope="col">Used for</th></tr></thead><tbody>
-<tr><td><code>pool-primary</code></td><td>The <code>pool-canary</code> process on VM 2 (192.168.1.11), port 8080</td><td>Priority 1 (Primary) on :8090</td></tr>
-<tr><td><code>pool-standby</code></td><td>The <code>pool-web</code> process on VM 1 (192.168.1.10), port 8080</td><td>Priority 2 (Standby) and default on :8090</td></tr>
+<tr><td><code>pool-primary</code></td><td>The <code>pool-primary</code> process on VM 2 (192.168.1.11), port 8088</td><td>Priority 1 (Primary) on :8090</td></tr>
+<tr><td><code>pool-standby</code></td><td>The <code>pool-standby</code> process on VM 1 (192.168.1.10), port 8088</td><td>Priority 2 (Standby) and default on :8090</td></tr>
 <tr><td><code>pool-web</code></td><td>The <code>pool-web</code> process on VM 1, port 8080</td><td>Default on :80, 90% of the canary on :8080</td></tr>
 <tr><td><code>pool-canary</code></td><td>The <code>pool-canary</code> process on VM 2, port 8080</td><td>10% of the canary on :8080</td></tr>
-<tr><td><code>pool-flag-off</code></td><td>The <code>pool-web</code> process on VM 1, port 8080</td><td>Flag off (default) on :8100</td></tr>
-<tr><td><code>pool-flag-on</code></td><td>The <code>pool-canary</code> process on VM 2, port 8080</td><td>Flag on (<code>X-Feature: new</code>) on :8100</td></tr>
+<tr><td><code>pool-flag-off</code></td><td>The <code>pool-flag-off</code> process on VM 1, port 8089</td><td>Flag off (default) on :8100</td></tr>
+<tr><td><code>pool-flag-on</code></td><td>The <code>pool-flag-on</code> process on VM 2, port 8089</td><td>Flag on (<code>X-Feature: new</code>) on :8100</td></tr>
 <tr><td><code>pool-rr</code></td><td>The <code>pool-rr-a</code> process on VM 1 and the <code>pool-rr-b</code> process on VM 2, port 8087</td><td>Round Robin on :8110 (two fast servers)</td></tr>
 <tr><td><code>pool-rr-slow</code></td><td>The <code>pool-slow</code> process on VM 1 (waits 3 s) and the <code>pool-fast</code> process on VM 2, port 8086</td><td>Round Robin with a slow server on :8120</td></tr>
 <tr><td><code>pool-lc</code></td><td>The same two processes as <code>pool-rr-slow</code></td><td>Least Connections on :8130 (<code>serverSelectionAlgorithm</code> on the pool)</td></tr>
@@ -309,7 +311,7 @@ http
 curl -i -H "X-Tenant-Id: customer-1024" http://localhost:8082/app/dashboard</code></pre>
 
 <h3>3.5 Putting it on the VMs (cloud-init + systemd)</h3>
-<p><code>deploy/make-cloud-init.sh</code> generates one bootstrap file per VM (<code>deploy.sh</code> runs it). Its arguments are the input (pool definitions) and the output file.</p><ul><li><code>cloud-init.yaml</code>: for VM 1. The seven processes of <code>backend/pools.conf</code> (ports 8080–8083, 8085, 8086, 8087)</li><li><code>cloud-init-canary.yaml</code>: for VM 2 (canary). <code>pool-canary</code> (port 8080), <code>pool-fast</code> (8086), and <code>pool-rr-b</code> (8087) from <code>backend/pools-canary.conf</code></li></ul><p>Both do these three things.</p><ol>
+<p><code>deploy/make-cloud-init.sh</code> generates one bootstrap file per VM (<code>deploy.sh</code> runs it). Its arguments are the input (pool definitions) and the output file.</p><ul><li><code>cloud-init.yaml</code>: for VM 1. The nine processes of <code>backend/pools.conf</code> (ports 8080–8083, 8085–8089)</li><li><code>cloud-init-canary.yaml</code>: for VM 2 (canary). <code>pool-canary</code> (port 8080), <code>pool-fast</code> (8086), <code>pool-rr-b</code> (8087), <code>pool-primary</code> (8088), and <code>pool-flag-on</code> (8089) from <code>backend/pools-canary.conf</code></li></ul><p>Both do these three things.</p><ol>
 <li>Install Node.js 26 (the current LTS) from the NodeSource apt repository, and put <code>server.js</code> in <code>/opt/agw-demo/</code> (embedded as base64). The repository's signing key is embedded in the file (<code>deploy/nodesource-repo.gpg.key</code>), not downloaded at boot. Ubuntu's own <code>nodejs</code> package (Node.js 18, end of life) is pinned out, so if NodeSource cannot be reached, the install fails instead of falling back to it</li>
 <li>Create the template unit <code>agw-pool@.service</code> (<code>DynamicUser=yes</code> runs it without a dedicated user)</li>
 <li>Create <code>/etc/agw-demo/&lt;pool&gt;.env</code> per pool and run <code>systemctl enable --now agw-pool@&lt;pool&gt;</code></li></ol>
@@ -329,12 +331,12 @@ DynamicUser=yes</code></pre>
 <h3>4.1 Resources that are created</h3>
 <table><thead><tr><th scope="col">Resource</th><th scope="col">Details</th></tr></thead><tbody>
 <tr><td>VNet / subnets</td><td><code>appgw</code> 192.168.0.0/24 (Application Gateway only), <code>backend</code> 192.168.1.0/24 (with an NSG)</td></tr>
-<tr><td>Backend VM 1</td><td>Static IP 192.168.1.10. Seven Node.js processes (ports 8080–8083, 8085, 8086, 8087). cloud-init installs <code>server.js</code></td></tr>
-<tr><td>Canary VM 2</td><td>Static IP 192.168.1.11. Three Node.js processes (<code>pool-canary</code> 8080, <code>pool-fast</code> 8086, <code>pool-rr-b</code> 8087)</td></tr>
+<tr><td>Backend VM 1</td><td>Static IP 192.168.1.10. Nine Node.js processes (ports 8080–8083, 8085–8089). cloud-init installs <code>server.js</code></td></tr>
+<tr><td>Canary VM 2</td><td>Static IP 192.168.1.11. Five Node.js processes (<code>pool-canary</code> 8080, <code>pool-fast</code> 8086, <code>pool-rr-b</code> 8087, <code>pool-primary</code> 8088, <code>pool-flag-on</code> 8089)</td></tr>
 <tr><td>WAF policy</td><td>Prevention, DRS 2.1. Custom rules <code>BlockDemoIp</code> (source IP) and <code>BlockDemoUA</code> (blocks requests whose User-Agent contains <code>agw-block-demo</code>)</td></tr>
 <tr><td>NAT gateway</td><td>Attached to the backend subnet (StandardV2, with its own StandardV2 public IP). Used for the VMs' outbound traffic (apt and so on). The VMs have no public IP and the subnet is private (no default outbound IP)</td></tr>
 <tr><td>Application Gateway (WAF_v2)</td><td>Listeners <code>listener-http</code> (:80), <code>listener-canary</code> (:8080), <code>listener-priority</code> (:8090), <code>listener-flag</code> (:8100). Rules <code>rule1</code> (Advanced, :80, map <code>advancedRoutingMap1</code>), <code>rule-canary</code> (Advanced, :8080, map <code>canaryMap</code>), <code>rule-priority</code> (Advanced, :8090, map <code>priorityMap</code>), <code>rule-flag</code> (Advanced, :8100, map <code>flagMap</code>)</td></tr>
-<tr><td>Probe, pools, backend settings</td><td>Probe <code>healthz</code>. Six pools (<code>pool-web</code>, <code>pool-partner</code>, <code>pool-tenant</code>, <code>pool-api-v2</code>, <code>pool-canary</code>, <code>pool-mobile</code>), each with backend settings <code>hs-&lt;pool&gt;</code>. Plus <code>pool-primary</code> / <code>pool-standby</code> for priority-based selection and <code>pool-flag-off</code> / <code>pool-flag-on</code> for the feature flag (they point at the existing processes)</td></tr>
+<tr><td>Probe, pools, backend settings</td><td>Probe <code>healthz</code>. Ten pools (<code>pool-web</code>, <code>pool-partner</code>, <code>pool-tenant</code>, <code>pool-api-v2</code>, <code>pool-canary</code>, <code>pool-mobile</code>, and <code>pool-primary</code> / <code>pool-standby</code> (8088) for priority-based selection and <code>pool-flag-on</code> / <code>pool-flag-off</code> (8089) for the feature flag), each with backend settings <code>hs-&lt;pool&gt;</code> on its own process</td></tr>
 <tr><td>Redirect</td><td><code>redirect-campaign</code>: 302 to <code>https://www.contoso.com/campaign</code>. The query string is kept</td></tr>
 <tr><td>Condition sets</td><td>Port 80: <code>cs-partner</code>, <code>cs-tenant</code>, <code>cs-apiv2</code>, <code>cs-campaign</code>, <code>cs-mobile</code>. Port 8080: <code>cs-canary-split</code>. Port 8090: <code>cs-priority-all</code>. Port 8100: <code>cs-flag-on</code></td></tr>
 <tr><td>Advanced routing map (port 80)</td><td><code>advancedRoutingMap1</code>. Default pool <code>pool-web</code>. Rules in priority order: partner (10), tenant (20), api-v2 (30), campaign (40), mobile (60)</td></tr>
@@ -371,11 +373,10 @@ DynamicUser=yes</code></pre>
                 priority 1 (Primary)        priority 2 (Standby)
                       |                           |
                       v                           v
-             pool-primary (VM2 :8080)    pool-standby (VM1 :8080)
-             = pool-canary on VM 2       = pool-web on VM 1
+             pool-primary (VM2 :8088)    pool-standby (VM1 :8088)
              used while healthy          used when the primary
                                          does not qualify</code></pre>
-<figcaption>Figure 4. Priority-based selection on port 8090 (when VM 2 stops, traffic switches to Standby).</figcaption>
+<figcaption>Figure 4. Priority-based selection on port 8090 (when pool-primary stops, traffic switches to Standby).</figcaption>
 </figure>
 <figure class="diagram"><pre><code>client --:8100--&gt; listener-flag --&gt; rule-flag (Advanced)
                                     |
@@ -387,8 +388,7 @@ DynamicUser=yes</code></pre>
         X-Feature: new (match)               anything else (default = flag off)
                  |                                     |
                  v                                     v
-        pool-flag-on (VM2 :8080)            pool-flag-off (VM1 :8080)
-        = pool-canary on VM 2               = pool-web on VM 1
+        pool-flag-on (VM2 :8089)            pool-flag-off (VM1 :8089)
         flag on                             flag off</code></pre>
 <figcaption>Figure 5. The feature flag on port 8100 (the header X-Feature turns it on).</figcaption>
 </figure>
@@ -406,8 +406,8 @@ API v2                 HTTP 200  pool-api-v2
 Encoded path           HTTP 200  pool-api-v2   ← /api%2Forders is decoded, then evaluated
 Canary (:8080 90:10)   HTTP 200  pool-web
 Campaign               HTTP 302  redirect -&gt; https://www.contoso.com/campaign?...
-Feature flag off       HTTP 200  pool-web      ← :8100 (pool-flag-off)
-Feature flag on        HTTP 200  pool-canary   ← :8100 (pool-flag-on)
+Feature flag off       HTTP 200  pool-flag-off
+Feature flag on        HTTP 200  pool-flag-on
 Mobile                 HTTP 200  pool-mobile
 WAF block (UA)         HTTP 403
 Round Robin (:8110)    HTTP 200  pool-rr-a     ← or pool-rr-b
@@ -415,29 +415,29 @@ RR slow (:8120)        HTTP 200  pool-fast     ← or pool-slow (3 s)
 Least conn (:8130)     HTTP 200  pool-fast     ← or pool-slow (3 s)</code></pre>
 <p class="note">This is sample output of <code>test.sh</code>. The Canary line is one request of the 90:10 split on port 8080, so it can be pool-web or pool-canary.</p>
 <h4>Priority-based selection (port 8090)</h4>
-<p>Port 8090 prefers <code>pool-canary</code> on VM 2 (Primary) and switches to <code>pool-web</code> on VM 1 (Standby) when the primary stops. <code>canary-check.sh</code> counts the <code>x-backend-pool</code> response header, which is the process name on the VM, so Primary shows as <code>pool-canary</code> and Standby as <code>pool-web</code>.</p>
+<p>Port 8090 prefers <code>pool-primary</code> on VM 2 (port 8088) and switches to <code>pool-standby</code> on VM 1 (port 8088) when the primary stops. <code>canary-check.sh</code> counts the <code>x-backend-pool</code> response header, which shows these names.</p>
 <pre><code>FRONTEND=&lt;frontend IP&gt;:8090 ./canary-check.sh /app/home 100   # normal
-# stop pool-canary on VM 2, then wait 2–3 minutes
-az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"
+# stop pool-primary on VM 2, then wait 2–3 minutes
+az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-primary"
 FRONTEND=&lt;frontend IP&gt;:8090 ./canary-check.sh /app/home 100   # stopped
 # start it again, then wait 2–3 minutes
-az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-canary"
+az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-primary"
 FRONTEND=&lt;frontend IP&gt;:8090 ./canary-check.sh /app/home 100   # restored</code></pre>
 <p>Expected (example):</p>
-<pre><code>normal     all 100 requests: pool-canary (Primary = VM 2)
-stopped    all 100 requests: pool-web    (Standby = VM 1)
-restored   all 100 requests: pool-canary (Primary = VM 2)</code></pre>
-<p class="note">The switch takes about 2–3 minutes after the stop. Right after it, pool-canary can still answer. The same process (VM 2, port 8080) is also the only server of pool-canary on port 8080 and pool-flag-on on port 8100. While it is stopped, about 10% of requests on port 8080 and requests on port 8100 with X-Feature: new also fail. Restore it as soon as the check is done. (Weighted distribution does not look at pool health, so the requests that pick pool-canary on port 8080 fail; see section 8.) The 8080 and 8100 results of <code>test.sh</code> can fail during the stop, so run <code>test.sh</code> after restoring.</p>
+<pre><code>normal     all 100 requests: pool-primary (VM 2)
+stopped    all 100 requests: pool-standby (VM 1)
+restored   all 100 requests: pool-primary (VM 2)</code></pre>
+<p class="note">The switch takes about 2–3 minutes after the stop. Right after it, pool-primary can still answer. The stopped process serves port 8090 only, so the other ports keep working. Start it again after the check.</p>
 <h4>Feature flag (port 8100)</h4>
-<p>On port 8100, the client turns the flag on with a header. <code>flagMap</code> sends requests with the header <code>X-Feature: new</code> to <code>pool-flag-on</code> (VM 2 port 8080) and everything else to the default <code>pool-flag-off</code> (VM 1 port 8080). <code>x-backend-pool</code> is the process name, so flag off shows as <code>pool-web</code> and flag on as <code>pool-canary</code>.</p>
+<p>On port 8100, the client turns the flag on with a header. <code>flagMap</code> sends requests with the header <code>X-Feature: new</code> to <code>pool-flag-on</code> (VM 2 port 8089) and everything else to the default <code>pool-flag-off</code> (VM 1 port 8089). <code>x-backend-pool</code> shows these names.</p>
 <pre><code>curl -s -D - -o /dev/null http://&lt;frontend IP&gt;:8100/ | grep -i x-backend-pool
 curl -s -D - -o /dev/null -H "X-Feature: other" http://&lt;frontend IP&gt;:8100/ | grep -i x-backend-pool
 curl -s -D - -o /dev/null -H "X-Feature: new" http://&lt;frontend IP&gt;:8100/ | grep -i x-backend-pool
 curl -s -D - -o /dev/null -H "X-Feature: NEW" http://&lt;frontend IP&gt;:8100/ | grep -i x-backend-pool</code></pre>
-<pre><code>no header         x-backend-pool: pool-web     (pool-flag-off, flag off)
-X-Feature: other  x-backend-pool: pool-web     (pool-flag-off, flag off)
-X-Feature: new    x-backend-pool: pool-canary  (pool-flag-on, flag on)
-X-Feature: NEW    x-backend-pool: pool-web     (pool-flag-off, flag off)</code></pre>
+<pre><code>no header         x-backend-pool: pool-flag-off  (flag off)
+X-Feature: other  x-backend-pool: pool-flag-off  (flag off)
+X-Feature: new    x-backend-pool: pool-flag-on   (flag on)
+X-Feature: NEW    x-backend-pool: pool-flag-off  (flag off)</code></pre>
 <p class="note">Header values are case-sensitive: <code>X-Feature: NEW</code> and <code>New</code> do not match <code>new</code> and go to the default (checked on the real gateway on 2026-11-26). The simulator matches the same way.</p>
 <p class="note">Port 80 has no feature flag rule. Always use port 8100. This is not an A/B test: the client chooses, and there is no random split (a statistical A/B test is tracked in issue #27).</p>
 <h4>Server selection (ports 8110 / 8120 / 8130)</h4>
@@ -531,8 +531,8 @@ if (req.method === "OPTIONS" &amp;&amp; req.headers["access-control-request-meth
 <tr><td>6</td><td>WAF runs before routing</td><td>"WAF block" → no rule is evaluated, 403</td><td><code>curl -i -A agw-block-demo http://&lt;IP&gt;/app/home</code> → 403 (the User-Agent WAF rule)</td></tr>
 <tr><td>7</td><td>Routing by User-Agent</td><td>"Mobile" → pool-mobile (a browser cannot send User-Agent, so the real response is the default pool-web)</td><td><code>curl -i -A "Mozilla/5.0 (iPhone; ...)" http://&lt;IP&gt;/app/home</code> → pool-mobile</td></tr>
 <tr><td>8</td><td>Canary (port 8080)</td><td>"Canary (port 8080)" → the weighted prediction (90:10)</td><td><code>FRONTEND=&lt;IP&gt;:8080 ./canary-check.sh /app/home 100</code> → about 90 pool-web, 10 pool-canary (measured: 91 / 9)</td></tr>
-<tr><td>9</td><td>Priority-based selection (port 8090)</td><td>"Priority (port 8090)" → Primary (VM 2) while healthy, Standby (VM 1) when stopped</td><td><code>FRONTEND=&lt;IP&gt;:8090 ./canary-check.sh /app/home 100</code> → pool-canary (VM 2) normally. Stop <code>agw-pool@pool-canary</code> on VM 2 and after 2–3 minutes it is pool-web (VM 1). While it is stopped, about 10% of requests on port 8080 and requests on port 8100 with X-Feature: new also fail. Restore it as soon as the check is done</td></tr>
-<tr><td>10</td><td>Feature flag (off / on)</td><td>"Feature flag (off)" and "Feature flag (on)" → off is pool-flag-off (pool-web on VM 1), on is pool-flag-on (pool-canary on VM 2)</td><td><code>curl -H "X-Feature: new" http://&lt;IP&gt;:8100/</code> → pool-canary. No header or another value → pool-web</td></tr>
+<tr><td>9</td><td>Priority-based selection (port 8090)</td><td>"Priority (port 8090)" → Primary (VM 2) while healthy, Standby (VM 1) when stopped</td><td><code>FRONTEND=&lt;IP&gt;:8090 ./canary-check.sh /app/home 100</code> → pool-primary (VM 2) normally. Stop <code>agw-pool@pool-primary</code> on VM 2 and after 2–3 minutes it is pool-standby (VM 1). Only port 8090 is affected. Start it again afterwards</td></tr>
+<tr><td>10</td><td>Feature flag (off / on)</td><td>"Feature flag (off)" and "Feature flag (on)" → off is pool-flag-off (VM 1), on is pool-flag-on (VM 2)</td><td><code>curl -H "X-Feature: new" http://&lt;IP&gt;:8100/</code> → pool-flag-on. No header or another value → pool-flag-off</td></tr>
 <tr><td>11</td><td>Server selection (ports 8110 / 8120 / 8130)</td><td>"Round Robin (port 8110)", "Round Robin with a slow server (port 8120)", "Least Connections (port 8130)" → test requests show the count and average time per server, and the total time</td><td><code>FRONTEND=&lt;IP&gt;:8130 ./lb-check.sh /app/home 100 6</code> → pool-slow 10 or fewer. On 8120 about half, and a much longer total time</td></tr>
 </tbody></table>
 <p class="note">The canary sends every request on port 8080 to pool-web 90% / pool-canary 10% (advanced rule <code>canary-split</code>). With few requests the counts drift from the expected values, so check with 100 or more.</p>
@@ -547,7 +547,6 @@ if (req.method === "OPTIONS" &amp;&amp; req.headers["access-control-request-meth
 <tr><td>The port 80 results of <code>test.sh</code> are not what you expect</td><td>Is <code>rule1</code> Advanced (as right after the deployment)? The conditions and priorities are in <code>advancedRoutingConditionSets</code> and <code>advancedRoutingMaps</code> of <code>deploy/main.bicep</code></td></tr>
 <tr><td>Port 8080 is not 90:10</td><td>With few requests the counts drift. Check 100 or more with <code>./canary-check.sh /app/home 100</code>. Check the weights of rule <code>canary-split</code> in map <code>canaryMap</code> (a portal edit goes back to the definition on <code>deploy.sh</code>)</td></tr>
 <tr><td>Port 8080 is all pool-canary</td><td>Rule <code>canary-split</code> does not match (the path condition of condition set <code>cs-canary-split</code>), so only the map default (pool-canary) is used</td></tr>
-<tr><td>While pool-canary is stopped, part of port 8080 and the flag-on requests (<code>X-Feature: new</code>) on port 8100 fail</td><td>Is <code>agw-pool@pool-canary</code> on VM 2 stopped (section 4.2)? It is the only server of pool-canary (8080) and pool-flag-on (8100). Start it and wait 2–3 minutes</td></tr>
 <tr><td>A POST without a body returns 403</td><td>Known issue: a DRS managed rule blocks a bodyless POST (a POST with a body, GET, and PUT pass). The rule ID has not been identified. The tests use GET</td></tr>
 <tr><td>A regular expression does not match</td><td>Does it use syntax RE2 does not support (lookahead, backreferences)? When the simulator and the real gateway differ, the real gateway is right</td></tr>
 <tr><td>The simulator and the real gateway differ</td><td>(1) A browser cannot send User-Agent (check "Mobile" and "WAF block" with <code>curl -A</code>). (2) The source IP is the one the gateway sees (<code>X-Forwarded-For</code>). (3) Compare the rule definitions (the simulator's JSON and <code>deploy/main.bicep</code>)</td></tr>

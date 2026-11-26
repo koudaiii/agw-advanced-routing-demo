@@ -45,8 +45,8 @@ On success the last lines include `Done. Frontend: http://<IP>/`. `deploy.sh` do
 - Creates the resource group `rg-agw-advrouting-demo`
 - Deploys `main.bicep`:
   - VNet (`appgw` 192.168.0.0/24, `backend` 192.168.1.0/24), backend NSG, NAT gateway (StandardV2, attached to the backend subnet)
-  - Backend VM 1 (Ubuntu 24.04, static IP 192.168.1.10, seven Node.js processes on ports 8080–8083, 8085, 8086 (`pool-slow`, 3 s), and 8087 (`pool-rr-a`))
-  - Canary VM 2 (static IP 192.168.1.11, `pool-canary` on port 8080, `pool-fast` on 8086, `pool-rr-b` on 8087)
+  - Backend VM 1 (Ubuntu 24.04, static IP 192.168.1.10, nine Node.js processes on ports 8080–8083, 8085, 8086 (`pool-slow`, 3 s), 8087 (`pool-rr-a`), 8088 (`pool-standby`), and 8089 (`pool-flag-off`))
+  - Canary VM 2 (static IP 192.168.1.11, `pool-canary` on port 8080, `pool-fast` on 8086, `pool-rr-b` on 8087, `pool-primary` on 8088, `pool-flag-on` on 8089)
   - WAF policy (Prevention, DRS 2.1, custom rules `BlockDemoIp` and `BlockDemoUA`)
   - Application Gateway (WAF_v2) with seven listeners. Four have an advanced rule and its own map; three (8110–8130) have a Basic rule for server selection:
 
@@ -83,15 +83,15 @@ cd deploy && FRONTEND=<IP printed by deploy.sh> ./test.sh
 | Encoded path | 200 pool-api-v2 | `/api%2Forders` is decoded, then matched |
 | Canary (:8080 90:10) | 200 pool-web or pool-canary | All of port 8080 is split 90% / 10%. One request lands on one of them |
 | Campaign | 302 (`https://www.contoso.com/campaign?campaign=...`) | The campaign condition (priority 40) matches |
-| Feature flag off | 200 pool-web (`pool-flag-off`) | Port 8100, no `X-Feature: new` header. Default of `flagMap` |
-| Feature flag on | 200 pool-canary (`pool-flag-on`) | Port 8100 with `X-Feature: new`. Rule `flag-on` (priority 10) |
+| Feature flag off | 200 pool-flag-off | Port 8100, no `X-Feature: new` header. Default of `flagMap` |
+| Feature flag on | 200 pool-flag-on | Port 8100 with `X-Feature: new`. Rule `flag-on` (priority 10) |
 | Mobile | 200 pool-mobile | iPhone User-Agent |
 | Round Robin (:8110) | 200 pool-rr-a or pool-rr-b | Two fast servers in `pool-rr` |
 | RR slow (:8120) | 200 pool-fast, or pool-slow after 3 s | Round Robin over a slow and a fast server |
 | Least conn (:8130) | 200 pool-fast, or pool-slow after 3 s | One request can reach either; use `lb-check.sh` for counts |
 | WAF block (UA) | 403 | `curl -A agw-block-demo`. WAF blocks it before routing (`BlockDemoUA`) |
 
-`x-backend-pool` is the name of the process that answered. The gateway pools `pool-primary` and `pool-flag-on` point at the `pool-canary` process on VM 2; `pool-standby` and `pool-flag-off` point at the `pool-web` process on VM 1.
+`x-backend-pool` is the name of the process that answered. `pool-primary` / `pool-standby` (8088) and `pool-flag-on` / `pool-flag-off` (8089) have their own processes with the same names as the gateway pools.
 
 ## 4. Live demo
 
@@ -153,30 +153,30 @@ The weights are expected values. With few requests the counts drift from 90 / 10
 
 | State | Expected | How |
 |---|---|---|
-| Normal | All 100 requests to `pool-primary` (VM 2, process `pool-canary`) | `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100` |
-| `pool-canary` stopped | After about 2–3 minutes, all 100 to `pool-standby` (VM 1, process `pool-web`) | Stop with the command below, wait 2–3 minutes |
+| Normal | All 100 requests to `pool-primary` (VM 2 :8088) | `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100` |
+| `pool-primary` stopped | After about 2–3 minutes, all 100 to `pool-standby` (VM 1 :8088) | Stop with the command below, wait 2–3 minutes |
 | Restored | All 100 back to `pool-primary` | Start with the command below, wait 2–3 minutes |
 
 ```bash
-# stop (pool-canary on VM 2)
-az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"
+# stop (pool-primary on VM 2)
+az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-primary"
 # restore
-az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-canary"
+az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-primary"
 ```
 
-- Without stopping `pool-canary` on VM 2, every request keeps going to the primary and the failover cannot be seen.
-- `agw-pool@pool-canary` (VM 2 :8080) is the only server of `pool-primary` (8090), `pool-canary` (8080, weight 10), and `pool-flag-on` (8100). While it is stopped, about 10% of requests on port 8080 and requests on port 8100 with `X-Feature: new` also fail. Restore it as soon as the check is done. Weighted distribution does not look at pool health, so the 8080 requests that pick `pool-canary` fail. Run `test.sh` after restoring, because its 8080 and 8100 results can fail during the stop. `pool-fast` and `pool-rr-b` (:8086 / :8087) are other processes and are not affected.
+- Without stopping `pool-primary` on VM 2, every request keeps going to the primary and the failover cannot be seen.
+- `agw-pool@pool-primary` (VM 2 :8088) serves port 8090 only, so stopping it does not affect 8080, 8100, or 8110–8130. Start it again after the check.
 - The simulator's "Test requests" button sends the request in the form (method, path, query, and headers, the same as "Send request") the chosen number of times. Select the "Priority (port 8090)" preset first to count Primary / Standby. While sending, the button becomes "Cancel". Results are shown under "Real response", 50 at a time. A request with no response within 10 seconds is counted as failed.
 
 ### Feature flag (port 8100)
 
-The client turns the flag on with a header. The rule `flag-on` (priority 10) sends requests with the header `X-Feature: new` to `pool-flag-on` (VM 2 port 8080). Everything else goes to the map default `pool-flag-off` (VM 1 port 8080).
+The client turns the flag on with a header. The rule `flag-on` (priority 10) sends requests with the header `X-Feature: new` to `pool-flag-on` (VM 2 port 8089). Everything else goes to the map default `pool-flag-off` (VM 1 port 8089).
 
 | Request | Expected |
 |---|---|
-| `:8100/` (no header) | pool-web (`pool-flag-off`, flag off, default) |
-| `:8100/` + `X-Feature: other` | pool-web (`pool-flag-off`, flag off, default) |
-| `:8100/` + `X-Feature: new` | pool-canary (`pool-flag-on`, flag on) |
+| `:8100/` (no header) | pool-flag-off (flag off, default) |
+| `:8100/` + `X-Feature: other` | pool-flag-off (flag off, default) |
+| `:8100/` + `X-Feature: new` | pool-flag-on (flag on) |
 | `:80/` + `X-Feature: new` | pool-web (port 80 has no feature flag rule) |
 
 ```bash
@@ -261,7 +261,7 @@ cd deploy && ./cleanup.sh --yes       # deletes without the prompt (needed when 
 | WAF runs before routing | advanced-rules | "WAF block" |
 | Regular expressions (RE2) and path normalization | advanced-rules: Path, pattern matching | "Encoded path" |
 | Weighted distribution (canary 90:10) | advanced-load-balancing: Weighted distribution | Port 8080, `canaryMap`, `canary-check.sh` |
-| Priority-based selection and minimum healthy percentage | advanced-load-balancing: Priority-based selection | Port 8090, `priorityMap`, stop and start `pool-canary` on VM 2 |
+| Priority-based selection and minimum healthy percentage | advanced-load-balancing: Priority-based selection | Port 8090, `priorityMap`, stop and start `pool-primary` on VM 2 |
 | Header-based feature flag | advanced-rules: Use cases | Port 8100, `flagMap` |
 | Server selection (RR, WRR, Least Connections) | advanced-load-balancing: Server selection | Ports 8110 / 8120 / 8130 with `lb-check.sh`, and the "Load distribution" section of the simulator (8120 / 8130 presets) |
 
