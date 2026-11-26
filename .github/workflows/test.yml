@@ -16,5 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: latest
+          # The newest release line (not "latest", which can pick a prerelease); check-latest takes its newest patch.
+          node-version: 26
+          check-latest: true
       - run: node --test backend/server.test.js tests/simulator.test.mjs
