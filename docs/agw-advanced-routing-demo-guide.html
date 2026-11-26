@@ -553,7 +553,8 @@ if (req.method === "OPTIONS" &amp;&amp; req.headers["access-control-request-meth
 
 <section id="notes"><h2>8. Limits and notes</h2><ul>
 <li>Advanced rules are a preview feature. They cannot be used with multisite listeners or the L4 (TCP/TLS) proxy</li>
-<li>The weighted split (the canary on port 8080, pool-web 90% / pool-canary 10%) is an advanced rule with <code>WeightedDistribution</code></li>
+<li>Multiple pools (weighted or priority-based) work on the v2 SKUs (Standard_v2 / WAF_v2), in Basic rules, Advanced rules, and the default action of an Advanced routing map. Each place takes up to five pools and one method. This demo sets them on the :8080 and :8090 Advanced routing maps</li>
+<li>Weighted distribution does not look at pool health. If the selected pool has no healthy server, the request fails. To switch pools by health, use priority-based selection</li>
 <li>Limits: 100 maps per gateway, 10,000 condition sets per gateway, 100 rules per map, 5 conditions per condition set, 5 values per condition, 128 characters per value or regular expression</li>
 <li>A WAF policy is associated with a gateway or a listener. A WAF policy per rule is not supported</li>
 <li>The simulator approximates the rules with the browser's regular expression engine, which is not exactly RE2</li></ul>

@@ -552,7 +552,8 @@ if (req.method === &quot;OPTIONS&quot; &amp;&amp; req.headers[&quot;access-contr
 
 <section id="notes"><h2>8. 制約・注意事項</h2><ul>
 <li>Advanced rules はプレビュー機能です。マルチサイト リスナーと L4 (TCP/TLS) プロキシでは使えません</li>
-<li>重み付け (ポート 8080 のカナリア、pool-web 90% / pool-canary 10%) は、高度なルールで <code>WeightedDistribution</code> を指定して作ります</li>
+<li>複数プール (重み付け・優先度ベース) は v2 SKU (Standard_v2 / WAF_v2) で使え、Basic ルール、Advanced ルール、Advanced routing map の既定アクションに設定できます。1 か所につき最大 5 プールで、方式はどちらか一方です。このデモは :8080 と :8090 の Advanced routing map に設定しています</li>
+<li>重み付けはプールの正常性を見ません。選ばれたプールに正常なサーバーがなければ、要求は失敗します。正常性で切り替えるなら、優先度ベースを使います</li>
 <li>上限: マップ 100 / ゲートウェイ、条件セット 10,000 / ゲートウェイ、ルール 100 / マップ、条件 5 / 条件セット、値 5 / 条件、値・正規表現 128 文字</li>
 <li>WAF ポリシーはゲートウェイまたはリスナー単位で関連付け。ルール単位の WAF ポリシーは非対応</li>
 <li>シミュレーターの判定はブラウザーの正規表現エンジンで近似しており、RE2 と完全には一致しません</li></ul>
