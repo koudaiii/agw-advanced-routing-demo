@@ -258,6 +258,8 @@ const headerRules = (map, n) => `Array.from({ length: ${n} }, (_, i) => ({ map: 
 // The text under "Basic listener" in the route diagram.
 const listenerLabel = () => page(`const texts = [...document.querySelectorAll("#diagram text")].map((x) => x.textContent);
   return texts[texts.findIndex((x) => /^Basic (リスナー|listener)$/.test(x)) + 1];`);
+// A configuration edit that leaves one rule: Path matches `pattern` → pool-api-v2.
+const pathRule = (pattern) => `(c) => { c.rules = [{ name: "p", priority: 1, conditions: [{ type: "Path", pattern: ${JSON.stringify(pattern)} }], target: { pool: "pool-api-v2" } }]; }`;
 const setUserAgent = (ua) => `const ins = [...document.querySelectorAll("#headers input")]; const i = ins.findIndex((n) => /^user-agent$/i.test(n.value));
   if (i >= 0) { ins[i + 1].value = ${JSON.stringify(ua)}; ins[i + 1].dispatchEvent(new Event("input")); } else t.addHeader("User-Agent", ${JSON.stringify(ua)});`;
 
@@ -275,6 +277,13 @@ test("the 100-rule limit is per map: 60 on :80 and 41 on :8100 save, 101 on :80 
   assert.match(errors[0], /100/);
 });
 
+test("the rule count shows each map against its own 100-rule limit", { skip }, async () => {
+  await open("en");
+  const count = await page(`return t.$("ruleCount").textContent;`);
+  assert.match(count, /:80 5\/100/); // the sample has five rules on :80 ...
+  assert.match(count, /:8100 1\/100/); // ... and the feature flag rule on :8100
+});
+
 for (const [lang, flag, canary] of [["en", ":8100 (feature flag)", ":8080 (canary)"], ["ja", ":8100 (機能フラグ)", ":8080 (カナリア)"]]) {
   test(`the diagram's listener follows the request's port (${lang})`, { skip }, async () => {
     await open(lang);
@@ -289,14 +298,20 @@ for (const [lang, flag, canary] of [["en", ":8100 (feature flag)", ":8080 (canar
 
 test("RE2 flags such as (?i) are accepted and matched; lookahead is still rejected", { skip }, async () => {
   await open("en");
-  const rule = (pattern) => `(c) => { c.rules = [{ name: "p", priority: 1, conditions: [{ type: "Path", pattern: ${JSON.stringify(pattern)} }], target: { pool: "pool-api-v2" } }]; }`;
-  assert.deepEqual(await saveRules(rule("(?i)^/APP")), []);
+  assert.deepEqual(await saveRules(pathRule("(?i)^/APP")), []);
   const summary = await page(`t.preset("^Default$"); t.set("path", "/app/home"); await t.send(); return t.summary();`);
   assert.match(summary, /pool-api-v2/);
   await open("en");
-  const errors = await saveRules(rule("^/api(?!/v1)"));
+  const errors = await saveRules(pathRule("^/api(?!/v1)"));
   assert.equal(errors.length, 1);
   assert.match(errors[0], /not supported by RE2/);
+});
+
+test("the other RE2 flags (?m) and (?s) are accepted too", { skip }, async () => {
+  await open("en");
+  assert.deepEqual(await saveRules(pathRule("(?m)^/app")), []);
+  await open("en");
+  assert.deepEqual(await saveRules(pathRule("(?is)^/APP")), []);
 });
 
 for (const [lang, text] of [["en", "Round Robin hands requests to the healthy servers in turn."], ["ja", "Round Robin は、正常なサーバーに順番に配ります。"]]) {
