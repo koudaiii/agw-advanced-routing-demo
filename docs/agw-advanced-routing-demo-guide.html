@@ -454,9 +454,8 @@ FRONTEND=&lt;frontend IP&gt;:8130 ./lb-check.sh /app/home 100 6</code></pre>
 <p><strong>Before you start</strong>: an Application Gateway with a Basic rule, a listener, and a default backend pool and settings. A second backend pool for v2 and its backend settings.</p>
 <ol>
 <li>Open <strong>Rules</strong> on the gateway and select the Basic rule.</li>
-<li>Set <strong>Rule type</strong> to <strong>Advanced</strong>.</li>
-<li><strong>Listener</strong> tab: enter the rule name (for example <code>rule1</code>) and the <strong>Rule priority</strong>. Lower numbers are evaluated first. The existing listener is prefilled.</li>
-<li><strong>Routing</strong> tab: enter the <strong>Advanced rule name</strong> (for example <code>V2-app-routing</code>) and the <strong>Advanced rule priority</strong>.</li>
+<li><strong>Listener</strong> tab: for an existing Basic rule the fields are prefilled: the rule name (for example <code>rule1</code>), the existing listener, and the <strong>Rule priority</strong> (lower numbers are evaluated first).</li>
+<li><strong>Routing</strong> tab: first set <strong>Rule type</strong> to <strong>Advanced</strong>. Then enter the <strong>Advanced rule name</strong> (for example <code>V2-app-routing</code>) and the <strong>Advanced rule priority</strong>. The Advanced rule priority orders the rules inside the map and is separate from the Rule priority.</li>
 <li><strong>Conditions</strong>: select <strong>+ Add conditions</strong> and create a condition set.
   <ul>
     <li>Condition set name: <code>V2-app-condition</code> (the name of the condition set, not the header name)</li>
