@@ -247,6 +247,66 @@ for (const [lang, note] of [
   });
 }
 
+// Review checks for the rule editor, the diagram, and the prediction text (#123).
+// Opens [Edit rules (JSON)], changes the configuration with `edit` (source of a function), saves, and reports the errors.
+const saveRules = (edit) => page(`t.$("editJson").click(); const c = JSON.parse(t.$("jsonText").value); (${edit})(c);
+  t.$("jsonText").value = JSON.stringify(c); t.$("jsonSave").click(); await t.wait(150);
+  const errors = [...t.$("jsonErr").querySelectorAll("li")].map((x) => x.textContent);
+  if (t.$("jsonDlg").open) t.$("jsonDlg").close(); return errors;`);
+const headerRules = (map, n) => `Array.from({ length: ${n} }, (_, i) => ({ map: ${map}, name: "r${map}-" + i, priority: i + 1,
+  conditions: [{ type: "Header", name: "X-T", values: ["v" + i] }], target: { pool: "pool-web" } }))`;
+// The text under "Basic listener" in the route diagram.
+const listenerLabel = () => page(`const texts = [...document.querySelectorAll("#diagram text")].map((x) => x.textContent);
+  return texts[texts.findIndex((x) => /^Basic (リスナー|listener)$/.test(x)) + 1];`);
+const setUserAgent = (ua) => `const ins = [...document.querySelectorAll("#headers input")]; const i = ins.findIndex((n) => /^user-agent$/i.test(n.value));
+  if (i >= 0) { ins[i + 1].value = ${JSON.stringify(ua)}; ins[i + 1].dispatchEvent(new Event("input")); } else t.addHeader("User-Agent", ${JSON.stringify(ua)});`;
+
+test("saving the rules unchanged gives no error", { skip }, async () => {
+  await open("en");
+  assert.deepEqual(await saveRules("(c) => {}"), []);
+});
+
+test("the 100-rule limit is per map: 60 on :80 and 41 on :8100 save, 101 on :80 does not", { skip }, async () => {
+  await open("en");
+  assert.deepEqual(await saveRules(`(c) => { c.rules = [...${headerRules(80, 60)}, ...${headerRules(8100, 41)}]; }`), []);
+  await open("en");
+  const errors = await saveRules(`(c) => { c.rules = ${headerRules(80, 101)}; }`);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /100/);
+});
+
+for (const [lang, flag, canary] of [["en", ":8100 (feature flag)", ":8080 (canary)"], ["ja", ":8100 (機能フラグ)", ":8080 (カナリア)"]]) {
+  test(`the diagram's listener follows the request's port (${lang})`, { skip }, async () => {
+    await open(lang);
+    await page(`t.preset("^(Feature flag \\\\(on\\\\)|機能フラグ \\\\(オン\\\\))$"); await t.send();`);
+    assert.equal(await listenerLabel(), flag);
+    await open(lang);
+    const prediction = await page(`t.preset("^(Canary|カナリア)"); ${setUserAgent("agw-block-demo")} await t.send(); return t.prediction();`);
+    assert.match(prediction, /403/);
+    assert.equal(await listenerLabel(), canary);
+  });
+}
+
+test("RE2 flags such as (?i) are accepted and matched; lookahead is still rejected", { skip }, async () => {
+  await open("en");
+  const rule = (pattern) => `(c) => { c.rules = [{ name: "p", priority: 1, conditions: [{ type: "Path", pattern: ${JSON.stringify(pattern)} }], target: { pool: "pool-api-v2" } }]; }`;
+  assert.deepEqual(await saveRules(rule("(?i)^/APP")), []);
+  const summary = await page(`t.preset("^Default$"); t.set("path", "/app/home"); await t.send(); return t.summary();`);
+  assert.match(summary, /pool-api-v2/);
+  await open("en");
+  const errors = await saveRules(rule("^/api(?!/v1)"));
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /not supported by RE2/);
+});
+
+for (const [lang, text] of [["en", "Round Robin hands requests to the healthy servers in turn."], ["ja", "Round Robin は、正常なサーバーに順番に配ります。"]]) {
+  test(`Round Robin is described as taking turns among healthy servers (${lang})`, { skip }, async () => {
+    await open(lang);
+    const prediction = await page(`t.preset("8120"); await t.send(); return t.prediction();`);
+    assert.ok(prediction.includes(text), prediction);
+  });
+}
+
 test("no JavaScript errors", { skip }, () => {
   assert.deepEqual(pageErrors, []);
 });
