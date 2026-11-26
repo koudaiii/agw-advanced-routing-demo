@@ -1,31 +1,30 @@
 # Application Gateway Advanced Routing ワークショップ
 
-これは `SKILL.md` (英語、スキル本体) の日本語版です。
+これは `SKILL.md` (英語、スキル本体) の日本語版です。ユーザーが書いた言語で答えてください。
 
 このリポジトリは [Advanced rules (プレビュー)](https://learn.microsoft.com/azure/application-gateway/advanced-rules) と [Advanced load balancing (プレビュー)](https://learn.microsoft.com/azure/application-gateway/advanced-load-balancing) を実機で示すデモです。ワークショップは次の順で進めます。
 
-1. 前提確認
-2. デプロイ (Bicep, 約 15〜20 分)
+1. 前提の確認
+2. デプロイ (Bicep、約 15〜20 分)
 3. 疎通確認 (`test.sh`)
 4. ライブデモ (ルール、WAF、リダイレクト)
-5. 負荷分散シミュレーション (シミュレーターのみ)
-6. 片付け
+5. カナリア、優先度ベース、機能フラグ、サーバー選択 (ポート 8080、8090、8100、8110〜8130)
+6. 負荷分散シミュレーション (シミュレーターのみ)
+7. 片付け
 
-カナリア (8080)、優先度 (8090)、機能フラグ (8100)、サーバー選択 (8110〜8130) の節は、片付けの節の後にあります。
+作業ディレクトリは **リポジトリのルート** です。Azure の操作は、実行前に必ずユーザーに確認してください (課金が発生し、数分かかります)。
 
-作業ディレクトリは **リポジトリのルート** です。Azure の操作は実行前にユーザーへ確認を取ってください (課金が発生し、数分かかります)。
-
-## 1. 前提確認
+## 1. 前提の確認
 
 ```bash
-az account show --query "{sub:name, id:id, user:user.name}" -o table   # 対象サブスクリプションか確認
+az account show --query "{sub:name, id:id, user:user.name}" -o table   # 対象のサブスクリプションか
 az provider show -n Microsoft.Network --query registrationState -o tsv   # Registered であること
 ```
 
-- Azure CLI 2.87.0 には `az network application-gateway advanced-routing-*` が **ありません**。そのためデプロイは CLI ではなく Bicep (`deploy/main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。`az bicep version` で Bicep が使えることを確認します。API バージョンは 2026-03-01 のままです。ARM 検証では 2026-05-01 と 2026-07-01 も成功しましたが、高度なルールの新しい機能は確認できませんでした。
-- SSH 鍵 (`~/.ssh/id_ed25519.pub`) がなければ `deploy.sh` が自動生成します。
-- 必要なパラメーターはありません。カナリアは送信元 IP や URI では絞らず、ポート 8080 の全リクエストを対象に、pool-web 90% / pool-canary 10% に振り分けます (ルール `canary-split`)。
-- 重み付けは Advanced load balancing の機能です。高度なルールで `WeightedDistribution` を指定すれば、実機で振り分けが効きます (2026-11-20 に確認)。
+- Azure CLI 2.87.0 には `az network application-gateway advanced-routing-*` のコマンドが **ありません**。そのため、デプロイは Bicep (`deploy/main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。Bicep は `az bicep version` で確認します。ARM の検証は 2026-05-01 と 2026-07-01 でも通りますが、高度なルールの新しい機能は見つかりませんでした。
+- SSH 鍵 (`~/.ssh/id_ed25519.pub`) がなければ、`deploy.sh` が生成します。
+- パラメーターは不要です。
+- 重み付けと優先度ベースのプール選択は、Advanced load balancing の機能です。高度なルールでは、機能の登録なしで動きます (2026-11-20 に実機で確認)。
 
 ## 2. デプロイ
 
@@ -34,13 +33,28 @@ cd deploy
 ./deploy.sh
 ```
 
-成功すると最後に `Done. Frontend: http://<IP>/` が出ます。以下は `deploy.sh` が行うことです。
+成功すると、最後の行に `Done. Frontend: http://<IP>/` が出ます。`deploy.sh` は次のことを行います。
 
-- `make-cloud-init.sh` で 2 つの初期化ファイルを生成 (`backend/server.js` を埋め込み): `cloud-init.yaml` (バックエンド VM 1) と `cloud-init-canary.yaml` (カナリア VM 2、`backend/pools-canary.conf`)
-- リソースグループ `rg-agw-advrouting-demo` を作成
-- `main.bicep` をデプロイ: VNet (`appgw` 192.168.0.0/24 / `backend` 192.168.1.0/24)、バックエンド NSG、バックエンド VM 1 (Ubuntu 24.04、固定 IP 192.168.1.10、Node.js プロセス 7 つ = ポート 8080–8083、8085、8086 (`pool-slow`、3 秒)、8087 (`pool-rr-a`))、カナリア VM 2 (固定 IP 192.168.1.11、`pool-canary` をポート 8080、`pool-fast` を 8086、`pool-rr-b` を 8087)、WAF_v2 ポリシー (Prevention、DRS 2.1、カスタムルール `BlockDemoIp` と `BlockDemoUA`)、NAT Gateway (StandardV2、backend サブネットに関連付け)、Application Gateway、Advanced routing map (`advancedRoutingMap1`、ポート 80 の条件セット 5 つとルール 5 つ、既定 pool-web)、マップ `canaryMap` (ポート 8080、既定は pool-canary、ルール `canary-split` で pool-web 90 / pool-canary 10、条件セット `cs-canary-split` は全パス一致)、`rule1` (Advanced、ポート 80)、`rule-canary` (Advanced、ポート 8080、マップ `canaryMap`)。
+- `make-cloud-init.sh` で 2 つの初期化ファイルを生成します (どちらも `backend/server.js` を埋め込み): `cloud-init.yaml` (バックエンド VM 1) と `cloud-init-canary.yaml` (カナリア VM 2、`backend/pools-canary.conf` から)
+- リソース グループ `rg-agw-advrouting-demo` を作ります
+- `main.bicep` をデプロイします:
+  - VNet (`appgw` 192.168.0.0/24、`backend` 192.168.1.0/24)、バックエンドの NSG、NAT Gateway (StandardV2、backend サブネットに関連付け)
+  - バックエンド VM 1 (Ubuntu 24.04、固定 IP 192.168.1.10、Node.js プロセス 7 つ: ポート 8080–8083、8085、8086 (`pool-slow`、3 秒)、8087 (`pool-rr-a`))
+  - カナリア VM 2 (固定 IP 192.168.1.11、`pool-canary` をポート 8080、`pool-fast` を 8086、`pool-rr-b` を 8087)
+  - WAF ポリシー (Prevention、DRS 2.1、カスタム ルール `BlockDemoIp` と `BlockDemoUA`)
+  - Application Gateway (WAF_v2) とリスナー 7 つ。4 つは高度なルールと専用のマップを持ち、3 つ (8110〜8130) はサーバー選択用の Basic のルールです:
 
-ゲートウェイのバックエンドが Healthy になるまで数分かかることがあります。確認:
+| ポート | リスナー | ルール | マップ | 内容 |
+|---|---|---|---|---|
+| 80 | `listener-http` | `rule1` | `advancedRoutingMap1` | ルール 5 つ (partner 10、tenant 20、api-v2 30、campaign 40、mobile 60)。既定 `pool-web` |
+| 8080 | `listener-canary` | `rule-canary` | `canaryMap` | ルール `canary-split` (全パス): `pool-web` 90 / `pool-canary` 10、`WeightedDistribution`。既定 `pool-canary` |
+| 8090 | `listener-priority` | `rule-priority` | `priorityMap` | ルール `priority-split` (全パス): `pool-primary` (優先度 1)、次に `pool-standby` (優先度 2)、`PriorityAware`、最小正常割合 60%。既定 `pool-standby` |
+| 8100 | `listener-flag` | `rule-flag` | `flagMap` | ルール `flag-on` (`X-Feature: new`) → `pool-flag-on`。既定 `pool-flag-off` |
+| 8110 | `listener-rr` | `rule-rr` (Basic) | — | `pool-rr`: `pool-rr-a` / `pool-rr-b` (8087)、Round Robin |
+| 8120 | `listener-rr-slow` | `rule-rr-slow` (Basic) | — | `pool-rr-slow`: `pool-slow` (3 秒) / `pool-fast` (8086)、Round Robin |
+| 8130 | `listener-lc` | `rule-lc` (Basic) | — | `pool-lc`: 8120 と同じサーバー、`serverSelectionAlgorithm: 'LeastConnections'` |
+
+バックエンドが正常になるまで数分かかることがあります。確認:
 
 ```bash
 az network application-gateway show-backend-health -g rg-agw-advrouting-demo -n agwdemo-agw -o table
@@ -49,117 +63,66 @@ az network application-gateway show-backend-health -g rg-agw-advrouting-demo -n 
 ## 3. 疎通確認
 
 ```bash
-cd deploy && FRONTEND=<表示された IP> ./test.sh
+cd deploy && FRONTEND=<deploy.sh が表示した IP> ./test.sh
 ```
 
-**期待結果** (実機で確認済み、送信元 IP に依存しません):
+**期待結果** (実機で確認済み。送信元 IP には依存しません):
 
 | シナリオ | 期待 | 理由 |
 |---|---|---|
-| Default (通常アクセス) | 200 pool-web | 既定プール |
-| Tenant (テナント) | 200 pool-tenant | `X-Tenant-Id: customer-*` と `/app` |
-| Partner (パートナー) | 200 pool-partner | `X-Partner-Id` 一致 (GET で送る) |
+| Default | 200 pool-web | 既定プール |
+| Tenant | 200 pool-tenant | `X-Tenant-Id: customer-*` と `/app` |
+| Partner | 200 pool-partner | `X-Partner-Id` が一致 (GET で送る) |
 | API v2 | 200 pool-api-v2 | `X-Api-Version: 2.0` と `/api/orders` |
-| Encoded path (エンコード済みパス) | 200 pool-api-v2 | `/api%2Forders` はデコードされて一致 |
-| Canary (:8080 90:10) | 200 pool-web / pool-canary | 8080 番の全体を pool-web 90% / pool-canary 10% で振り分け (1 件では片方に決まる) |
-| Campaign (キャンペーン) | 302 (`https://www.contoso.com/campaign?campaign=...`) | 高度なルールのキャンペーン条件 (優先度 40) で一致する |
-| Mobile (モバイル) | 200 pool-mobile | iPhone UA。カナリアはポート 8080 のみのため影響しない |
-| Feature flag off | 200 pool-web (`pool-flag-off`) | ポート 8100 (`X-Feature: new` なし)。マップ `flagMap` の既定 |
-| Feature flag on | 200 pool-canary (`pool-flag-on`) | ポート 8100 + `X-Feature: new`。ルール `flag-on` (優先度 10) |
+| Encoded path | 200 pool-api-v2 | `/api%2Forders` はデコードしてから照合 |
+| Canary (:8080 90:10) | 200 pool-web または pool-canary | ポート 8080 全体を 90% / 10% で振り分け。1 件ではどちらか一方 |
+| Campaign | 302 (`https://www.contoso.com/campaign?campaign=...`) | キャンペーンの条件 (優先度 40) が一致 |
+| Feature flag off | 200 pool-web (`pool-flag-off`) | ポート 8100、`X-Feature: new` なし。`flagMap` の既定 |
+| Feature flag on | 200 pool-canary (`pool-flag-on`) | ポート 8100 で `X-Feature: new` あり。ルール `flag-on` (優先度 10) |
+| Mobile | 200 pool-mobile | iPhone の User-Agent |
 | Round Robin (:8110) | 200 pool-rr-a または pool-rr-b | `pool-rr` の速い 2 台 |
 | RR slow (:8120) | 200 pool-fast、または 3 秒後に pool-slow | 遅いサーバーと速いサーバーの Round Robin |
 | Least conn (:8130) | 200 pool-fast、または 3 秒後に pool-slow | 1 件ではどちらにも届く。件数は `lb-check.sh` で見る |
-| WAF block (UA) | 403 | `curl -A agw-block-demo` の要求。ルーティングの前に WAF が遮断する (`BlockDemoUA`) |
+| WAF block (UA) | 403 | `curl -A agw-block-demo`。ルーティングの前に WAF が遮断 (`BlockDemoUA`) |
 
-**100 回連続の確認** (`deploy/canary-check.sh`、ポート 8080):
-
-```bash
-cd deploy && FRONTEND=<IP>:8080 ./canary-check.sh /app/home 100   # → pool-web 約 90 件、pool-canary 約 10 件 (実機確認: 91 / 9)
-cd deploy && FRONTEND=<IP>      ./canary-check.sh /app/home 100   # → ポート 80 は高度なルール (重み付けなし)
-```
-
-> 注意: 重み付けは「期待値」で、件数は少しずれます (ドキュメントどおり、件数が少ないと期待値から外れます)。
+`x-backend-pool` には、応答したプロセスの名前が出ます。ゲートウェイのプール `pool-primary` と `pool-flag-on` は VM 2 の `pool-canary` プロセスを、`pool-standby` と `pool-flag-off` は VM 1 の `pool-web` プロセスを指します。
 
 ## 4. ライブデモ
 
-ブラウザーで `agw-routing-simulator.html` を開き、ゲートウェイ URL に `http://<FRONTEND>` を入力すると、予測と実機の応答を並べて比較できます (`backend/server.js` は CORS 対応済み)。
+ブラウザーで `agw-routing-simulator.html` を開き、ゲートウェイ URL に `http://<FRONTEND>` を入れると、予測と実機の応答が並んで表示されます (`backend/server.js` は CORS 対応済み)。シミュレーターはブラウザーの言語に合わせて日本語か英語で表示し、ヘッダーの言語リンクで切り替えられます。
 
-- 実機モードでは、予測の送信元 IP はプリセットの値ではなく、ゲートウェイが見ている実際の IP (`X-Forwarded-For`) を使います。
-- カナリア (ポート 8080) はシミュレーターの「負荷分散」セクションの「カナリア: ポート 8080 全体 90:10」プリセットで予測します。実機と同じ 90:10 の構成です。ポート 80 の高度なルールは送信元 IP に依存しません。
+- 実機モードの予測は、プリセットの IP ではなく、ゲートウェイが見ている送信元 IP (`X-Forwarded-For`) を使います。
+- ブラウザーは User-Agent ヘッダーを設定できません。「モバイル」と「WAF ブロック」は `curl -A` で見せます。
 
-推奨の順序:
+おすすめの順序:
 
-1. **既定と一致ルール**: 「テナント」「API v2」のプリセットを送信し、実機の `x-backend-pool` と予測が一致することを示す。
-2. **優先度**: ルール 1 (パートナー) とルール 2 (テナント) が両方一致しうる要求を作り、優先度の小さい方が勝つことを示す。
-3. **Path 条件の正規化**: 「エンコード済みパス」で `/api%2Forders` がデコードされて一致することを示す。
-4. **リダイレクト**: 「キャンペーン」を送り、302 と Location (クエリ文字列が引き継がれる) を確認する。優先度 40 の条件なので、プレゼンターの IP からでも出る。
-5. **WAF はルーティングより前**: WAF ブロック用の IP を追加して 403 を出す (次の節)。
+1. **既定と一致するルール**: 「テナント」と「API v2」のプリセットを送り、実機の `x-backend-pool` が予測と一致することを見せます。
+2. **優先度**: パートナーのルール (10) とテナントのルール (20) の両方に一致する要求を作り、数字の小さいほうが勝つことを見せます。
+3. **パスの正規化**: 「エンコード済みパス」で、`/api%2Forders` がデコードされて一致することを見せます。
+4. **リダイレクト**: 「キャンペーン」を送り、302 と Location ヘッダーを確認します (クエリ文字列は引き継がれます)。
+5. **WAF はルーティングより前**: 次の節を参照。
 
-### WAF ブロックの実演
+### WAF ブロック
 
-WAF は、ルーティングより前に要求を遮断します。実演には、テンプレートに入っている User-Agent の WAF ルール `BlockDemoUA` (優先度 12) を使います。どのクライアントからでも再現でき、CLI での作成や削除は不要です。
+WAF は、ルーティングより前に要求を遮断します。テンプレートが作る User-Agent のルール `BlockDemoUA` (優先度 12) を使います。どのクライアントからでも再現でき、CLI での変更も要りません。
 
 ```bash
 curl -i -A "agw-block-demo" http://<FRONTEND>/app/home   # → 403 (ルーティングの前に遮断)
 curl -i http://<FRONTEND>/app/home                        # → 200 (比較用)
 ```
 
-シミュレーターでも、WAF 欄の「ブロックする User-Agent」に `agw-block-demo` を入れた状態で「WAF ブロック (User-Agent)」プリセットを送ると、同じ結果を予測できます。
+シミュレーターでは「WAF ブロック」プリセットで同じ結果を予測します。送信元 IP で遮断する `BlockDemoIp` (198.51.100.0/24) もテンプレートにありますが、送信元 IP は環境で変わるため、デモでは User-Agent のルールを使います。
 
-`BlockDemoIp` (198.51.100.0/24、送信元 IP による遮断) も残しています。送信元 IP は環境で変わるため、デモでは User-Agent を使います。
+## 5. カナリア、優先度ベース、機能フラグ、サーバー選択
 
-## 5. 負荷分散シミュレーション (シミュレーター)
-
-```text
-                  一致したルール
-                        |
-                        v
-              プール選択アルゴリズム
-              |                   |
-              v                   v
-   重み付け (Weighted)        優先度 (Priority)
-   Pool A: 重み 8 (80%)       Priority 1 = 主系 (条件を満たす間)
-   Pool B: 重み 2 (20%)       Priority 2 = 待機系 (主系が使えないとき)
-   異常でも割合は変わらない    最小正常割合で適格かを判定
-```
-
-
-`agw-routing-simulator.html` の「負荷分散: プール選択 → サーバー選択」セクションは **シミュレーションのみ** です。実機には反映されません。実機で 2 台入りのプールがあるのは、ポート 8110〜8130 だけです。
-
-- プリセット: ポート 8080 全体のカナリア 90:10 (実機と同じ構成)、重み 8:2、優先度 (5 台中 1 台異常 → プライマリ、5 台中 3 台異常 → スタンバイ)、WRR 6:3:1 (全台正常 / 重み 6 が異常)
-- 期待値 (ドキュメントと一致): 90:10 → 90/10、8:2 → 80/20。WRR 6:3:1 全台正常 → 60/30/10、重み 6 が異常 → 75/25。優先度 最小正常割合 60%: 5 台中 1 台異常はプライマリ、5 台中 3 台異常はスタンバイ。
-
-ドキュメント対応: 「Pool selection algorithm」「Server selection algorithm」「How requests are distributed」(advanced-load-balancing)。
-
-## 6. 片付け
+### カナリア (ポート 8080)
 
 ```bash
-cd deploy && ./cleanup.sh             # リソースの一覧を表示し、グループ名の入力を求めてからリソースグループを削除
-cd deploy && ./cleanup.sh --dry-run   # 一覧表示だけ (削除なし)
-cd deploy && ./cleanup.sh --yes       # 確認なしで削除 (端末がないときはこれが必要)
+cd deploy && FRONTEND=<IP>:8080 ./canary-check.sh /app/home 100   # → pool-web 約 90 件、pool-canary 約 10 件 (実機確認: 91 / 9)
+cd deploy && FRONTEND=<IP>      ./canary-check.sh /app/home 100   # → ポート 80: 高度なルール、振り分けなし
 ```
 
-`cleanup.sh` は `az group delete -n rg-agw-advrouting-demo --yes --no-wait` を実行します。削除はバックグラウンドで数分かかります (`az group exists -n rg-agw-advrouting-demo` が `false` になれば完了)。ゲートウェイ (WAF_v2) とバックエンド VM は課金されます。ワークショップ後は必ず削除してください。
-
-## 既知の問題
-
-- **本文のない POST が 403 になる**: `/api/orders` への本文のない POST は、DRS 2.1 のマネージドルールに遮断されます。本文 (JSON) 付きの POST や GET / PUT は通ります。ワークショップのテストとシミュレーターは GET で送ります。原因のルール ID は未特定です。
-- **ARM API の事実 (2026-11-20 確認)**: 高度なルールは、単一プール (`backendAddressPool`) と複数プール (`backendAddressPoolsAndSettings` + `poolSelectionAlgorithm`) のどちらも指定できます。複数プールの重み付け (`WeightedDistribution`) は、実機に反映されます。高度なルールに `loadDistributionPolicy` (Basic 用の項目) だけを指定すると、ARM は `ApplicationGatewayAdvancedRoutingRuleMustReference` で拒否します。公開の REST API 仕様 (2026-03-01 / 2026-05-01) には複数プールの項目がなく、仕様は不完全です。
-
-## 講義のポイント (ドキュメントとの対応)
-
-| 話題 | ドキュメント | デモ |
-|---|---|---|
-| 階層 (ルーティングマップ → ルール → 条件セット → 条件) | advanced-rules: Architecture overview | `main.bicep` の `advancedRoutingMaps` / `advancedRoutingConditionSets` |
-| 条件種別 (Header, QueryString, ClientIP, Method, Path) | advanced-rules: Supported condition types | test.sh の各シナリオ |
-| 評価は優先度順、最初の一致で決定 | advanced-rules: Request flows | 優先度 10 (パートナー) と 20 (テナント) |
-| WAF はルーティングより前 | advanced-rules: WAF integration | 「WAF はルーティングより前」の節 |
-| 正規表現 (RE2) とパス正規化 | advanced-rules: Path, Pattern matching | 「エンコード済みパス」 |
-| 負荷分散 (プール選択 / サーバー選択 / 最小正常割合) | advanced-load-balancing | 「負荷分散」セクション (シミュレーター) |
-| 重み付けによるカナリア (ポート全体 90:10) | advanced-load-balancing: Weighted distribution (Advanced ルール) | ポート 8080 の `rule-canary` と マップ `canaryMap`、`canary-check.sh` |
-| サーバー選択 (Round Robin / Least Connections) | advanced-load-balancing: Server selection algorithm | ポート 8110 / 8120 / 8130 と `lb-check.sh`、シミュレーターの 8120 / 8130 プリセット |
-
-## 設計メモ: なぜカナリア用の VM2 が必要か
+重みは期待値です。件数が少ないと 90 / 10 からずれます。
 
 ```text
  VM1 (192.168.1.10)                      VM2 (192.168.1.11)
@@ -171,30 +134,21 @@ cd deploy && ./cleanup.sh --yes       # 確認なしで削除 (端末がない�
  | :8085 pool-mobile          |
  +----------------------------+
 
- 8080 番の流れ: listener-canary -> rule-canary -> canaryMap -> canary-split
-                 -> WeightedDistribution (pool-web 90 / pool-canary 10)
+ 8080 番: listener-canary -> rule-canary -> canaryMap -> canary-split
+          -> WeightedDistribution (pool-web 90 / pool-canary 10)
 ```
 
+- `pool-web` は VM 1 の 8080 番で動きます。`pool-canary` は同じポートで別の応答を返すため、**別の IP アドレス** が必要で、VM 2 (192.168.1.11) の 8080 番で動かします。
+- 高度なルールでは、プールごとにバックエンド設定を持てます。どちらのプールも `hs-pool-web` (8080 番) を使います。VM 2 を別ポートにできるかは未検証です。
 
-- 高度なルールでは、プールごとにバックエンド設定 (`backendHttpSettings`) を持てます。pool-web と pool-canary は、どちらも `hs-pool-web` (8080 番) を使っています。
-- pool-web は VM1 の 8080 番で動いています。同じポートで別の応答を返す pool-canary を置くには、**別の IP アドレス** が必要です。そのため新バージョン (pool-canary) は VM2 (192.168.1.11) の 8080 番で動かします。
-- 以前の構成 (VM1 の 8084 番) は、Basic ルールの重み付けに入れられませんでした (同じポートが必要だったため)。VM2 を別ポートにできるかは未検証です。
-- 代替案: VM1 に 2 つ目の IP を付け、同じ方法で動かせば VM が 1 台減ります。ただし VM1 の初期化データ (customData) の変更は既存 VM で拒否されるため、VM1 の再作成が必要になります。
+### 優先度ベース (ポート 8090)
 
-## 現在の実装状態 (8080 番のカナリア)
-
-- 8080 番のカナリアは、高度なルール `canary-split` (`WeightedDistribution`、pool-web 90 / pool-canary 10) で動きます。切り替えのスイッチはありません。
-
-## 優先度ベースの確認 (ポート 8090)
-
-構成: リスナー `listener-priority` (8090)、ルール `rule-priority` (Advanced、優先度 300)、マップ `priorityMap`。マップの中で、全パスに一致するルール `priority-split` が、`pool-primary` (VM 2、優先度 1) と `pool-standby` (VM 1、優先度 2) を `PriorityAware`、最小正常割合 60% で振り分けます。既定の振り分け先は `pool-standby` です。
-
-確認は 3 つの状態で行います。
+`pool-primary` (VM 2、優先度 1) は、最小正常割合 60% を満たす間だけ使われます。満たさなければ `pool-standby` (VM 1、優先度 2) が使われます。各プールは 1 台なので、見せられるのはプール全体の切り替えだけです。
 
 | 状態 | 期待 | 手順 |
 |---|---|---|
-| 正常 | 100 件すべて `pool-primary` (VM 2) | `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100` |
-| VM 2 停止 | 切り替わるまで約 2〜3 分。その後 100 件すべて `pool-standby` (VM 1) | 下のコマンドで停止し、2〜3 分待つ |
+| 正常 | 100 件すべて `pool-primary` (VM 2、プロセス `pool-canary`) | `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100` |
+| `pool-canary` 停止 | 約 2〜3 分後、100 件すべて `pool-standby` (VM 1、プロセス `pool-web`) | 下のコマンドで停止し、2〜3 分待つ |
 | 復旧 | 100 件すべて `pool-primary` に戻る | 下のコマンドで起動し、2〜3 分待つ |
 
 ```bash
@@ -204,13 +158,13 @@ az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --c
 az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-canary"
 ```
 
-- VM 2 の pool-canary を止めないと、Primary に送られ続けるため、Standby への切り替えは見えません。
-- シミュレーターの「テスト要求」は、選んでいる要求のポートに件数分送ります。優先度 (8090) のプリセットを選んでから押すと、Primary / Standby の件数を数えられます。押すと「キャンセル」に変わり、送信を止められます。結果は「実機の応答」の欄に、50 件ずつ表示します。10 秒以内に応答がない要求は、失敗として数えます。
+- VM 2 の `pool-canary` を止めないと、すべての要求が Primary に送られ続け、切り替えは見えません。
+- `pool-canary` を止めると、ポート 8080 (カナリアの 10%) とポート 8100 のフラグ オンにも影響します。確認後は戻してください。
+- シミュレーターの「テスト要求」は、選んでいる要求のポートに件数分送ります。Primary / Standby を数えるには、先に「優先度 (ポート 8090)」のプリセットを選びます。送信中はボタンが「キャンセル」に変わります。結果は「実機の応答」に 50 件ずつ表示します。10 秒以内に応答がない要求は、失敗として数えます。
 
+### 機能フラグ (ポート 8100)
 
-## 機能フラグ (ヘッダーでオン・オフを決める)
-
-機能フラグ (Feature flag) は、専用のリスナー (ポート 8100) と、専用のマップ `flagMap` で処理します。クライアントがヘッダーでフラグをオンにします。ルール `flag-on` (優先度 10) は、ヘッダー `X-Feature` = `new` に一致した要求を `pool-flag-on` (VM 2 の 8080 番) に送ります。一致しない要求は、マップの既定 `pool-flag-off` (VM 1 の 8080 番) に送ります。`rule-flag` (ポート 8100) が `flagMap` を参照します。
+クライアントがヘッダーでフラグをオンにします。ルール `flag-on` (優先度 10) は、ヘッダー `X-Feature: new` の要求を `pool-flag-on` (VM 2 の 8080 番) に送ります。それ以外は、マップの既定 `pool-flag-off` (VM 1 の 8080 番) に送ります。
 
 | 要求 | 期待 |
 |---|---|
@@ -223,12 +177,12 @@ az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --c
 curl -s -D - -o /dev/null -H "X-Feature: new" http://<FRONTEND-IP>:8100/ | grep -i x-backend-pool
 ```
 
-- シミュレーターの「機能フラグ (オフ / オン)」プリセットで、同じ予測を確認できます。
-- クライアントが選ぶ方式で、ランダムには分けないため、A/B テストではありません。統計的な A/B テスト (ランダムに分け、同じ利用者を同じ側に固定する) は #27 で扱います。
+- シミュレーターの「機能フラグ (オフ)」「機能フラグ (オン)」プリセットで、同じ結果を予測します。
+- クライアントが選ぶ方式で、ランダムには分けないため、A/B テストではありません。統計的な A/B テスト (ランダムに分け、同じ利用者を同じ側に固定する) は issue #27 で扱います。
 
-## サーバー選択 (ポート 8110 / 8120 / 8130)
+### サーバー選択 (ポート 8110 / 8120 / 8130)
 
-1 つのプールの中でゲートウェイがサーバーをどう選ぶか、1 台が詰まったとき (hot spot) に何が起きるかを見せます。各ポートは Basic のルールで、2 台入りのプールに送ります。`x-backend-pool` には応答したサーバーが出ます。
+1 つのプールの中でゲートウェイがサーバーをどう選ぶか、1 台が詰まったとき (hot spot) に何が起きるかを見せます。各ポートは Basic のルールで、2 台入りのプール 1 つに送ります。`x-backend-pool` には応答したサーバーが出ます。
 
 | ポート | ルール / プール | サーバー | 期待 (100 件、同時 6 件) |
 |---|---|---|---|
@@ -242,29 +196,85 @@ cd deploy && FRONTEND=<IP>:8120 ./lb-check.sh /app/home 100 6
 cd deploy && FRONTEND=<IP>:8130 ./lb-check.sh /app/home 100 6
 ```
 
-- Least Connections と Round Robin の差は、遅いサーバーに前の要求が残っている間にだけ出ます。`lb-check.sh` とシミュレーターのテスト要求は同時に 6 件を保って送ります。1 件ずつ送る `canary-check.sh` では差が出ません。
+- Least Connections と Round Robin の差は、遅いサーバーに前の要求が残っている間にだけ出ます。`lb-check.sh` とシミュレーターのテスト要求は、同時に 6 件を保って送ります。1 件ずつ送る `canary-check.sh` では差が出ません。
 - ポートは 1 つずつ試してください。8120 と 8130 は同じ 2 台を使います。
-- 3 秒の遅延はプローブのタイムアウト (20 秒) より短いため、`pool-slow` は正常のままです。応答しなくなったサーバーは、どちらのアルゴリズムでもヘルスプローブで外れます。Least Connections が役に立つのは、プローブには合格するが遅い、というときです。
-- Cookie によるアフィニティが有効だと Least Connections は使われません。`hs-8086` と `hs-8087` では無効にしています。
-- アルゴリズムはプールの `serverSelectionAlgorithm: 'LeastConnections'` (`pool-lc`) です。公開 API 仕様にも Bicep の型定義にもないプレビューの項目で、ポータルでプールを変更し、前後のゲートウェイを比べて見つけました。
-- 新しいプロセスは最初の起動時に cloud-init で入ります。この変更より前にデプロイした環境は、`./cleanup.sh` の後に `./deploy.sh` で作り直してください。
+- 3 秒の遅延はプローブのタイムアウト (20 秒) より短いため、`pool-slow` は正常のままです。応答しなくなったサーバーは、どちらのアルゴリズムでもヘルス プローブで外れます。Least Connections が役に立つのは、プローブには合格するが遅いサーバーがあるときです。
+- Cookie によるアフィニティが有効だと、Least Connections は使われません。`hs-8086` と `hs-8087` では無効にしています。
+- アルゴリズムは、プールの `serverSelectionAlgorithm: 'LeastConnections'` (`pool-lc`) です。公開 API 仕様にも Bicep の型定義にもないプレビューの項目で、ポータルでプールを変更し、前後のゲートウェイを比べて見つけました。
+- 新しいプロセスは、最初の起動時に cloud-init で入ります。この変更より前にデプロイした環境は、`./cleanup.sh` の後に `./deploy.sh` で作り直してください。
 - シミュレーターのプリセット: 「Round Robin (ポート 8110)」「Round Robin 遅いサーバーあり (ポート 8120)」「Least Connections (ポート 8130)」。
+
+## 6. 負荷分散シミュレーション (シミュレーター)
+
+```text
+                  一致したルール
+                        |
+                        v
+              プール選択アルゴリズム
+              |                   |
+              v                   v
+   重み付け (Weighted)        優先度 (Priority)
+   Pool A: 重み 8 (80%)       Priority 1 = プライマリ (条件を満たす間)
+   Pool B: 重み 2 (20%)       Priority 2 = スタンバイ (満たさないとき)
+   異常でも割合は変わらない    条件を満たすかは
+                              最小正常割合で決まる
+```
+
+`agw-routing-simulator.html` の「負荷分散: プール選択 → サーバー選択」セクションは **シミュレーションのみ** で、実機は変わりません。実機で 2 台入りのプールがあるのは、ポート 8110〜8130 だけです。
+
+- プリセット: ポート 8080 のカナリア 90:10 (実機と同じ)、重み 8:2、優先度 (5 台中 1 台異常 → プライマリ、5 台中 3 台異常 → スタンバイ)、WRR 6:3:1 (全台正常 / 重み 6 のサーバーが異常)
+- 期待値 (ドキュメントと同じ): 90:10 → 90/10、8:2 → 80/20。WRR 6:3:1 は全台正常で 60/30/10、重み 6 が異常で 75/25。最小正常割合 60% の優先度では、5 台中 1 台異常ならプライマリのまま、5 台中 3 台異常ならスタンバイ。
+
+ドキュメントの節: 「Pool selection algorithm」「Server selection algorithm」「How requests are distributed」(advanced-load-balancing)。
+
+## 7. 片付け
+
+```bash
+cd deploy && ./cleanup.sh             # リソースを一覧表示し、グループ名の入力を求めてから、リソース グループを削除
+cd deploy && ./cleanup.sh --dry-run   # 一覧表示だけ
+cd deploy && ./cleanup.sh --yes       # 確認なしで削除 (端末がないときに必要)
+```
+
+`cleanup.sh` は `az group delete -n rg-agw-advrouting-demo --yes --no-wait` を実行するため、削除は数分かけてバックグラウンドで終わります (`az group exists -n rg-agw-advrouting-demo` が `false` を返せば完了)。ゲートウェイ (WAF_v2) と VM は稼働時間で課金されます。ワークショップの後は必ず削除してください。
+
+## 既知の問題
+
+- **本文のない POST が 403 になる**: `/api/orders` への本文のない POST は、DRS 2.1 のマネージド ルールに遮断されます。本文 (JSON) 付きの POST、GET、PUT は通ります。テストとシミュレーターは GET で送ります。ルール ID は未特定です。
+- **ARM API の事実 (2026-11-20 に確認)**: 高度なルールは、単一プール (`backendAddressPool`) と複数プール (`backendAddressPoolsAndSettings` + `poolSelectionAlgorithm`) のどちらも指定できます。`loadDistributionPolicy` (Basic のルールの項目) だけを指定すると、ARM は `ApplicationGatewayAdvancedRoutingRuleMustReference` で拒否します。公開の REST API 仕様 (2026-03-01、2026-05-01) には複数プールの項目がないため、Bicep は BCP037 の警告を出しますが、デプロイは成功します。
+- **ルーティング マップには 1 つ以上のルールが必要**: `advancedRoutingRules` が空だと `ApplicationGatewayAdvancedRoutingMapMustSpecifyAdvancedRoutingRules` で失敗します。そのため、`canaryMap` と `priorityMap` は全パス (`^/`) に一致するルールを使います。
+- **`backend/server.js` やプール定義を変えると、VM の初期化データが変わる**: 既存の VM に対して `deploy.sh` が `PropertyChangeNotAllowed` (`osProfile.customData`) で失敗します。VM (またはリソース グループ) を削除してから、もう一度デプロイしてください。
+- **ポータルでの変更は再デプロイで消える**: `deploy.sh` はゲートウェイをテンプレートの状態に戻します。
+
+## 説明のポイント (ドキュメントとの対応)
+
+| 話題 | ドキュメント | デモ |
+|---|---|---|
+| 階層 (ルーティング マップ → ルール → 条件セット → 条件) | advanced-rules: Architecture overview | `main.bicep` の `advancedRoutingMaps` / `advancedRoutingConditionSets` |
+| 条件の種類 (Header、QueryString、ClientIP、Method、Path) | advanced-rules: Supported condition types | `test.sh` のシナリオ |
+| ルールは優先度順に評価し、最初の一致で決まる | advanced-rules: Request flows | 優先度 10 (パートナー) と 20 (テナント) |
+| WAF はルーティングより前 | advanced-rules | 「WAF ブロック」 |
+| 正規表現 (RE2) とパスの正規化 | advanced-rules: Path, pattern matching | 「エンコード済みパス」 |
+| 重み付け (カナリア 90:10) | advanced-load-balancing: Weighted distribution | ポート 8080、`canaryMap`、`canary-check.sh` |
+| 優先度ベースと最小正常割合 | advanced-load-balancing: Priority-based selection | ポート 8090、`priorityMap`、VM 2 の `pool-canary` の停止と起動 |
+| ヘッダーによる機能フラグ | advanced-rules: Use cases | ポート 8100、`flagMap` |
+| サーバー選択 (RR、WRR、Least Connections) | advanced-load-balancing: Server selection | ポート 8110 / 8120 / 8130 と `lb-check.sh`、シミュレーターの「負荷分散」セクション (8120 / 8130 のプリセット) |
 
 ## 設計メモ: 外向き通信 (NAT Gateway)
 
-- バックエンド VM には public IP を付けません。受信は NSG の既定ルール (インターネットからの受信は拒否) で遮断します。
-- 外向き通信 (apt など) は NAT Gateway (StandardV2、専用の StandardV2 public IP) を backend サブネットに関連付けて行います。
-- backend サブネットは `defaultOutboundAccess: false` (プライベート サブネット) です。既定の外向き IP は付きません。既存の VM では、この変更を反映するには停止と割り当て解除が必要です。
+- バックエンド VM には public IP を付けません。インターネットからの受信は、NSG の既定ルールで拒否します。
+- 外向き通信 (apt など) は、backend サブネットに関連付けた NAT Gateway (StandardV2、専用の StandardV2 public IP) を通ります。
+- backend サブネットは `defaultOutboundAccess: false` (プライベート サブネット) のため、既定の外向き IP は付きません。
 
 ## 関連ファイル
 
 - `deploy/main.bicep`: インフラ全体 (テンプレート)
-- `deploy/deploy.sh`: デプロイ手順
-- `deploy/make-cloud-init.sh`, `deploy/cloud-init.yaml`, `deploy/cloud-init-canary.yaml`: バックエンド VM の初期化 (VM 1 / カナリア VM 2)
-- `deploy/test.sh`: 疎通確認
-- `deploy/canary-check.sh`: 指定した URI に 100 回連続で送り、プール別の件数を表示 (カナリアは `FRONTEND=<IP>:8080`)
+- `deploy/deploy.sh`: デプロイ
+- `deploy/make-cloud-init.sh`、`deploy/cloud-init.yaml`、`deploy/cloud-init-canary.yaml`: VM の初期化 (VM 1 / カナリア VM 2)
+- `deploy/test.sh`: シナリオの確認
+- `deploy/canary-check.sh`: 指定した URI に 100 回連続で送り、プール別の件数を表示
 - `deploy/lb-check.sh`: 件数分を同時 6 件で送り、サーバーごとの件数と平均の時間、全体の所要時間を表示 (8110〜8130 のサーバー選択)
-- `deploy/cleanup.sh`: リソースグループを削除 (`--dry-run` は一覧表示だけ、`--yes` は確認を省く)
-- `backend/server.js`, `backend/pools.conf`, `backend/pools-canary.conf`: バックエンドとプール定義
-- `agw-routing-simulator.html`: 予測と実機の比較、負荷分散シミュレーション
-- `docs/agw-advanced-routing-demo-guide_ja.html` (日本語)、`docs/agw-advanced-routing-demo-guide.html` (英語): 参加者向けガイド
+- `deploy/cleanup.sh`: リソース グループを削除 (`--dry-run` は一覧表示だけ、`--yes` は確認を省く)
+- `backend/server.js`、`backend/pools.conf`、`backend/pools-canary.conf`: バックエンドとプール定義
+- `agw-routing-simulator.html`: 予測と実機の応答の比較、テスト要求、負荷分散シミュレーション (英語 / 日本語)
+- `docs/agw-advanced-routing-demo-guide.html` (英語)、`docs/agw-advanced-routing-demo-guide_ja.html` (日本語): 参加者向けガイド
+- `README.md` (英語)、`README_ja.md` (日本語)
