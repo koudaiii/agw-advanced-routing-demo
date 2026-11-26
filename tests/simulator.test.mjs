@@ -401,6 +401,24 @@ test("header condition values are case-sensitive, as on the real gateway", { ski
   assert.match(r.upper, /pool-flag-off/);
 });
 
+// The build guide must fit a phone screen: nothing, not even a table of long error names, may be wider than it (#137).
+for (const file of ["agw-advanced-routing-demo-guide.html", "agw-advanced-routing-demo-guide_ja.html"]) {
+  test(`the build guide fits a phone screen (${file})`, { skip }, async () => {
+    const url = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "docs", file)).href;
+    await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    try {
+      await cdp("Page.navigate", { url: `${url}?lang=${file.includes("_ja") ? "ja" : "en"}` });
+      await sleep(800);
+      const wide = await evaluate(`[...document.querySelectorAll("main *")]
+        .filter((e) => e.getBoundingClientRect().right > document.documentElement.clientWidth + 1)
+        .filter((e) => !e.closest("pre, svg")).map((e) => e.closest("section")?.id + " " + e.tagName).slice(0, 5)`);
+      assert.deepEqual(wide, []);
+    } finally {
+      await cdp("Emulation.clearDeviceMetricsOverride");
+    }
+  });
+}
+
 test("no JavaScript errors", { skip }, () => {
   assert.deepEqual(pageErrors, []);
 });
