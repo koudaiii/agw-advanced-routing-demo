@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<script>
+// Language: ?lang=ja|en wins; otherwise Japanese only when the browser language is ja*. This file is the "en" version.
+(function(){var me="en",other="agw-ignite-2026-announcements_ja.html";
+var q=new URLSearchParams(location.search).get("lang"),chosen=q==="ja"||q==="en";
+var want=chosen?q:((navigator.language||"en").toLowerCase().indexOf("ja")===0?"ja":"en");
+if(want!==me)location.replace(other+(chosen?"?lang="+q:"")+location.hash)})();
+</script>
+<title>Microsoft Ignite 2026: Azure Application Gateway announcements</title>
+<style>
+/* Blog theme (colors and typefaces of the Jekyll blog-theme) */
+:root{
+  --bg:#faf8f3;--fg:#191919;--muted:rgba(25,25,25,.66);
+  --line:rgba(25,25,25,.30);--line-soft:rgba(25,25,25,.16);
+  --soft:#f1ece2;--card:#fffdf8;--code:#f1ece2;
+  --accent:#7d5a4c;--accent-hi:#a4614f;--logo:#5c4f43;
+  --note:#f5ead6;--note-line:#d6bb8d;
+  --sans:"Segoe Sans","Segoe UI Variable Text","Segoe UI",Arial,"Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;
+  --serif:"Segoe Serif",Georgia,"Yu Mincho","YuMincho","Hiragino Mincho ProN",serif;
+  --g1:linear-gradient(118deg,#85939f 0%,#5e8aa3 30%,#658da5 45%,#919597 68%,#d6bb8d 100%);
+  --g3:linear-gradient(135deg,#efe4d2 0%,#d6bb8d 45%,#a89f92 100%);
+}
+html{background:var(--bg);color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.75;font-size:15px;-webkit-font-smoothing:antialiased}
+main{max-inline-size:980px;margin-inline:auto;padding-block:48px 96px;padding-inline:clamp(28px,7vw,96px)}
+header{position:relative;padding-block-start:28px}
+header::before{content:"";position:absolute;inset-block-start:0;inset-inline:0;block-size:6px;border-radius:999px;background:var(--g1)}
+.eyebrow{color:var(--logo);font-size:13px;letter-spacing:.04em;margin:0}
+h1{font:400 clamp(28px,4vw,38px)/1.25 var(--serif);letter-spacing:-.02em;margin-block:8px 14px}
+h2{font:400 24px/1.35 var(--serif);letter-spacing:.01em;margin-block:56px 14px;padding-block-end:8px;border-block-end:1px solid var(--line)}
+h3{font:400 18px/1.45 var(--serif);margin-block:30px 8px}
+.lead{font-size:16px;margin-block:0 10px}
+.meta{color:var(--muted);font-size:13px}
+nav{background:var(--soft);border:0;border-radius:16px;padding:6px 24px 16px;margin-block-start:28px}
+nav h2{border:0;margin-block:14px 0 4px;font-size:17px}
+nav ol{columns:2;margin-block:6px}
+a{color:var(--accent);text-underline-offset:3px}
+a:hover{color:var(--accent-hi)}
+code{font-family:ui-monospace,SFMono-Regular,Consolas,"BIZ UDGothic",monospace;font-size:.9em;background:var(--soft);padding-inline:5px;border-radius:4px}
+pre{background:var(--code);border:0;border-radius:12px;padding:16px 20px;overflow-x:auto;font-size:12.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all}
+pre code{background:none;padding:0;font-size:inherit}
+table{border-collapse:collapse;inline-size:100%;margin-block:14px;font-size:14px}
+th,td{border-block-end:1px solid var(--line-soft);padding:8px 10px;text-align:start;vertical-align:top}
+thead th{border-block-end:1px solid var(--line);font-weight:600;color:var(--logo)}
+.note{background:var(--note);border-inline-start:3px solid var(--note-line);padding:10px 16px;border-radius:0 12px 12px 0;font-size:14px}
+.diagram{margin:20px 0}
+.diagram svg{inline-size:100%;block-size:auto;background:var(--card);border:1px solid var(--line-soft);border-radius:16px}
+.diagram figcaption{font-size:13px;color:var(--muted);margin-block-start:8px}
+.box{fill:var(--bg);stroke:var(--logo);stroke-width:1.3}
+.ln{stroke:var(--accent);stroke-width:2;fill:none}
+.dash{stroke-dasharray:6 5;stroke:var(--muted)}
+.ink{fill:var(--accent)}
+svg text{fill:var(--fg);text-anchor:middle;font-size:12px;font-family:var(--sans)}
+svg .h{font-weight:700;font-size:14px}
+svg .m{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+svg .l{text-anchor:start}
+@media (max-width:600px){
+  main{padding-inline:16px}
+  nav ol{columns:1}
+  h2{margin-block:44px 12px}
+}
+@media print{body{font-size:11pt}main{padding:0}nav{break-after:page}pre,table,figure{break-inside:avoid}a{color:inherit}header::before{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+.table-wrap{overflow-x:auto}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-block:18px 6px}
+.kpi{background:var(--soft);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+.kpi .num{font:400 26px/1.15 var(--serif);color:var(--logo)}
+.kpi .num small{font-size:14px;margin-inline-start:2px}
+.kpi .lbl{font-size:13px;color:var(--muted);line-height:1.5}
+@media (max-width:820px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style></head>
+<body><main>
+<header>
+<p class="meta"><a href="https://github.com/koudaiii/agw-advanced-routing-demo">GitHub: koudaiii/agw-advanced-routing-demo</a> · English | <a href="agw-ignite-2026-announcements_ja.html?lang=ja" lang="ja" hreflang="ja">日本語</a></p>
+<p class="eyebrow">Microsoft Ignite 2026 · Azure networking</p>
+<h1>Microsoft Ignite 2026: Azure Application Gateway announcements</h1>
+<p class="lead">As of November 26, 2026. Scope: the five 2026 items in Azure Updates with product "Application Gateway" and tag "Microsoft Ignite" (all public previews published on November 17, 2026, with Update Types "Microsoft Ignite" and "Feature").</p>
+<p class="meta">Related: <a href="agw-advanced-routing-demo-guide.html?lang=en">Demo environment build guide</a> (Advanced routing and load balancing on a real gateway)</p>
+</header>
+
+<nav aria-label="Contents"><h2>Contents</h2><ol>
+<li><a href="#s1">Summary: five features that move routing, authentication, and data protection into the gateway</a></li><li><a href="#s2">Overview: where in the gateway each feature works</a></li><li><a href="#s3">1. Accelerated deployment tier: faster scaling for new gateways</a></li><li><a href="#s4">2. Advanced routing rules: five condition types in one rule</a></li><li><a href="#s5">3. Advanced load balancing: pool selection and server selection in two steps</a></li><li><a href="#s6">4. Centralized user authentication + JWT validation: moving authentication from apps to the gateway</a></li><li><a href="#s7">5. Confidential Compute: protecting data in a TEE even after decryption</a></li><li><a href="#s8">Combination limits: four points to check before design</a></li><li><a href="#s9">Next steps: a proof of concept per scenario</a></li><li><a href="#s10">Related updates from the same period (without the Ignite tag)</a></li><li><a href="#s11">Results in the demo environment: Advanced routing and load balancing on a real gateway</a></li><li><a href="#s12">Sources</a></li></ol></nav>
+
+<section id="s1"><h2>Summary: five features that move routing, authentication, and data protection into the gateway</h2>
+<p>The Application Gateway announcements at Ignite 2026 move decisions that apps and surrounding infrastructure used to make into the gateway. They cover four areas, scale platform, traffic control, identity, and data protection, with five items in all.</p>
+<p>All five are public previews (no SLA, not recommended for production). Some come with limits such as "can be chosen only at creation" or "cannot be combined with other preview features". Start with a proof of concept, with those limits in mind.</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">#</th><th scope="col">Announcement (Azure Update ID)</th><th scope="col">Area</th><th scope="col">What changes</th><th scope="col">Existing gateway</th></tr></thead><tbody><tr><td>1</td><td>Next-generation elastic architecture = Accelerated deployment tier (580428)</td><td>Scale platform</td><td>Up to 50% shorter provisioning and up to 70% shorter autoscaling</td><td>No (chosen at creation)</td></tr><tr><td>2</td><td>Advanced routing rules (579324)</td><td>Traffic control</td><td>Routing by Header / QueryString / ClientIP / Method / Path conditions</td><td>Yes (update a Basic rule to Advanced)</td></tr><tr><td>3</td><td>Advanced load balancing (580423)</td><td>Traffic control</td><td>Between pools: weighted or priority; within a pool: weighted round robin or least connections</td><td>Yes</td></tr><tr><td>4</td><td>Centralized user authentication + JWT validation (580418)</td><td>Identity</td><td>OIDC sign-in and JWT validation, with one policy applied to many gateways</td><td>Yes</td></tr><tr><td>5</td><td>Confidential Compute (579649)</td><td>Data protection</td><td>The data plane runs in a TEE, protecting data even after decryption</td><td>No (enabled at creation)</td></tr></tbody></table></div>
+<div class="kpis" role="list"><div class="kpi" role="listitem"><span class="num">5<small> items</small></span><span class="lbl">All public preview<br>(published November 17, 2026)</span></div><div class="kpi" role="listitem"><span class="num">50<small>%</small> / 70<small>%</small></span><span class="lbl">Accelerated tier, maximum reduction<br>provisioning / autoscaling</span></div><div class="kpi" role="listitem"><span class="num">5<small> types</small></span><span class="lbl">Advanced routing conditions<br>Header, Query, ClientIP, Method, Path</span></div><div class="kpi" role="listitem"><span class="num">West / East</span><span class="lbl">Japan regions<br>Accelerated: Japan West; Confidential: Japan East</span></div></div>
+</section>
+<section id="s2"><h2>Overview: where in the gateway each feature works</h2>
+<p>#2 to #4 work at stages of request processing; #1 and #5 work on the gateway's platform itself.</p>
+<pre><code>Client
+  │ HTTPS
+  ▼
+Application Gateway (Standard_v2 / WAF_v2)
+  ├─ ① Listener ............ Advanced rules need a Basic listener (no multisite)
+  ├─ ② WAF policy .......... Evaluated before routing (per gateway / listener)
+  ├─ ③ Routing rule ........ Authentication policy (OIDC / JWT) per rule [#4]
+  ├─ ④ Advanced routing map  Condition sets (AND) in priority order [#2]
+  ├─ ⑤ Pool selection ...... Weighted, or priority + minimum healthy percentage [#3]
+  └─ ⑥ Server selection .... Round robin / weighted RR / least connections [#3]
+  ▼
+Backend pool
+
+Platform: Accelerated tier [#1] / Confidential Compute (TEE) [#5]
+* During the preview, the Accelerated tier cannot be combined with other preview features, including #2 to #5</code></pre>
+</section>
+<section id="s3"><h2>1. Accelerated deployment tier: faster scaling for new gateways</h2>
+<p>The next-generation architecture of Application Gateway v2 can now be chosen as a new deployment tier, "Accelerated (preview)". Compared with the current tier, it cuts provisioning time by up to 50% and autoscaling time by up to 70%. It also supports scale-out in under a minute and longer connection draining. There is no extra charge; the billing model is the same as today.</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">Deployment tier</th><th scope="col">Position</th><th scope="col">Fits</th></tr></thead><tbody><tr><td>Standard</td><td>The current GA platform. A public frontend IP is required</td><td>General workloads, workloads that need WAF</td></tr><tr><td>Network isolated</td><td>Private-only gateways without a registration flag</td><td>No public IP allowed, forced tunneling of outbound traffic, outbound Deny All</td></tr><tr><td>Accelerated (preview)</td><td>Public, private-only, or both, without registration</td><td>Sudden traffic changes, when scaling speed and limits matter</td></tr></tbody></table></div>
+<h3>Limits during the preview</h3>
+<ul><li>The deployment tier cannot be changed after creation. There is no in-place migration of an existing gateway (create a new one and move the configuration)</li><li>The WAF tier, FIPS mode, TCP/TLS proxy, and Private Link are not supported</li><li>Other features currently in preview (including #2 to #5 in this document) cannot be combined with it</li><li>Keep at least 10 free IP addresses in the gateway subnet. Allow inbound traffic from the client IP ranges to the listener ports in the NSG</li><li>The gateway health dashboard, the certificate metadata API, on-demand backend health, and subnet sharing are not available</li><li>Available in 21 regions. In Japan, only Japan West (not Japan East). In the portal, create it from the preview link</li></ul>
+<p class="note"><strong>Note</strong> the Japanese Learn page (updated November 17, 2026) is older than the English page (updated November 25) and differs in the region list and limits. Check against the English page.</p>
+</section>
+<section id="s4"><h2>2. Advanced routing rules: five condition types in one rule</h2>
+<p>Routing that used to center on paths now also branches on attributes of the HTTP request. Rules are evaluated from the smallest priority; the request goes to the destination of the first matching rule (a backend pool or a redirect). If no rule matches, it goes to the default pool.</p>
+<pre><code>Advanced routing map (up to 100 per gateway)
+  ├─ Advanced routing rule (up to 100 per map) ... evaluated from the smallest priority
+  │    ├─ Condition set ... up to 5 conditions; matches when all match (AND)
+  │    │    └─ Condition ... up to 5 values; matches when any matches (OR). Values and regex up to 128 characters
+  │    └─ Destination ... backend pool + HTTP settings (+ rewrite set), or a redirect
+  └─ Default destination ... pool + HTTP settings (+ rewrite set) when no rule matches
+Up to 10,000 condition sets per gateway</code></pre>
+<div class="table-wrap"><table><thead><tr><th scope="col">Condition type</th><th scope="col">Match</th><th scope="col">Notes</th></tr></thead><tbody><tr><td>Header</td><td>Exact / regular expression</td><td>Regular expressions must be RE2-compatible</td></tr><tr><td>QueryString</td><td>Exact / regular expression</td><td>Only QueryString accepts an empty value</td></tr><tr><td>ClientIP</td><td>IPv4 / IPv6</td><td>CIDR notation</td></tr><tr><td>Method</td><td>Exact only</td><td>Uppercase (GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, PATCH)</td></tr><tr><td>Path</td><td>Exact / regular expression</td><td>Evaluated after URL decoding (<code>/foo%2Fbar</code> is compared as <code>/foo/bar</code>)</td></tr></tbody></table></div>
+<h3>Example condition (in the format Learn uses)</h3>
+<pre><code>{
+  "conditionType": "Header",
+  "propertyName": "X-Custom-Header",
+  "propertyValueMatcher": { "pattern": "^(customer-[0-9]+|partner-[a-z]+)$" }
+}</code></pre>
+<h3>Limits and notes</h3>
+<ul><li>Basic listeners only. Multisite listeners and L4 (TCP/TLS proxy) are not supported</li><li>WAF is evaluated before routing. A WAF policy is per gateway or listener; it cannot be associated per rule</li><li>Rewrite sets are applied after the routing decision, before the request is sent to the backend</li><li>The portal's gateway creation wizard cannot configure it. After creation, update an existing Basic rule to Advanced</li><li>The priority of an Advanced rule is separate from the priority of an ordinary routing rule</li></ul>
+<p class="note"><strong>Conflicting information</strong> the Learn overview page still has a sentence saying "only Header conditions during the public preview". The condition list on the same page, the Azure Update, and the product blog all state five types. The published demo environment also worked with, among others, an AND of a Header (regular expression) and a Path condition, so this summary treats all five types as supported. Check in the portal or API before use.</p>
+<p class="note"><strong>Use cases</strong> A/B tests and canaries (header), API versioning (query / header), multitenancy (tenant ID header), read/write split (method), internal and partner paths (client IP), mobile split (User-Agent).</p>
+</section>
+<section id="s5"><h2>3. Advanced load balancing: pool selection and server selection in two steps</h2>
+<p>One rule can have several backend pools. The gateway first picks a pool, then a server in that pool. The two choices are independent; for example, "weighted between pools, least connections within a pool".</p>
+<pre><code>Request
+  ▼
+① Pool selection (up to 5 pools per rule or default action; one method or the other)
+  ├─ Weighted ... integers 0–100 set the ratio (e.g. 8:2 is 80% / 20%)
+  └─ Priority ... 1–5. The highest-priority pool that meets the minimum healthy percentage (0–100%)
+  ▼
+② Server selection (set per pool)
+  ├─ Round robin (default)
+  ├─ Weighted round robin ... 0–100. Only servers registered by IP / FQDN
+  └─ Least connections ...... Not applied while cookie affinity is on</code></pre>
+<h3>Priority failover example (minimum healthy percentage 60%, 5 primary servers, 4 standby servers)</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">Situation</th><th scope="col">Primary healthy percentage</th><th scope="col">Selected pool</th></tr></thead><tbody><tr><td>1 primary server down</td><td>80% (4 of 5)</td><td>Primary</td></tr><tr><td>3 primary servers down</td><td>40% (2 of 5)</td><td>Standby (switches even with 2 healthy servers left)</td></tr></tbody></table></div>
+<p>When no pool meets the threshold, requests go to the highest-priority pool. When a higher pool meets the threshold again, new requests go back to it at once (the return cannot be delayed).</p>
+<h3>Design pitfalls</h3>
+<ul><li>Weighted selection does not look at pool health. If a pool with no healthy server is chosen, the request fails. To take a pool out, set its weight to 0; to switch by health, use priority</li><li>With cookie affinity on, weighted selection pins existing sessions with a pool cookie (a weight change affects new sessions only). Priority selection issues no pool cookie, and on a switch the next request moves</li><li>New instances right after a scale-out count as unhealthy until they pass the probe. The healthy percentage drops for a while and can cause an unintended switch (going from 4 to 8 servers is 50% for a while)</li><li>Weighted round robin cannot be used in a pool that has NIC-associated VMs / VMSS</li><li>The Basic SKU and L4 (TCP/TLS proxy) are not supported. Classic path-based rules stay at one pool. Multiple pools are set on Basic / Advanced rules (and the default action of an Advanced routing map)</li><li>HTTP settings with Dedicated Backend Connection cannot be used for multiple pools</li><li>API version 2026-03-01 or later is required</li></ul>
+<p class="note"><strong>For AI</strong> put a PTU (provisioned throughput) endpoint in the priority 1 pool and a pay-as-you-go endpoint in the priority 2 pool. Traffic goes to pay-as-you-go only when the provisioned side drops below the threshold. Clients need no change.</p>
+</section>
+<section id="s6"><h2>4. Centralized user authentication + JWT validation: moving authentication from apps to the gateway</h2>
+<p>One authentication policy can now be created and associated with routing rules on many gateways. Use OIDC user sign-in for browsers and JWT validation for APIs.</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">Aspect</th><th scope="col">User authentication</th><th scope="col">JWT validation</th></tr></thead><tbody><tr><td>Main clients</td><td>Browsers (interactive users)</td><td>APIs, service-to-service, automation</td></tr><tr><td>Method</td><td>OIDC authorization code flow</td><td>Bearer token validation (signature, issuer, audience, expiry)</td></tr><tr><td>Redirect to the IdP</td><td>Yes</td><td>No</td></tr><tr><td>Gateway session cookie</td><td>Yes (default name ApplicationGatewayUserSession, 7 days by default)</td><td>No (the token is validated every time)</td></tr><tr><td>Unauthenticated requests</td><td>Authenticate (recommended) / allow / deny (401)</td><td>Deny (401) / allow (forwarded without the identity header)</td></tr><tr><td>Headers to the backend</td><td><code>x-msft-entra-identity</code> (<code>&lt;tid&gt;:&lt;sub&gt;</code>), plus the ID / access token when available</td><td><code>x-msft-entra-identity</code> (<code>tenantId:oid</code>)</td></tr></tbody></table></div>
+<h3>Prerequisites</h3>
+<ul><li>Standard_v2 / WAF_v2. An HTTPS listener is required (not HTTP)</li><li>Applies to Basic / Advanced rules (including Advanced rules with path conditions). Classic path-based rules are not supported</li><li>One authentication policy per rule. The policy is a regional resource in the same region as the gateway</li><li>User authentication: the IdP is Microsoft Entra ID. Keep the client secret in Key Vault and give each gateway's managed identity read access. Up to 10 scopes (default: openid, profile, email)</li><li>JWT validation: the gateway must reach the Microsoft Entra metadata endpoint over TCP 443</li></ul>
+<h3>The earlier JWT validation preview</h3>
+<ul><li>This JWT validation is a revision of the existing JWT validation preview. The earlier preview will not go GA and will be retired (a formal retirement notice will follow)</li><li>Earlier policies keep working until the new centralized JWT validation is GA. There is no automatic migration</li><li>Use centralized policies for new configurations; users of the earlier preview should plan to reconfigure</li></ul>
+</section>
+<section id="s7"><h2>5. Confidential Compute: protecting data in a TEE even after decryption</h2>
+<p>The Application Gateway data plane runs in a hardware trusted execution environment (TEE), protecting data while the gateway decrypts and processes it. TLS termination, WAF, L7 routing, L4 proxy, load balancing, and monitoring work as before.</p>
+<pre><code>Client ──TLS──▶ Application Gateway (Confidential Compute)
+                  └─ In the TEE: TLS termination → WAF inspection → routing
+                     (memory encrypted by hardware, isolated from the hypervisor and host)
+                ──TLS──▶ Backend (e.g. Confidential VM)</code></pre>
+<ul><li>An add-on for Standard_v2 / WAF_v2. It can be enabled only when the gateway is created (not on an existing one)</li><li>In the portal, select the check box at creation. In the API, <code>"enableConfidentialCompute": true</code> (API version 2026-05-01 or later)</li><li>Pricing: "SKU fixed price + capacity units + hourly charge for the Confidential Compute add-on"</li><li>Available in 17 regions. In Japan, only Japan East (not Japan West)</li><li>It does not protect against vulnerabilities in app code or a compromised backend</li></ul>
+<div class="table-wrap"><table><thead><tr><th scope="col">Key Vault type</th><th scope="col">Private key</th><th scope="col">Protection</th></tr></thead><tbody><tr><td>Standard / Premium</td><td>The gateway gets the PFX and does TLS in the TEE</td><td>Private key and app data protected in the TEE</td></tr><tr><td>Managed HSM</td><td>The private key never leaves the HSM; the HSM does the cryptography</td><td>Key in the HSM, app data in the TEE</td></tr></tbody></table></div>
+<p class="note"><strong>Fits</strong> workloads with financial transactions, health information, personal data, or intellectual property, and extending the protection of confidential backends (such as Confidential VMs) to the app delivery layer.</p>
+</section>
+<section id="s8"><h2>Combination limits: four points to check before design</h2>
+<ol><li>Chosen only at creation: the Accelerated tier and Confidential Compute. To use them with an existing gateway, create a new one and move the configuration</li><li>Try Accelerated on its own: during the preview, it cannot be combined with the WAF tier or other preview features, including #2 to #5</li><li>Move path-based rules to Advanced rules: multi-pool load balancing and authentication policies do not work on classic path-based rules. Replacing them with Advanced rules with Path conditions makes both available</li><li>Japan regions differ: Accelerated is Japan West only, Confidential Compute is Japan East only</li></ol>
+<div class="table-wrap"><table><thead><tr><th scope="col">Feature</th><th scope="col">Add to an existing gateway</th><th scope="col">With WAF_v2</th><th scope="col">L4 (TCP/TLS) proxy</th><th scope="col">Classic path-based rules</th><th scope="col">Japan regions</th></tr></thead><tbody><tr><td>#1 Accelerated</td><td>No</td><td>No (WAF tier not supported)</td><td>No</td><td>— (tier feature)</td><td>Japan West only</td></tr><tr><td>#2 Advanced routing</td><td>Yes</td><td>Yes (WAF per gateway / listener)</td><td>No</td><td>Replacement</td><td>Not stated</td></tr><tr><td>#3 Advanced load balancing</td><td>Yes</td><td>Yes</td><td>No</td><td>No (stays at one pool)</td><td>Not stated</td></tr><tr><td>#4 User authentication / JWT</td><td>Yes</td><td>Yes</td><td>— (HTTPS listeners only)</td><td>No</td><td>Not stated</td></tr><tr><td>#5 Confidential Compute</td><td>No</td><td>Yes</td><td>Yes</td><td>— (platform feature)</td><td>Japan East only</td></tr></tbody></table></div>
+</section>
+<section id="s9"><h2>Next steps: a proof of concept per scenario</h2>
+<div class="table-wrap"><table><thead><tr><th scope="col">Customer problem</th><th scope="col">Feature to try</th><th scope="col">First step</th></tr></thead><tbody><tr><td>Scaling cannot keep up with traffic spikes</td><td>#1</td><td>In Japan West, put a workload that does not need WAF on a new gateway and measure the scaling time</td></tr><tr><td>Staged releases; making full use of AI PTUs</td><td>#2 + #3</td><td>Update a test Basic rule on an existing gateway to Advanced, and try 90:10 weights and priority switching</td></tr><tr><td>Stop implementing authentication in every app</td><td>#4</td><td>Create a user authentication policy for browser apps and a JWT validation policy for APIs, and associate them with several gateways</td></tr><tr><td>Protecting data in use is a requirement (finance, healthcare, and so on)</td><td>#5</td><td>In Japan East, create a new gateway with Confidential Compute and consider Managed HSM</td></tr><tr><td>Using the earlier JWT validation preview</td><td>#4</td><td>Plan the move to the new centralized policy and watch for the retirement notice</td></tr></tbody></table></div>
+<p>All of these are previews. Decide on production use after GA and the Learn updates.</p>
+</section>
+<section id="s10"><h2>Related updates from the same period (without the Ignite tag)</h2>
+<ul><li>GA: WAF Insights for Azure Application Gateway (579280, published November 23, 2026)</li><li>Public preview: Application Gateway for Containers Private ingress (576393), MCP gateway (576388), JWT validation (576382)</li><li>GA: Keyless TLS on Application Gateway with Azure Key Vault Managed HSM (577130)</li></ul>
+</section>
+<section id="s11"><h2>Results in the demo environment: Advanced routing and load balancing on a real gateway</h2>
+<ul><li>Published: build guide <a href="https://koudaiii.com/agw-advanced-routing-demo/">https://koudaiii.com/agw-advanced-routing-demo/</a> , simulator and Bicep <a href="https://github.com/koudaiii/agw-advanced-routing-demo">https://github.com/koudaiii/agw-advanced-routing-demo</a></li><li>Setup: WAF_v2 (capacity 1), 7 Basic listeners (:80 / :8080 / :8090 / :8100 / :8110 / :8120 / :8130), 4 Advanced rules and 3 Basic rules deployed with Bicep</li><li>The Advanced routing CLI commands (<code>advanced-routing-set</code> / <code>advanced-routing-map</code>) are available in Azure CLI 2.92.0 and later. The demo deploys with Bicep and uses the CLI to check the real gateway</li><li>A 90:10 weighted canary (91 / 9 over 100 requests), a header feature flag (<code>X-Feature: new</code>), and priority failover with a 60% minimum healthy percentage worked. The switch took about 2–3 minutes after the primary was stopped</li><li>Header values were case-sensitive (<code>X-Feature: NEW</code> went to the default pool)</li><li>Server selection: with 100 requests (6 at a time) to two servers, one of which takes 3 seconds, Round Robin sent about half to the slow server, and Least Connections sent 10 or fewer</li><li>An encoded path (<code>/api%2Forders</code>) was evaluated by the Path condition after decoding</li><li>Regular expressions must be RE2-compatible. Lookahead and backreferences are not available</li></ul>
+</section>
+<section id="s12"><h2>Sources</h2>
+<h3>Azure Updates (all published November 17, 2026)</h3>
+<ul><li>580428 Public Preview: Next-generation elastic architecture for Azure Application Gateway v2 — <a href="https://azure.microsoft.com/updates?id=580428">https://azure.microsoft.com/updates?id=580428</a></li><li>579324 Public Preview: Azure Application Gateway advanced routing rules — <a href="https://azure.microsoft.com/updates?id=579324">https://azure.microsoft.com/updates?id=579324</a></li><li>580423 Public Preview: Advanced load balancing in Azure Application Gateway — <a href="https://azure.microsoft.com/updates?id=580423">https://azure.microsoft.com/updates?id=580423</a></li><li>580418 Public Preview: Centralized user authentication + JWT validation for Azure Application Gateway — <a href="https://azure.microsoft.com/updates?id=580418">https://azure.microsoft.com/updates?id=580418</a></li><li>579649 Public Preview: Azure Application Gateway confidential compute support — <a href="https://azure.microsoft.com/updates?id=579649">https://azure.microsoft.com/updates?id=579649</a></li></ul>
+<h3>Microsoft Learn</h3>
+<ul><li>Application Gateway deployment tiers — <a href="https://learn.microsoft.com/azure/application-gateway/deployment-tier">https://learn.microsoft.com/azure/application-gateway/deployment-tier</a></li><li>Advanced routing rules — <a href="https://learn.microsoft.com/azure/application-gateway/advanced-rules">https://learn.microsoft.com/azure/application-gateway/advanced-rules</a></li><li>Tutorial: Configure header-based routing with Advanced rules — <a href="https://learn.microsoft.com/azure/application-gateway/configure-advanced-routing-rule">https://learn.microsoft.com/azure/application-gateway/configure-advanced-routing-rule</a></li><li>Advanced load balancing — <a href="https://learn.microsoft.com/azure/application-gateway/advanced-load-balancing">https://learn.microsoft.com/azure/application-gateway/advanced-load-balancing</a></li><li>User authentication — <a href="https://learn.microsoft.com/azure/application-gateway/user-authentication">https://learn.microsoft.com/azure/application-gateway/user-authentication</a></li><li>JWT validation — <a href="https://learn.microsoft.com/azure/application-gateway/json-web-token-overview">https://learn.microsoft.com/azure/application-gateway/json-web-token-overview</a></li><li>Confidential Compute overview — <a href="https://learn.microsoft.com/azure/application-gateway/confidential-compute-overview">https://learn.microsoft.com/azure/application-gateway/confidential-compute-overview</a></li></ul>
+<h3>Product blog</h3>
+<ul><li>Redefining application load balancing in Azure Application Gateway (November 11, 2026) — <a href="https://techcommunity.microsoft.com/blog/AzureNetworkingBlog/redefining-application-load-balancing-in-azure-application-gateway/4572687">https://techcommunity.microsoft.com/blog/AzureNetworkingBlog/redefining-application-load-balancing-in-azure-application-gateway/4572687</a></li></ul>
+</section>
+<p class="meta">Based on public information and tests as of November 26, 2026. Preview features can change.</p>
+</main></body></html>
