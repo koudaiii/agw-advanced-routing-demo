@@ -67,7 +67,7 @@ ol.rules{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;g
 .target{margin-inline-start:auto;font-family:var(--mono);font-size:12px}
 figure{margin:0}
 figcaption{font:400 15px/1.4 var(--serif);margin-block-end:8px}
-svg.diagram{display:block;inline-size:100%;block-size:auto;min-inline-size:640px;background:var(--card);border:1px solid var(--line-soft);border-radius:16px}
+svg.diagram{display:block;inline-size:100%;block-size:auto;max-block-size:50vh;min-inline-size:640px;background:var(--card);border:1px solid var(--line-soft);border-radius:16px}
 .scroll-x{overflow-x:auto}
 pre{font-family:var(--mono);font-size:12px;background:var(--soft);border-radius:12px;padding:10px 12px;margin:0;white-space:pre-wrap;word-break:break-all}
 .page{border:1px solid var(--line-soft);border-radius:16px;overflow:hidden;background:var(--card)}
@@ -706,7 +706,7 @@ function renderDiagram() {
     { label: "VM 2 (192.168.1.11)", rows: ["pool-primary", "pool-canary", "pool-flag-on", "pool-fast", "pool-rr-b"].map(rowOf) },
     { label: "VM 1 (192.168.1.10)", rows: ["pool-standby", "pool-web", "pool-flag-off", "pool-partner", "pool-tenant", "pool-api-v2", "pool-mobile", "pool-slow", "pool-rr-a"].map(rowOf) },
   ];
-  const rowH = 42, groupGap = 14, frameHead = 26;
+  const rowH = 32, groupGap = 10, frameHead = 22;
   const frames = [];
   let cursor = 10;
   for (const g of vmGroups) {
@@ -752,7 +752,7 @@ function renderDiagram() {
     { port: 8090, l: "priorityMap :8090", sub: "Primary 1 / Standby 2" },
     { port: 8100, l: "flagMap :8100", sub: L("オン → pool-flag-on", "on → pool-flag-on") },
     ...Object.entries(SERVER_SELECT_PORTS).map(([port, sp]) => ({ port: Number(port), l: `Basic rule :${port}`, sub: `${sp.pool} · ${algoName(sp.algo)}` })),
-  ].map((m, k, all) => ({ ...m, y: mid + (k - (all.length - 1) / 2) * 70 }));
+  ].map((m, k, all) => ({ ...m, y: mid + (k - (all.length - 1) / 2) * 58 }));
   const activeY = (mapDefs.find((m) => m.port === activePort) || mapDefs[0]).y;
   mapDefs.forEach((m) => {
     const isActive = on && !blocked && m.port === activePort;
@@ -763,7 +763,7 @@ function renderDiagram() {
   });
   frames.forEach((f) => {
     svg.append(s("rect", { x: f.x, y: f.y, width: f.w, height: f.h, rx: 10, fill: "none", stroke: "var(--line)", "stroke-width": 1.5, "stroke-dasharray": "5 4" }));
-    svg.append(s("text", { x: f.x + 10, y: f.y + 17, "font-size": 12, "font-weight": 700, fill: "var(--fg)" }, f.label));
+    svg.append(s("text", { x: f.x + 10, y: f.y + 15, "font-size": 12, "font-weight": 700, fill: "var(--fg)" }, f.label));
   });
   // Which destinations each map can reach is always drawn (thin grey lines).
   // Only the route the request took is drawn on top, as a thick colored line from the called map to the pool that was hit.
@@ -796,9 +796,9 @@ function renderDiagram() {
     const y = t.y;
     const hit = (t.id === "__redirect" && d && d.kind === "redirect") || hitSet.has(t.id);
     const p = t.color ? { color: t.color } : POOLS.find((x) => x.id === t.id);
-    svg.append(s("rect", { x: 650, y: y - 17, width: 202, height: 34, rx: 6, fill: hit ? (p ? p.color : "var(--primary)") : "var(--card)", stroke: hit ? (p ? p.color : "var(--primary)") : "var(--line)", "stroke-width": hit ? 2 : 1 }));
-    svg.append(s("text", { x: 660, y: y - 2, "font-size": 11.5, "font-weight": 700, fill: hit ? "#ffffff" : "var(--fg)" }, t.t));
-    svg.append(s("text", { x: 660, y: y + 11, "font-size": 10, fill: hit ? "#ffffff" : "var(--fg)" }, t.sub));
+    svg.append(s("rect", { x: 650, y: y - 13, width: 202, height: 26, rx: 6, fill: hit ? (p ? p.color : "var(--primary)") : "var(--card)", stroke: hit ? (p ? p.color : "var(--primary)") : "var(--line)", "stroke-width": hit ? 2 : 1 }));
+    svg.append(s("text", { x: 660, y: y - 1.5, "font-size": 11, "font-weight": 700, fill: hit ? "#ffffff" : "var(--fg)" }, t.t));
+    svg.append(s("text", { x: 660, y: y + 9.5, "font-size": 9.5, fill: hit ? "#ffffff" : "var(--fg)" }, t.sub));
   });
   $("summary").textContent = summary;
 }
