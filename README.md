@@ -145,8 +145,8 @@ node --test backend/server.test.js tests/simulator.test.mjs
 ```
 
 - `backend/server.test.js`: the backend's delay, health check, and CORS preflight.
-- `tests/simulator.test.mjs`: the simulator in headless Chrome. It checks that the prediction follows the request form (headers, method, path, query, client IP) when "Send request" or "Send test requests" is pressed, that test requests send the form's request (against a local stand-in gateway), and that ports 8080, 8090, and 8110–8130 say they do not route by the request. It is skipped when Chrome is not found; set `CHROME_PATH` to point at it. Use the latest Node.js.
-- GitHub Actions (`.github/workflows/test.yml`) runs the same command with the latest Node.js on every pull request and on pushes to `main`.
+- `tests/simulator.test.mjs`: the simulator in headless Chrome. It checks that the prediction follows the request form (headers, method, path, query, client IP) when "Send request" or "Send test requests" is pressed, that test requests send the form's request (against a local stand-in gateway), and that ports 8080, 8090, and 8110–8130 say they do not route by the request. It is skipped when Chrome is not found; set `CHROME_PATH` to point at it.
+- GitHub Actions (`.github/workflows/test.yml`) runs the same command on every pull request and on pushes to `main`.
 
 ## Notes
 

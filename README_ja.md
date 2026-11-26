@@ -145,8 +145,8 @@ node --test backend/server.test.js tests/simulator.test.mjs
 ```
 
 - `backend/server.test.js`: バックエンドの遅延、正常性の確認、CORS の事前確認。
-- `tests/simulator.test.mjs`: headless Chrome でシミュレーターを動かします。「要求を送信」や「テスト要求を送る」を押したときに、予測が入力欄 (ヘッダー、メソッド、パス、クエリ、クライアント IP) に従うこと、テスト要求が入力欄の要求を送ること (ローカルの代役ゲートウェイで確認)、ポート 8080、8090、8110〜8130 では要求で振り分けないと表示することを確かめます。Chrome が見つからないときはスキップします。場所は `CHROME_PATH` で指定できます。Node.js は最新版を使ってください。
-- GitHub Actions (`.github/workflows/test.yml`) が、pull request ごとと `main` への push ごとに、最新版の Node.js で同じコマンドを実行します。
+- `tests/simulator.test.mjs`: headless Chrome でシミュレーターを動かします。「要求を送信」や「テスト要求を送る」を押したときに、予測が入力欄 (ヘッダー、メソッド、パス、クエリ、クライアント IP) に従うこと、テスト要求が入力欄の要求を送ること (ローカルの代役ゲートウェイで確認)、ポート 8080、8090、8110〜8130 では要求で振り分けないと表示することを確かめます。Chrome が見つからないときはスキップします。場所は `CHROME_PATH` で指定できます。
+- GitHub Actions (`.github/workflows/test.yml`) が、pull request ごとと `main` への push ごとに同じコマンドを実行します。
 
 ## 補足
 
