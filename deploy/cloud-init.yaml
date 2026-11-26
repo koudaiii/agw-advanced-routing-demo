@@ -106,6 +106,20 @@ write_files:
       POOL_LABEL="Round Robin A"
       POOL_COLOR="#0e7490"
       DELAY_MS=0
+  - path: /etc/agw-demo/pool-standby.env
+    content: |
+      POOL_NAME=pool-standby
+      PORT=8088
+      POOL_LABEL="Standby (priority 2)"
+      POOL_COLOR="#475569"
+      DELAY_MS=0
+  - path: /etc/agw-demo/pool-flag-off.env
+    content: |
+      POOL_NAME=pool-flag-off
+      PORT=8089
+      POOL_LABEL="Feature flag off"
+      POOL_COLOR="#0369a1"
+      DELAY_MS=0
 runcmd:
   - systemctl daemon-reload
   - systemctl enable --now agw-pool@pool-web
@@ -115,3 +129,5 @@ runcmd:
   - systemctl enable --now agw-pool@pool-mobile
   - systemctl enable --now agw-pool@pool-slow
   - systemctl enable --now agw-pool@pool-rr-a
+  - systemctl enable --now agw-pool@pool-standby
+  - systemctl enable --now agw-pool@pool-flag-off
