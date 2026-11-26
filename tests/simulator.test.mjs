@@ -405,7 +405,7 @@ test("header condition values are case-sensitive, as on the real gateway", { ski
 for (const file of ["agw-advanced-routing-demo-guide.html", "agw-advanced-routing-demo-guide_ja.html"]) {
   test(`the build guide fits a phone screen (${file})`, { skip }, async () => {
     const url = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "docs", file)).href;
-    await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    await cdp("Emulation.setDeviceMetricsOverride", { width: 320, height: 640, deviceScaleFactor: 1, mobile: true });
     try {
       await cdp("Page.navigate", { url: `${url}?lang=${file.includes("_ja") ? "ja" : "en"}` });
       await sleep(800);
