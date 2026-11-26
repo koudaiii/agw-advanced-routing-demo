@@ -589,11 +589,11 @@ function baseFor(r) {
   if (r.port) u.port = String(r.port);
   return u.origin;
 }
-async function callGateway(r) {
-  const base = baseFor(r);
+// The URL and headers of one request from the form. Used by "Send request" and "Send test requests", so both send the same request.
+// Headers a browser does not let a page set are skipped and listed.
+function gatewayRequest(r) {
   const q = r.query.replace(/^\?/, "");
-  const url = base + r.path + (q ? `?${q}` : "");
-  if (r.method === "CONNECT") return { kind: "error", message: L("CONNECT はブラウザーから送信できません", "A browser cannot send CONNECT") };
+  const url = baseFor(r) + r.path + (q ? `?${q}` : "");
   const headers = new Headers({ Accept: "application/json" });
   const skipped = [];
   for (const h of r.headers) {
@@ -602,6 +602,12 @@ async function callGateway(r) {
     if (FORBIDDEN.has(n.toLowerCase())) { skipped.push(n); continue; }
     try { headers.set(n, h.value); } catch (e) { skipped.push(n); }
   }
+  return { url, headers, skipped };
+}
+const CONNECT_ERROR = () => L("CONNECT はブラウザーから送信できません", "A browser cannot send CONNECT");
+async function callGateway(r) {
+  if (r.method === "CONNECT") return { kind: "error", message: CONNECT_ERROR() };
+  const { url, headers, skipped } = gatewayRequest(r);
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 10000);
   const started = performance.now();
@@ -856,6 +862,8 @@ function statusBlock(code, text, note) {
 function renderSim() {
   const out = $("simOut"); out.replaceChildren();
   const d = state.ev.d, r = state.sent;
+  // Ports 8080, 8090, and 8110-8130 pick the pool without looking at the request, so say that changing the form does not change the result.
+  if (d.kind === "weighted" || d.kind === "priority" || d.kind === "server") out.append(el("p", { class: "note", text: L(`ポート ${d.port} は、ヘッダー、メソッド、パス、クエリでは振り分けません (WAF の User-Agent による遮断を除く)。これらを変えても予測は変わりません。`, `Port ${d.port} does not route by header, method, path, or query (except the WAF block by User-Agent). Changing them does not change the prediction.`) }));
   if (d.kind === "waf") { out.append(statusBlock(403, "Forbidden", L("WAF がブロックしたため、バックエンドには届きません。", "WAF blocked the request, so it does not reach a backend."))); return; }
   if (d.kind === "weighted") { out.append(poolSelectBlock(8080, null), statusBlock("—", "", L("ポート 8080 の重み付けのため、1 件では pool-web か pool-canary のどちらかに確率で決まります。100 件の割合は canary-check.sh で確認します。", "Port 8080 is weighted, so a single request lands on pool-web or pool-canary by chance. Check the ratio of 100 requests with canary-check.sh."))); return; }
   if (d.kind === "priority") { out.append(poolSelectBlock(8090, null), statusBlock("—", "", L("ポート 8090 は優先度ベース。Primary (VM 2) が正常なら Primary、停止していれば Standby (VM 1) に届きます。テスト要求で件数を送って確認します。", "Port 8090 is priority-based. The request reaches Primary (VM 2) while it is healthy, and Standby (VM 1) when it is stopped. Use the test requests to count."))); return; }
@@ -1342,14 +1350,14 @@ async function runTestRequests() {
   renderAll();
   const port = Number(r.port) || 80;
   const n = Number($("testN").value) || 100;
-  const u = new URL(normBase(state.backendUrl));
-  u.port = String(port);
-  const url = `${u.origin}/app/home`;
+  if (r.method === "CONNECT") { state_.textContent = CONNECT_ERROR(); out.replaceChildren(); return; }
+  // Each test request is the request in the form (method, path, query, headers), the same as "Send request".
+  const { url, headers } = gatewayRequest(r);
   const run = { seq: new Array(n).fill(null), n, url, cancelled: false, finished: false, controller: new AbortController(), page: 1 };
   testRun = run;
   setTestButton(true);
   state_.textContent = L(`送信中 0 / ${n} 件`, `Sending 0 / ${n}`);
-  out.replaceChildren(el("p", { class: "note", text: L(`${url} に ${n} 件送信中…`, `Sending ${n} requests to ${url}…`) }));
+  out.replaceChildren(el("p", { class: "note", text: L(`${r.method} ${url} に ${n} 件送信中…`, `Sending ${n} requests: ${r.method} ${url}…`) }));
   let done = 0;
   const t0 = performance.now();
   try {
@@ -1363,8 +1371,8 @@ async function runTestRequests() {
       const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, TEST_TIMEOUT_MS);
       const started = performance.now();
       try {
-        const res = await fetch(url, { cache: "no-store", mode: "cors", redirect: "manual", signal: ctl.signal });
-        run.seq[i] = { pool: gatewayPoolName(res.headers.get("x-backend-pool") || L("(ヘッダーなし)", "(no header)"), port), status: res.status, ms: performance.now() - started };
+        const res = await fetch(url, { method: r.method, headers, cache: "no-store", mode: "cors", redirect: "manual", signal: ctl.signal });
+        run.seq[i] = { pool: gatewayPoolName(res.headers.get("x-backend-pool") || L("(ヘッダーなし)", "(no header)"), port, r.path), status: res.status, ms: performance.now() - started };
       } catch (e) {
         const secs = TEST_TIMEOUT_MS / 1000;
         if (run.cancelled) run.seq[i] = { cancelled: true };
