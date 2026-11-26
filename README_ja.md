@@ -37,6 +37,7 @@
 | パス | 内容 |
 |---|---|
 | `agw-routing-simulator.html` | 単体で動くシミュレーター。ゲートウェイ URL が空ならオフラインで動き、URL を入れると実機に要求を送って予測と比べます。ブラウザーの言語に合わせて日本語か英語で表示します |
+| `tests/simulator.test.mjs` | シミュレーターのブラウザー テスト (「テスト」を参照) |
 | `docs/agw-advanced-routing-demo-guide_ja.html` | 構築ガイド (日本語)。英語は `docs/agw-advanced-routing-demo-guide.html` |
 | `backend/server.js` | 依存なしの Node.js バックエンド。どのプールが応答したかと、受信したリクエスト ヘッダー (Application Gateway が付けた `X-Forwarded-*` などを強調) を HTML か JSON で返します。プール名は応答ヘッダー `x-backend-pool` にも入ります。CORS 対応済み (`ALLOW_ORIGIN`、既定は `*`) |
 | `backend/pools.conf` | VM 1 のプロセス名・ポート・表示名・色・遅延。7 プロセス (ポート 8080–8083、8085。サーバー選択用に、3 秒遅れる `pool-slow` 8086 と `pool-rr-a` 8087) |
@@ -103,7 +104,7 @@ client --:8080--> listener-canary --> rule-canary (Advanced)
 
 - 確認: `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100`
 - 停止と復旧 (手動): `az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"` で VM 2 のプロセスを止めます。切り替わるまで約 2〜3 分かかります。`systemctl start agw-pool@pool-canary` で戻すと、また `pool-primary` に送られます。
-- シミュレーターの「テスト要求」は、選んでいる要求のポートに件数分送り、どのプールに届いたかを Primary / Standby の名前で数えます。結果は「実機の応答」に表示します。10 秒以内に応答がない要求は、失敗として数えます。
+- シミュレーターの「テスト要求」は、入力欄の要求 (メソッド、パス、クエリ、ヘッダー。「要求を送信」と同じ) を件数分送り、どのプールに届いたかを Primary / Standby の名前で数えます。結果は「実機の応答」に表示します。10 秒以内に応答がない要求は、失敗として数えます。
 
 ### 機能フラグ (ポート 8100)
 
@@ -136,6 +137,16 @@ FRONTEND=<IP>:8130 ./lb-check.sh /app/home 100 6   # pool-slow は 10 件以下�
 - プロセスは最初の起動時 (cloud-init) に入ります。この変更より前にデプロイした環境は、`./cleanup.sh` の後に `./deploy.sh` で作り直してください。
 
 `pool-primary`、`pool-standby`、`pool-flag-off`、`pool-flag-on` は、既存のプロセスを指すゲートウェイのプールです。そのため `x-backend-pool` ヘッダーにはプロセス名が出ます: VM 2 は `pool-canary`、VM 1 は `pool-web` です。
+
+## テスト
+
+```bash
+node --test backend/server.test.js tests/simulator.test.mjs
+```
+
+- `backend/server.test.js`: バックエンドの遅延、正常性の確認、CORS の事前確認。
+- `tests/simulator.test.mjs`: headless Chrome でシミュレーターを動かします。「要求を送信」や「テスト要求を送る」を押したときに、予測が入力欄 (ヘッダー、メソッド、パス、クエリ、クライアント IP) に従うこと、テスト要求が入力欄の要求を送ること (ローカルの代役ゲートウェイで確認)、ポート 8080、8090、8110〜8130 では要求で振り分けないと表示することを確かめます。Chrome が見つからないときはスキップします。場所は `CHROME_PATH` で指定できます。
+- GitHub Actions (`.github/workflows/test.yml`) が、pull request ごとと `main` への push ごとに同じコマンドを実行します。
 
 ## 補足
 
