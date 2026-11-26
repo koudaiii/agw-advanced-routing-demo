@@ -236,16 +236,53 @@ test("a saved port-8100 rule named A/B test is kept", { skip }, async () => {
   assert.deepEqual(await savedRules(), ["A/B test (variant B)"]);
 });
 
-// Stopping pool-canary for the 8090 check also breaks 8080 and 8100: the note says so (#119).
-for (const [lang, note] of [
-  ["en", "While it is stopped, about 10% of requests on port 8080 and requests on port 8100 with X-Feature: new also fail."],
-  ["ja", "停止中は、ポート 8080 の約 10% と、ポート 8100 の X-Feature: new の要求も失敗します。"],
+// Priority (8090) and the feature flag (8100) have their own processes on 8088 / 8089 (#131).
+for (const [lang, rows] of [
+  ["en", [":8088 Priority 1", ":8088 Priority 2", ":8089 Feature flag on", ":8089 Feature flag off"]],
+  ["ja", [":8088 優先度 1", ":8088 優先度 2", ":8089 機能フラグ オン", ":8089 機能フラグ オフ"]],
 ]) {
-  test(`the note on stopping pool-canary says what else fails (${lang})`, { skip }, async () => {
+  test(`the diagram shows the dedicated ports 8088 and 8089 (${lang})`, { skip }, async () => {
     await open(lang);
-    assert.ok((await page(`return document.body.textContent;`)).includes(note));
+    const texts = await page(`return [...document.querySelectorAll("#diagram text")].map((x) => x.textContent);`);
+    for (const row of rows) assert.ok(texts.includes(row), row);
+    assert.ok(!texts.some((x) => /^:8080 (Priority|優先度)/.test(x)));
   });
 }
+
+// Stopping the primary for the 8090 check only stops pool-primary, so nothing else fails (#131, replaces #119's note).
+for (const [lang, gone] of [["en", "about 10% of requests on port 8080"], ["ja", "ポート 8080 の約 10%"]]) {
+  test(`the note on stopping the primary names pool-primary and nothing else fails (${lang})`, { skip }, async () => {
+    await open(lang);
+    const text = await page(`return document.body.textContent;`);
+    assert.ok(text.includes('systemctl stop agw-pool@pool-primary'));
+    assert.ok(text.includes('systemctl start agw-pool@pool-primary'));
+    assert.ok(!text.includes("agw-pool@pool-canary"));
+    assert.ok(!text.includes(gone));
+  });
+}
+
+// x-backend-pool names the process that answered; the simulator shows it as it is, with no renaming (#131).
+test("a live response on 8090 shows x-backend-pool as it is", { skip }, async (t) => {
+  const g8090 = http.createServer((req, res) => {
+    res.setHeader("access-control-allow-origin", "*");
+    res.setHeader("access-control-allow-headers", "*");
+    res.setHeader("access-control-expose-headers", "x-backend-pool");
+    if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
+    res.setHeader("x-backend-pool", "pool-web");
+    res.setHeader("content-type", "application/json");
+    res.end("{}");
+  });
+  const listening = await new Promise((r) => { g8090.once("error", () => r(false)); g8090.listen(8090, "127.0.0.1", () => r(true)); });
+  if (!listening) { t.skip("port 8090 is in use"); return; }
+  try {
+    await open("en");
+    const live = await page(`t.set("backendUrl", "http://127.0.0.1:8090"); await t.wait(300); t.preset("port 8090"); await t.send();
+      for (let i = 0; i < 30 && !/x-backend-pool/.test(t.$("liveOut").textContent); i++) await t.wait(100);
+      return t.$("liveOut").textContent;`);
+    assert.match(live, /x-backend-pool: pool-web/);
+    assert.doesNotMatch(live, /process on the VM/);
+  } finally { g8090.close(); }
+});
 
 // Review checks for the rule editor, the diagram, and the prediction text (#123).
 // Opens [Edit rules (JSON)], changes the configuration with `edit` (source of a function), saves, and reports the errors.

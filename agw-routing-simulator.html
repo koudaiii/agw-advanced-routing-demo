@@ -165,11 +165,11 @@ ol.rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
         <button type="button" id="testBtn" class="primary small" data-ja="テスト要求を送る">Send test requests</button>
         <span class="note" id="testState"></span>
         <div class="err" style="border-left:3px solid var(--line-soft);padding-left:10px">
-          <p style="margin:0"><strong data-ja="優先度ベースを実機で試す前に、VM 2 の pool-canary を手動で止めてください。">Before you test priority-based selection on the real gateway, stop pool-canary on VM 2 by hand.</strong><span data-ja=" 止めないと、優先度 1 の Primary (VM 2) に送られ続け、Standby (VM 1) への切り替えは見えません。"> Otherwise every request keeps going to Primary (VM 2, priority 1) and you cannot see the switch to Standby (VM 1).</span><span data-ja=" 停止中は、ポート 8080 の約 10% と、ポート 8100 の X-Feature: new の要求も失敗します。確認が終わったらすぐ復帰してください。"> While it is stopped, about 10% of requests on port 8080 and requests on port 8100 with X-Feature: new also fail. Restore it as soon as the check is done.</span></p>
+          <p style="margin:0"><strong data-ja="優先度ベースを実機で試す前に、VM 2 の pool-primary (8088 番) を手動で止めてください。">Before you test priority-based selection on the real gateway, stop pool-primary (port 8088) on VM 2 by hand.</strong><span data-ja=" 止めないと Primary に送られ続け、Standby への切り替えは見えません。止まるのは 8090 の Primary だけで、ほかのポートには影響しません。"> Otherwise every request keeps going to Primary and you cannot see the switch to Standby. Only the 8090 primary stops; other ports are not affected.</span></p>
           <p style="margin:6px 0 0" data-ja="停止 (Azure CLI):">Stop (Azure CLI):</p>
-          <pre class="mono" style="white-space:pre-wrap">az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-canary"</pre>
+          <pre class="mono" style="white-space:pre-wrap">az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-primary"</pre>
           <p style="margin:6px 0 0" data-ja="復帰 (テスト後に戻す。復旧させると、また Primary (VM 2) に要求が送られます):">Restore (run it after the test; requests then go to Primary (VM 2) again):</p>
-          <pre class="mono" style="white-space:pre-wrap">az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-canary"</pre>
+          <pre class="mono" style="white-space:pre-wrap">az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-primary"</pre>
         </div>
       </div>
     </form>
@@ -289,8 +289,8 @@ const POOLS = [
   { id: "pool-api-v2", label: "Orders API v2", port: 8083, color: "#1d4ed8" },
   { id: "pool-canary", label: L("カナリア (新バージョン)", "Canary (new version)"), port: 8080, color: "#a16207" },
   { id: "pool-mobile", label: L("モバイル", "Mobile"), port: 8085, color: "#7e22ce" },
-  { id: "pool-flag-off", label: L("機能フラグ オフ", "Feature flag off"), port: 8080, color: "#0369a1" },
-  { id: "pool-flag-on", label: L("機能フラグ オン", "Feature flag on"), port: 8080, color: "#be185d" },
+  { id: "pool-flag-off", label: L("機能フラグ オフ", "Feature flag off"), port: 8089, color: "#0369a1" },
+  { id: "pool-flag-on", label: L("機能フラグ オン", "Feature flag on"), port: 8089, color: "#be185d" },
   // Server selection (#84): gateway pools with two servers each. The servers are the processes in SERVER_INFO.
   { id: "pool-rr", label: L("Round Robin (速い 2 台)", "Round Robin (two fast servers)"), port: 8087, color: "#0e7490" },
   { id: "pool-rr-slow", label: L("Round Robin (遅い 1 台を含む)", "Round Robin (one slow server)"), port: 8086, color: "#9a3412" },
@@ -473,7 +473,7 @@ function evaluate(cfg, r) {
 }
 const pool = (id) => POOLS.find((p) => p.id === id) || (SERVER_INFO[id] ? { id, label: SERVER_INFO[id].label, port: SERVER_INFO[id].port, color: SERVER_INFO[id].color } : { id, label: id, port: 0, color: PRIORITY_COLOR[id] || "#334155" });
 // Server selection (#84): ports 8110 / 8120 / 8130 use Basic rules, one pool each, two servers per pool.
-// x-backend-pool shows the process (server) that answered, so the names are kept as they are (no gatewayPoolName mapping).
+// x-backend-pool shows the process (server) that answered, so the names are kept as they are.
 const SERVER_INFO = {
   "pool-slow": { label: L("遅いサーバー (3 秒)", "Slow server (3 s)"), color: "#b91c1c", vm: 1, port: 8086 },
   "pool-fast": { label: L("速いサーバー", "Fast server"), color: "#15803d", vm: 2, port: 8086 },
@@ -491,15 +491,9 @@ const POOL_SELECT_PORTS = {
   8080: { map: "canaryMap", kind: "weighted", pools: [{ id: "pool-web", weight: 90, vm: 1 }, { id: "pool-canary", weight: 10, vm: 2 }] },
   8090: { map: "priorityMap", kind: "priority", pools: [{ id: "pool-primary", priority: 1, vm: 2 }, { id: "pool-standby", priority: 2, vm: 1 }] },
 };
-// Priority-based (8090): Primary = VM 2 (process pool-canary), Standby = VM 1 (process pool-web)
+// Priority-based (8090): Primary = pool-primary (VM 2 :8088), Standby = pool-standby (VM 1 :8088). Each gateway pool has
+// its own process with the same name, so x-backend-pool is the gateway pool name as it is (#131).
 const PRIORITY_COLOR = { "pool-primary": "#b45309", "pool-standby": "#475569" };
-const PRIORITY_NAME_ON_8090 = { "pool-canary": "pool-primary", "pool-web": "pool-standby" };
-const FLAG_NAME_ON_8100 = { "pool-web": "pool-flag-off", "pool-canary": "pool-flag-on" };
-function gatewayPoolName(processPool, port, path) {
-  if (Number(port) === 8090 && PRIORITY_NAME_ON_8090[processPool]) return PRIORITY_NAME_ON_8090[processPool];
-  if (Number(port) === 8100 && FLAG_NAME_ON_8100[processPool]) return FLAG_NAME_ON_8100[processPool];
-  return processPool;
-}
 function describe(d, cfg) {
   if (d.kind === "waf") return L(`WAF がブロック (${d.cidr}) — ルーティング評価なし`, `Blocked by WAF (${d.cidr}) — no routing evaluation`);
   if (d.kind === "weighted") return L(`ポート ${d.port} は重み付け (既定 pool-web 90% / pool-canary 10%)。1 件の経路は確率で決まります`, `Port ${d.port} is weighted (pool-web 90% / pool-canary 10%). A single request lands on one of them by chance`);
@@ -636,7 +630,7 @@ async function callGateway(r) {
     let body = null;
     if (r.method !== "HEAD" && (res.headers.get("content-type") || "").includes("json")) { try { body = await res.json(); } catch (e) { body = null; } }
     const processPool = res.headers.get("x-backend-pool");
-    return { kind: "response", status: res.status, statusText: res.statusText, pool: gatewayPoolName(processPool, r.port, r.path), rawPool: processPool, port: r.port, path: r.path, body, ms, skipped, url };
+    return { kind: "response", status: res.status, statusText: res.statusText, pool: processPool, port: r.port, path: r.path, body, ms, skipped, url };
   } catch (e) {
     return { kind: "error", message: ctl.signal.aborted ? L("10 秒以内に応答がありませんでした", "No response within 10 seconds") : L("応答を読めませんでした (WAF のブロック、CORS 未設定、URL 誤り、混在コンテンツのいずれか)", "Could not read the response (blocked by WAF, CORS not configured, wrong URL, or mixed content)"), skipped, url };
   } finally { clearTimeout(timer); }
@@ -720,8 +714,8 @@ function renderDiagram() {
   const ev = state.ev, d = ev && ev.d, cfg = state.config;
   // Primary (VM 2) and Standby (VM 1) of priority-based selection (8090) are always drawn as separate pools, first in their VM
   const priorityPools = [
-    { id: "pool-primary", t: "pool-primary (Primary)", sub: L(":8080 優先度 1", ":8080 Priority 1"), color: "#b45309" },
-    { id: "pool-standby", t: "pool-standby (Standby)", sub: L(":8080 優先度 2", ":8080 Priority 2"), color: "#475569" },
+    { id: "pool-primary", t: "pool-primary (Primary)", sub: L(":8088 優先度 1", ":8088 Priority 1"), color: "#b45309" },
+    { id: "pool-standby", t: "pool-standby (Standby)", sub: L(":8088 優先度 2", ":8088 Priority 2"), color: "#475569" },
   ];
   const rowOf = (id) => {
     const pp = priorityPools.find((x) => x.id === id);
@@ -756,7 +750,7 @@ function renderDiagram() {
   const active = d && (d.kind === "pool" || d.kind === "default") ? d.pool : null;
   const weighted = !!(d && (d.kind === "weighted" || d.kind === "priority"));
   const priority = !!(d && d.kind === "priority");
-  // Priority-based: Primary (pool-canary on VM 2) is the hit while healthy; when it is stopped the real answer is Standby (pool-web on VM 1)
+  // Priority-based: Primary (pool-primary on VM 2) is the hit while healthy; when it is stopped the real answer is Standby (pool-standby on VM 1)
   const serverSel = d && d.kind === "server" ? SERVER_SELECT_PORTS[d.port] : null;
   const hitSet = serverSel ? new Set(serverSel.servers) : priority ? new Set(["pool-primary"]) : weighted ? new Set(["pool-web", "pool-canary"]) : new Set(active ? [active] : []);
   const st = (x) => (x ? "var(--primary)" : "var(--line)");
@@ -856,7 +850,7 @@ function serverSelectBlock(port, answered) {
   }));
 }
 // Pool selection ports (#93): lists the candidate pools with their weight or priority. `answered` is the gateway pool
-// name (after gatewayPoolName); with no `answered` (the prediction), no pool is marked.
+// name (x-backend-pool); with no `answered` (the prediction), no pool is marked.
 function poolSelectBlock(port, answered) {
   const ps = POOL_SELECT_PORTS[port];
   const note = ps.kind === "weighted" ? L("重み付け", "weighted") : L("優先度、最小正常割合 60%", "priority, minimum healthy 60%");
@@ -941,11 +935,11 @@ function renderLive() {
     const hs = Object.entries(b.headers || {}).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : v]);
     const serverPort = SERVER_SELECT_PORTS[Number(l.port)] ? Number(l.port) : null;
     if (serverPort) out.append(serverSelectBlock(serverPort, b.pool));
-    if (POOL_SELECT_PORTS[Number(l.port)]) out.append(poolSelectBlock(Number(l.port), gatewayPoolName(b.pool, l.port, l.path)));
-    out.append(backendPage(pool(gatewayPoolName(b.pool, l.port, l.path)), b.method || "", b.path || "", new URLSearchParams(b.query || {}).toString(), hs, b.instance || "",
+    if (POOL_SELECT_PORTS[Number(l.port)]) out.append(poolSelectBlock(Number(l.port), b.pool));
+    out.append(backendPage(pool(b.pool), b.method || "", b.path || "", new URLSearchParams(b.query || {}).toString(), hs, b.instance || "",
       serverPort ? L("この応答を返したサーバー", "Server that answered this request") : null));
   } else {
-    out.append(statusBlock(l.status, l.statusText || "", l.pool ? `x-backend-pool: ${l.pool}${l.rawPool && l.rawPool !== l.pool ? L(` (VM のプロセス: ${l.rawPool})`, ` (process on the VM: ${l.rawPool})`) : ""}` : L("x-backend-pool ヘッダーなし (デモ用バックエンドではないか、CORS の Expose-Headers 未設定)", "No x-backend-pool header (not the demo backend, or CORS Expose-Headers is missing)")));
+    out.append(statusBlock(l.status, l.statusText || "", l.pool ? `x-backend-pool: ${l.pool}` : L("x-backend-pool ヘッダーなし (デモ用バックエンドではないか、CORS の Expose-Headers 未設定)", "No x-backend-pool header (not the demo backend, or CORS Expose-Headers is missing)")));
   }
   out.append(meta, skipped);
 }
@@ -1397,7 +1391,7 @@ async function runTestRequests() {
       const started = performance.now();
       try {
         const res = await fetch(url, { method: r.method, headers, cache: "no-store", mode: "cors", redirect: "manual", signal: ctl.signal });
-        run.seq[i] = { pool: gatewayPoolName(res.headers.get("x-backend-pool") || L("(ヘッダーなし)", "(no header)"), port, r.path), status: res.status, ms: performance.now() - started };
+        run.seq[i] = { pool: res.headers.get("x-backend-pool") || L("(ヘッダーなし)", "(no header)"), status: res.status, ms: performance.now() - started };
       } catch (e) {
         const secs = TEST_TIMEOUT_MS / 1000;
         if (run.cancelled) run.seq[i] = { cancelled: true };
