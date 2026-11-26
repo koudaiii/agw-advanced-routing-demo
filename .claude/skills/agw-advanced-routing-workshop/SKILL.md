@@ -165,7 +165,7 @@ az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --c
 ```
 
 - Without stopping `pool-canary` on VM 2, every request keeps going to the primary and the failover cannot be seen.
-- Stopping `pool-canary` also affects port 8080 (the canary's 10%) and the flag-on pool on port 8100. Restore it after the test.
+- `agw-pool@pool-canary` (VM 2 :8080) is the only server of `pool-primary` (8090), `pool-canary` (8080, weight 10), and `pool-flag-on` (8100). While it is stopped, about 10% of requests on port 8080 and requests on port 8100 with `X-Feature: new` also fail. Restore it as soon as the check is done. Weighted distribution does not look at pool health, so the 8080 requests that pick `pool-canary` fail. Run `test.sh` after restoring, because its 8080 and 8100 results can fail during the stop. `pool-fast` and `pool-rr-b` (:8086 / :8087) are other processes and are not affected.
 - The simulator's "Test requests" button sends the request in the form (method, path, query, and headers, the same as "Send request") the chosen number of times. Select the "Priority (port 8090)" preset first to count Primary / Standby. While sending, the button becomes "Cancel". Results are shown under "Real response", 50 at a time. A request with no response within 10 seconds is counted as failed.
 
 ### Feature flag (port 8100)
