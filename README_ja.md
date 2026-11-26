@@ -141,7 +141,7 @@ FRONTEND=<IP>:8130 ./lb-check.sh /app/home 100 6   # pool-slow は 10 件以下�
 ## テスト
 
 ```bash
-node --test backend/ tests/
+node --test backend/server.test.js tests/simulator.test.mjs
 ```
 
 - `backend/server.test.js`: バックエンドの遅延、正常性の確認、CORS の事前確認。

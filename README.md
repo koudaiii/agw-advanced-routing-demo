@@ -141,7 +141,7 @@ FRONTEND=<IP>:8130 ./lb-check.sh /app/home 100 6   # pool-slow 10 or fewer, tota
 ## Tests
 
 ```bash
-node --test backend/ tests/
+node --test backend/server.test.js tests/simulator.test.mjs
 ```
 
 - `backend/server.test.js`: the backend's delay, health check, and CORS preflight.

@@ -1,4 +1,4 @@
-// Browser tests for agw-routing-simulator.html (zero dependencies). Run: node --test tests/
+// Browser tests for agw-routing-simulator.html (zero dependencies). Run: node --test tests/simulator.test.mjs
 // They start headless Chrome (set CHROME_PATH if it is not found) and drive the page over the DevTools protocol.
 // Without Chrome the tests are skipped.
 import { test, before, after } from "node:test";
