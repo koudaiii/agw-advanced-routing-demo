@@ -1459,13 +1459,6 @@ if (!Array.isArray(state.config.waf.blockedUA)) state.config.waf.blockedUA = ["a
 // Sample rule names are data. A configuration saved in the other language keeps that language's names: show them in the current one.
 const RULE_NAMES = [["パートナー連携", "Partner integration"], ["マルチテナント", "Multi-tenant"], ["API バージョニング", "API versioning"], ["キャンペーン LP", "Campaign landing page"], ["機能フラグ (オン)", "Feature flag (on)"], ["モバイル振り分け", "Mobile routing"]];
 state.config.rules.forEach((r) => { const pair = RULE_NAMES.find((x) => x.includes(r.name)); if (pair) r.name = L(pair[0], pair[1]); });
-// Settings saved while port 8100 was the "A/B test" (header X-Variant), or from before it had its own map:
-// replace those rules with the feature flag sample rule.
-const isOldAbRule = (r) => /^A\/B (テスト|test)/.test(r.name) || (r.map === 8100 && (r.conditions || []).some((c) => c.name === "X-Variant"));
-if (!state.config.rules.some((r) => r.map === 8100 && !isOldAbRule(r))) {
-  state.config.rules = state.config.rules.filter((r) => !isOldAbRule(r)).concat(sampleConfig().rules.filter((r) => r.map === 8100));
-  state.config.rules.sort((a, b) => a.priority - b.priority);
-}
 DIST_PRESETS.forEach(([label, build]) => {
   const b = el("button", { type: "button", class: "small", text: label });
   b.addEventListener("click", () => { state.dist = build(); distChanged(true); });
