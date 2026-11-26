@@ -431,10 +431,13 @@ FRONTEND=&lt;フロントエンド IP&gt;:8090 ./canary-check.sh /app/home 100  
 <p>8100 番では、クライアントがヘッダーでフラグをオンにします。<code>flagMap</code> は、ヘッダー <code>X-Feature: new</code> の要求を <code>pool-flag-on</code> (VM 2 の 8080 番) に送り、それ以外は既定の <code>pool-flag-off</code> (VM 1 の 8080 番) に送ります。<code>x-backend-pool</code> はプロセス名なので、オフは <code>pool-web</code>、オンは <code>pool-canary</code> と表示されます。</p>
 <pre><code>curl -s -D - -o /dev/null http://&lt;フロントエンド IP&gt;:8100/ | grep -i x-backend-pool
 curl -s -D - -o /dev/null -H "X-Feature: other" http://&lt;フロントエンド IP&gt;:8100/ | grep -i x-backend-pool
-curl -s -D - -o /dev/null -H "X-Feature: new" http://&lt;フロントエンド IP&gt;:8100/ | grep -i x-backend-pool</code></pre>
+curl -s -D - -o /dev/null -H "X-Feature: new" http://&lt;フロントエンド IP&gt;:8100/ | grep -i x-backend-pool
+curl -s -D - -o /dev/null -H "X-Feature: NEW" http://&lt;フロントエンド IP&gt;:8100/ | grep -i x-backend-pool</code></pre>
 <pre><code>ヘッダーなし      x-backend-pool: pool-web     (pool-flag-off、オフ)
 X-Feature: other  x-backend-pool: pool-web     (pool-flag-off、オフ)
-X-Feature: new    x-backend-pool: pool-canary  (pool-flag-on、オン)</code></pre>
+X-Feature: new    x-backend-pool: pool-canary  (pool-flag-on、オン)
+X-Feature: NEW    x-backend-pool: pool-web     (pool-flag-off、オフ)</code></pre>
+<p class="note">ヘッダーの値は大文字と小文字を区別します。<code>X-Feature: NEW</code> や <code>New</code> は <code>new</code> に一致せず、既定に送られます (2026-11-26 に実機で確認)。シミュレーターも同じように照合します。</p>
 <p class="note">ポート 80 には機能フラグのルールがありません。必ず 8100 番を使います。クライアントが選ぶ方式で、ランダムには分けないため、A/B テストではありません (統計的な A/B テストは #27 で扱います)。</p>
 <h4>サーバー選択 (ポート 8110 / 8120 / 8130)</h4>
 <p>この 3 つのポートで、1 つのプールの中でゲートウェイがサーバーをどう選ぶか、1 台が詰まったとき (hot spot) に何が起きるかを見せます。8110 は速い 2 台の Round Robin です。8120 は <code>pool-slow</code> (3 秒待つ) と <code>pool-fast</code> の Round Robin で、約半分の要求が待たされます。8130 は同じ 2 台の Least Connections で、新しい要求は遅いサーバーを避けます。<code>x-backend-pool</code> には応答したサーバーが出ます。</p>

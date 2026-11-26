@@ -109,7 +109,7 @@ client --:8080--> listener-canary --> rule-canary (Advanced)
 
 ### 機能フラグ (ポート 8100)
 
-クライアントがヘッダーでフラグをオンにします。`X-Feature: new` を付けた要求は `pool-flag-on` (VM 2 の 8080 番) に、それ以外は既定の `pool-flag-off` (VM 1 の 8080 番) に送ります。確認: `curl -H "X-Feature: new" http://<FRONTEND-IP>:8100/`
+クライアントがヘッダーでフラグをオンにします。`X-Feature: new` を付けた要求は `pool-flag-on` (VM 2 の 8080 番) に、それ以外は既定の `pool-flag-off` (VM 1 の 8080 番) に送ります。確認: `curl -H "X-Feature: new" http://<FRONTEND-IP>:8100/`。ヘッダーの値は大文字と小文字を区別します。`X-Feature: NEW` は `pool-flag-off` に送られます (2026-11-26 に実機で確認)。
 
 クライアントが選ぶ方式で、ランダムには分けないため、A/B テストではありません。統計的な A/B テストは issue #27 で扱います。
 

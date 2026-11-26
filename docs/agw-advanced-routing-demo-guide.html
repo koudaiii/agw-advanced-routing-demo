@@ -432,10 +432,13 @@ restored   all 100 requests: pool-canary (Primary = VM 2)</code></pre>
 <p>On port 8100, the client turns the flag on with a header. <code>flagMap</code> sends requests with the header <code>X-Feature: new</code> to <code>pool-flag-on</code> (VM 2 port 8080) and everything else to the default <code>pool-flag-off</code> (VM 1 port 8080). <code>x-backend-pool</code> is the process name, so flag off shows as <code>pool-web</code> and flag on as <code>pool-canary</code>.</p>
 <pre><code>curl -s -D - -o /dev/null http://&lt;frontend IP&gt;:8100/ | grep -i x-backend-pool
 curl -s -D - -o /dev/null -H "X-Feature: other" http://&lt;frontend IP&gt;:8100/ | grep -i x-backend-pool
-curl -s -D - -o /dev/null -H "X-Feature: new" http://&lt;frontend IP&gt;:8100/ | grep -i x-backend-pool</code></pre>
+curl -s -D - -o /dev/null -H "X-Feature: new" http://&lt;frontend IP&gt;:8100/ | grep -i x-backend-pool
+curl -s -D - -o /dev/null -H "X-Feature: NEW" http://&lt;frontend IP&gt;:8100/ | grep -i x-backend-pool</code></pre>
 <pre><code>no header         x-backend-pool: pool-web     (pool-flag-off, flag off)
 X-Feature: other  x-backend-pool: pool-web     (pool-flag-off, flag off)
-X-Feature: new    x-backend-pool: pool-canary  (pool-flag-on, flag on)</code></pre>
+X-Feature: new    x-backend-pool: pool-canary  (pool-flag-on, flag on)
+X-Feature: NEW    x-backend-pool: pool-web     (pool-flag-off, flag off)</code></pre>
+<p class="note">Header values are case-sensitive: <code>X-Feature: NEW</code> and <code>New</code> do not match <code>new</code> and go to the default (checked on the real gateway on 2026-11-26). The simulator matches the same way.</p>
 <p class="note">Port 80 has no feature flag rule. Always use port 8100. This is not an A/B test: the client chooses, and there is no random split (a statistical A/B test is tracked in issue #27).</p>
 <h4>Server selection (ports 8110 / 8120 / 8130)</h4>
 <p>These three ports show how the gateway picks a server inside one pool, and what happens when one server is stuck (a hot spot). 8110 is Round Robin over two fast servers. 8120 is Round Robin over <code>pool-slow</code> (waits 3 s) and <code>pool-fast</code>, so about half of the requests wait. 8130 uses Least Connections over the same two servers, so new requests avoid the slow one. <code>x-backend-pool</code> shows the server that answered.</p>

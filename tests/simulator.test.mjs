@@ -325,6 +325,16 @@ for (const [lang, text] of [
   });
 }
 
+// The real gateway matches header values case-sensitively: X-Feature: NEW stays on flag off (checked 2026-11-26, #129).
+test("header condition values are case-sensitive, as on the real gateway", { skip }, async () => {
+  await open("en");
+  const r = await page(`t.preset("^Feature flag \\\\(on\\\\)$"); await t.send(); const on = t.summary();
+    for (const n of document.querySelectorAll("#headers input")) if (n.value === "new") { n.value = "NEW"; n.dispatchEvent(new Event("input")); }
+    await t.send(); return { on, upper: t.summary() };`);
+  assert.match(r.on, /pool-flag-on/);
+  assert.match(r.upper, /pool-flag-off/);
+});
+
 test("no JavaScript errors", { skip }, () => {
   assert.deepEqual(pageErrors, []);
 });
