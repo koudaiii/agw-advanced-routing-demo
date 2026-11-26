@@ -50,7 +50,7 @@
 | `deploy/canary-check.sh` | 指定した URI に 100 回連続で送り、`x-backend-pool` からプール別の件数と割合を表示します。カナリアは `FRONTEND=<IP>:8080` |
 | `deploy/lb-check.sh` | 指定した URI に件数分 (既定は同時 6 件) 送り、サーバーごとの件数、割合、平均の時間と、全体の所要時間を表示します。サーバー選択は `FRONTEND=<IP>:8110`、`:8120`、`:8130` |
 | `deploy/test.sh` | シミュレーターのシナリオを curl で実機に送り、応答したプールを一覧表示します |
-| `.github/workflows/pages.yml` / `.github/pages/build.sh` | 構築ガイドだけを GitHub Pages で公開します。シミュレーターは任意の URL に多数の要求を送れるため公開せず、シミュレーターへのリンクはこのリポジトリ内のファイルを指します。Settings → Pages → Source を「GitHub Actions」にする必要があります |
+| `.github/workflows/pages.yml` / `.github/pages/build.sh` | 構築ガイドだけを GitHub Pages で公開します。シミュレーターは任意の URL に多数の要求を送れるため公開せず、シミュレーターへのリンクはこのリポジトリ内のファイルを指します。トップ ページ (`index.html`) は英語ガイドのコピーで、日本語のブラウザーでは日本語ガイドを開きます。Settings → Pages → Source を「GitHub Actions」にする必要があります。「Deploy from a branch」にすると、シミュレーターを含むリポジトリ全体が公開されます |
 
 ## 手順
 
