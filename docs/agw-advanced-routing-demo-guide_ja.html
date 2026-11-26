@@ -453,9 +453,8 @@ FRONTEND=&lt;フロントエンド IP&gt;:8130 ./lb-check.sh /app/home 100 6</co
 <p><strong>前提</strong>: 基本ルール、リスナー、既定のバックエンド プールと設定がある Application Gateway。v2 用の 2 つ目のバックエンド プールと、そのバックエンド設定。</p>
 <ol>
 <li>ゲートウェイの <strong>ルール</strong> を開き、基本ルールを選ぶ。</li>
-<li><strong>ルールの種類</strong> を <strong>Advanced</strong> にする。</li>
-<li><strong>リスナー</strong> タブ: ルール名 (例: <code>rule1</code>) と <strong>ルールの優先度</strong> を入力する。数値が小さいほど先に評価される。リスナーは既存のものが事前に入る。</li>
-<li><strong>ルーティング</strong> タブ: <strong>Advanced ルール名</strong> (例: <code>V2-app-routing</code>) と <strong>Advanced ルールの優先度</strong> を入力する。</li>
+<li><strong>リスナー</strong> タブ: 既存の基本ルールでは、ルール名 (例: <code>rule1</code>)、既存のリスナー、<strong>ルールの優先度</strong> (数値が小さいほど先に評価される) が入力済みになっている。</li>
+<li><strong>ルーティング</strong> タブ: 最初に <strong>ルールの種類</strong> を <strong>Advanced</strong> にする。続けて <strong>Advanced ルール名</strong> (例: <code>V2-app-routing</code>) と <strong>Advanced ルールの優先度</strong> を入力する。Advanced ルールの優先度はマップ内のルールの評価順で、ルールの優先度とは別の値。</li>
 <li><strong>条件</strong>: <strong>+ Add conditions</strong> で条件セットを作る。
   <ul>
     <li>条件セット名: <code>V2-app-condition</code> (条件セットの名前であり、ヘッダー名ではない)</li>
