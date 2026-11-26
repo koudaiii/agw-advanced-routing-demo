@@ -37,6 +37,7 @@ The diagrams are from Microsoft Learn: [Advanced load balancing on Azure Applica
 | Path | Contents |
 |---|---|
 | `agw-routing-simulator.html` | Standalone simulator. Offline when the gateway URL is empty; with a URL it sends the request to the real gateway and compares the answer with its prediction. Shows English or Japanese from the browser language |
+| `tests/simulator.test.mjs` | Browser tests for the simulator (see Tests) |
 | `docs/agw-advanced-routing-demo-guide.html` | Build guide (English). Japanese: `docs/agw-advanced-routing-demo-guide_ja.html` |
 | `backend/server.js` | Dependency-free Node.js backend. Returns which pool answered and the request headers it received (the `X-Forwarded-*` headers added by Application Gateway are highlighted) as HTML or JSON. The pool name is also in the `x-backend-pool` response header. CORS is enabled (`ALLOW_ORIGIN`, default `*`) |
 | `backend/pools.conf` | Process name, port, label, color, and delay for VM 1. Seven processes (ports 8080–8083, 8085, and for server selection `pool-slow` 8086 with a 3 s delay and `pool-rr-a` 8087) |
@@ -136,6 +137,16 @@ FRONTEND=<IP>:8130 ./lb-check.sh /app/home 100 6   # pool-slow 10 or fewer, tota
 - Processes are added at first boot (cloud-init). An environment deployed before this change needs `./cleanup.sh` and `./deploy.sh` again.
 
 `pool-primary`, `pool-standby`, `pool-flag-off`, and `pool-flag-on` are gateway pools that point at the existing processes, so the `x-backend-pool` header shows the process name: `pool-canary` for VM 2 and `pool-web` for VM 1.
+
+## Tests
+
+```bash
+node --test backend/ tests/
+```
+
+- `backend/server.test.js`: the backend's delay, health check, and CORS preflight.
+- `tests/simulator.test.mjs`: the simulator in headless Chrome. It checks that the prediction follows the request form (headers, method, path, query, client IP) when "Send request" or "Send test requests" is pressed, that test requests send the form's request (against a local stand-in gateway), and that ports 8080, 8090, and 8110–8130 say they do not route by the request. It is skipped when Chrome is not found; set `CHROME_PATH` to point at it. Needs Node.js 22 or later.
+- GitHub Actions (`.github/workflows/test.yml`) runs the same command on every pull request and on pushes to `main`.
 
 ## Notes
 
