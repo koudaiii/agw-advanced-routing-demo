@@ -98,9 +98,16 @@ before(async () => {
   // CI runners (Ubuntu 24.04) can refuse Chrome's sandbox, so it is turned off there only.
   const args = ["--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", `--user-data-dir=${profile}`, "--remote-debugging-port=0"];
   if (process.env.CI) args.push("--no-sandbox");
-  chrome = spawn(CHROME, [...args, "about:blank"], { stdio: "ignore" });
+  chrome = spawn(CHROME, [...args, "about:blank"], { stdio: ["ignore", "ignore", "pipe"] });
+  // Keep Chrome's stderr and exit status, so a start failure says why.
+  let stderr = "", exited = null;
+  chrome.stderr.on("data", (d) => { stderr = (stderr + d).slice(-4000); });
+  chrome.on("exit", (code, signal) => { exited = signal || code; });
   const portFile = path.join(profile, "DevToolsActivePort");
-  for (let i = 0; i < 100 && !existsSync(portFile); i++) await sleep(100);
+  for (let i = 0; i < 300 && !existsSync(portFile) && exited === null; i++) await sleep(100);
+  if (!existsSync(portFile)) {
+    throw new Error(`Chrome did not start (${exited === null ? "no DevTools port after 30 s" : `exited: ${exited}`}). Chrome: ${CHROME}\n${stderr}`);
+  }
   const port = readFileSync(portFile, "utf8").split("\n")[0];
   const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
   ws = new WebSocket(targets.find((t) => t.type === "page").webSocketDebuggerUrl);
