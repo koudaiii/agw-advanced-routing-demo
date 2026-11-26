@@ -690,18 +690,18 @@ function renderDiagram() {
   const ev = state.ev, d = ev && ev.d, cfg = state.config;
   // Primary (VM 2) and Standby (VM 1) of priority-based selection (8090) are always drawn as separate pools, first in their VM
   const priorityPools = [
-    { id: "pool-primary", t: "pool-primary (Primary)", sub: L("VM 2 :8080 ・優先度 1", "VM 2 :8080 · priority 1"), color: "#b45309" },
-    { id: "pool-standby", t: "pool-standby (Standby)", sub: L("VM 1 :8080 ・優先度 2", "VM 1 :8080 · priority 2"), color: "#475569" },
+    { id: "pool-primary", t: "pool-primary (Primary)", sub: L(":8080 優先度 1", ":8080 Priority 1"), color: "#b45309" },
+    { id: "pool-standby", t: "pool-standby (Standby)", sub: L(":8080 優先度 2", ":8080 Priority 2"), color: "#475569" },
   ];
   const rowOf = (id) => {
     const pp = priorityPools.find((x) => x.id === id);
     if (pp) return pp;
     const si = SERVER_INFO[id];
-    if (si) return { id, t: id, sub: `VM ${si.vm} :${si.port} ${si.label}`, color: si.color };
+    if (si) return { id, t: id, sub: `:${si.port} ${si.label}`, color: si.color };
     const p = POOLS.find((x) => x.id === id);
     return { id: p.id, t: p.id + (p.id === cfg.defaultPool ? L(" (既定)", " (default)") : ""), sub: `:${p.port} ${p.label}` };
   };
-  // One frame per VM: VM 2 = pool-primary, pool-canary, pool-flag-on; VM 1 = pool-standby and the other pools
+  // One frame per VM (the frame label names the VM, so the rows start with the port): VM 2 = pool-primary, pool-canary, pool-flag-on; VM 1 = pool-standby and the other pools
   const vmGroups = [
     { label: "VM 2 (192.168.1.11)", rows: ["pool-primary", "pool-canary", "pool-flag-on", "pool-fast", "pool-rr-b"].map(rowOf) },
     { label: "VM 1 (192.168.1.10)", rows: ["pool-standby", "pool-web", "pool-flag-off", "pool-partner", "pool-tenant", "pool-api-v2", "pool-mobile", "pool-slow", "pool-rr-a"].map(rowOf) },
