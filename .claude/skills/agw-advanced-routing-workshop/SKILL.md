@@ -284,3 +284,18 @@ cd deploy && ./cleanup.sh --yes       # deletes without the prompt (needed when 
 - `agw-routing-simulator.html`: prediction versus real response, test requests, load distribution simulation (English / Japanese)
 - `docs/agw-advanced-routing-demo-guide.html` (English), `docs/agw-advanced-routing-demo-guide_ja.html` (Japanese): guide for participants
 - `README.md` (English), `README_ja.md` (Japanese)
+
+## References
+
+Official pages behind the facts in this skill. Check them when a preview behavior seems to have changed.
+
+- [Advanced routing rules on Azure Application Gateway (Preview)](https://learn.microsoft.com/azure/application-gateway/advanced-rules): hierarchy (map, rules, condition sets, conditions), condition types, limits, and RE2 regular expressions
+- [Advanced load balancing on Azure Application Gateway (Preview)](https://learn.microsoft.com/azure/application-gateway/advanced-load-balancing): weighted and priority-based pool selection, Round Robin / Weighted Round Robin / Least Connections, the limits (up to five pools, v2 SKUs, Basic and Advanced rules and a map's default action), and that weighted distribution does not look at pool health
+- [Azure Application Gateway backend settings configuration](https://learn.microsoft.com/azure/application-gateway/configuration-http-settings): cookie-based affinity (Least Connections is not applied while it is on) and Dedicated Backend Connection
+- [Microsoft.Network/applicationGateways (Bicep / ARM template reference)](https://learn.microsoft.com/azure/templates/microsoft.network/applicationgateways): properties used in `deploy/main.bicep`, such as `cookieBasedAffinity` and `dedicatedBackendConnection`
+- [Tutorial: Configure header-based routing with the Azure portal](https://learn.microsoft.com/azure/application-gateway/configure-advanced-routing-rule): creating an advanced rule by hand in the portal
+- [az network application-gateway advanced-routing-map](https://learn.microsoft.com/cli/azure/network/application-gateway/advanced-routing-map?view=azure-cli-latest): list and manage advanced routing maps
+- [az network application-gateway advanced-routing-map rule](https://learn.microsoft.com/cli/azure/network/application-gateway/advanced-routing-map/rule?view=azure-cli-latest): list and manage the rules of a map
+- [az network application-gateway advanced-routing-set](https://learn.microsoft.com/cli/azure/network/application-gateway/advanced-routing-set?view=azure-cli-latest): show and manage condition sets
+- [Azure CLI release notes (November 03, 2026, version 2.92.0)](https://learn.microsoft.com/cli/azure/release-notes-azure-cli?view=azure-cli-latest#november-03,-2026): the advanced routing commands were added in Azure CLI 2.92.0
+- [Troubleshoot backend health issues in Azure Application Gateway](https://learn.microsoft.com/troubleshoot/azure/application-gateway/application-gateway-backend-health-troubleshooting#backend-health-status-unhealthy): 502 responses and unhealthy backends

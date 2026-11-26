@@ -78,7 +78,7 @@ svg .l{text-anchor:start}
 <nav aria-label="目次"><h2>目次</h2><ol>
 <li><a href="#arch">全体構成</a></li><li><a href="#prereq">前提条件</a></li><li><a href="#backend">バックエンドの作り方</a></li>
 <li><a href="#agw">Application Gateway の構築</a></li><li><a href="#front">シミュレーターをフロントエンドにする</a></li>
-<li><a href="#demo">デモの進め方</a></li><li><a href="#trouble">トラブルシューティング</a></li><li><a href="#notes">制約・注意事項</a></li><li><a href="#cleanup">後片付け</a></li></ol></nav>
+<li><a href="#demo">デモの進め方</a></li><li><a href="#trouble">トラブルシューティング</a></li><li><a href="#notes">制約・注意事項</a></li><li><a href="#cleanup">後片付け</a></li><li><a href="#refs">参考文献</a></li></ol></nav>
 
 <section id="arch"><h2>1. 全体構成</h2>
 
@@ -567,5 +567,19 @@ if (req.method === &quot;OPTIONS&quot; &amp;&amp; req.headers[&quot;access-contr
 ./cleanup.sh --dry-run   # 一覧表示だけ
 ./cleanup.sh --yes       # 確認なしで削除
 az group exists -n rg-agw-advrouting-demo   # 削除が終わると false</code></pre>
+</section>
+<section id="refs"><h2>10. 参考文献</h2>
+<p>このガイドの根拠にした Microsoft Learn の公式ページです。ガイドとページの内容が違うときは、ページが正しいものとします (プレビューの機能は変わることがあります)。</p>
+<ul>
+<li><a href="https://learn.microsoft.com/azure/application-gateway/advanced-rules">Azure Application Gateway の高度なルーティング規則 (プレビュー)</a>: 階層 (マップ、ルール、条件セット、条件)、条件の種類、上限、RE2 の正規表現 (1、4、8 章)</li>
+<li><a href="https://learn.microsoft.com/azure/application-gateway/advanced-load-balancing">Azure Application Gateway における高度な負荷分散 (プレビュー)</a>: 重み付けと優先度ベースのプール選択、Round Robin / Weighted Round Robin / Least Connections、制約 (最大 5 プール、v2 SKU、Basic・Advanced ルールとマップの既定アクション)、重み付けはプールの正常性を見ないこと (4.2 節、8 章)</li>
+<li><a href="https://learn.microsoft.com/azure/application-gateway/configuration-http-settings">Azure Application Gateway バックエンド設定の構成</a>: Cookie によるアフィニティ (有効だと Least Connections は使われない) と Dedicated Backend Connection</li>
+<li><a href="https://learn.microsoft.com/azure/templates/microsoft.network/applicationgateways">Microsoft.Network/applicationGateways (Bicep / ARM テンプレートのリファレンス)</a>: <code>deploy/main.bicep</code> で使うプロパティ (<code>cookieBasedAffinity</code>、<code>dedicatedBackendConnection</code> など)</li>
+<li><a href="https://learn.microsoft.com/azure/application-gateway/configure-advanced-routing-rule">チュートリアル: Azure portal でヘッダーベースのルーティングを構成する</a>: ポータルで高度なルールを手動で作る手順 (4.3 節)</li>
+<li><a href="https://learn.microsoft.com/cli/azure/network/application-gateway/advanced-routing-map?view=azure-cli-latest">az network application-gateway advanced-routing-map</a>: 高度なルーティング マップの一覧と管理 (5.1 節)</li>
+<li><a href="https://learn.microsoft.com/cli/azure/network/application-gateway/advanced-routing-map/rule?view=azure-cli-latest">az network application-gateway advanced-routing-map rule</a>: マップのルールの一覧と管理 (5.1 節)</li>
+<li><a href="https://learn.microsoft.com/cli/azure/network/application-gateway/advanced-routing-set?view=azure-cli-latest">az network application-gateway advanced-routing-set</a>: 条件セットの表示と管理 (5.1 節)</li>
+<li><a href="https://learn.microsoft.com/cli/azure/release-notes-azure-cli?view=azure-cli-latest#november-03,-2026">Azure CLI リリース ノート (2026 年 11 月 3 日、バージョン 2.92.0)</a>: Advanced routing のコマンドが Azure CLI 2.92.0 で追加されたこと (2 章)</li>
+<li><a href="https://learn.microsoft.com/troubleshoot/azure/application-gateway/application-gateway-backend-health-troubleshooting#backend-health-status-unhealthy">Azure Application Gateway のバックエンドの正常性に関する問題のトラブルシューティング</a>: 502 の応答と異常なバックエンド (7 章)</li></ul>
 </section>
 </main></body></html>
