@@ -310,7 +310,7 @@ curl -i -H &quot;X-Tenant-Id: customer-1024&quot; http://localhost:8082/app/dash
 
 <h3>3.5 VM への配置 (cloud-init + systemd)</h3>
 <p><code>deploy/make-cloud-init.sh</code> が、VM ごとに 1 つずつ初期化ファイルを生成します (<code>deploy.sh</code> が実行します)。引数で入力 (プール定義) と出力ファイルを指定します。</p><ul><li><code>cloud-init.yaml</code>: VM 1 用。<code>backend/pools.conf</code> の 7 プロセス (ポート 8080–8083、8085、8086、8087)</li><li><code>cloud-init-canary.yaml</code>: VM 2 用 (カナリア)。<code>backend/pools-canary.conf</code> の <code>pool-canary</code> (ポート 8080)、<code>pool-fast</code> (8086)、<code>pool-rr-b</code> (8087)</li></ul><p>どちらも中身は次の 3 点です。</p><ol>
-<li>Node.js をインストールし、<code>server.js</code> を <code>/opt/agw-demo/</code> に配置 (base64 埋め込み)</li>
+<li>NodeSource の apt リポジトリから Node.js 26 (現行の LTS) をインストールし、<code>server.js</code> を <code>/opt/agw-demo/</code> に配置 (base64 埋め込み)。リポジトリの署名鍵は、起動時に取得せず、ファイルに埋め込んでいます (<code>deploy/nodesource-repo.gpg.key</code>)。Ubuntu 標準の <code>nodejs</code> パッケージ (Node.js 18、サポート終了) は入らないように固定しています。そのため、NodeSource に届かないときは、Node.js 18 に戻らずにインストールが失敗します</li>
 <li>テンプレート ユニット <code>agw-pool@.service</code> を作成 (<code>DynamicUser=yes</code> で専用ユーザーなしに実行)</li>
 <li>プールごとに <code>/etc/agw-demo/&lt;pool&gt;.env</code> を作り、<code>systemctl enable --now agw-pool@&lt;pool&gt;</code></li></ol>
 <pre><code>[Service]

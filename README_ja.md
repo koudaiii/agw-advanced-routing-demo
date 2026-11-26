@@ -44,7 +44,8 @@
 | `backend/pools-canary.conf` | VM 2 のプロセス (`pool-canary` 8080。サーバー選択用に `pool-fast` 8086 と `pool-rr-b` 8087) |
 | `deploy/deploy.sh` | リソース グループを作り、`deploy/main.bicep` をデプロイします。SSH 鍵がなければ生成します |
 | `deploy/main.bicep` | VNet、バックエンド VM 1 (7 プロセス: ポート 8080–8083、8085、8086、8087)、VM 2 (3 プロセス: `pool-canary` 8080、`pool-fast` 8086、`pool-rr-b` 8087)、NAT Gateway、WAF ポリシー、Application Gateway、7 つのリスナー。4 つは高度なルールと専用のマップを持ちます: `rule1` / `advancedRoutingMap1` (ポート 80)、`rule-canary` / `canaryMap` (ポート 8080)、`rule-priority` / `priorityMap` (ポート 8090)、`rule-flag` / `flagMap` (ポート 8100)。3 つはサーバー選択用の Basic のルールです: `rule-rr` (ポート 8110)、`rule-rr-slow` (ポート 8120)、`rule-lc` (ポート 8130) |
-| `deploy/make-cloud-init.sh` / `cloud-init.yaml` | バックエンド VM 1 の初期化データ (`backend/server.js` を埋め込み) |
+| `deploy/make-cloud-init.sh` / `cloud-init.yaml` | バックエンド VM 1 の初期化データ (`backend/server.js` を埋め込み)。NodeSource から Node.js 26 (現行の LTS) を入れる |
+| `deploy/nodesource-repo.gpg.key` | NodeSource の apt リポジトリの署名鍵。両方の初期化データに埋め込む。指紋 `6F71 F525 2828 41EE DAF8 51B4 2F59 B5F9 9B1B E0B4` |
 | `deploy/cloud-init-canary.yaml` | カナリア VM 2 の初期化データ (`backend/pools-canary.conf` から生成) |
 | `deploy/canary-check.sh` | 指定した URI に 100 回連続で送り、`x-backend-pool` からプール別の件数と割合を表示します。カナリアは `FRONTEND=<IP>:8080` |
 | `deploy/lb-check.sh` | 指定した URI に件数分 (既定は同時 6 件) 送り、サーバーごとの件数、割合、平均の時間と、全体の所要時間を表示します。サーバー選択は `FRONTEND=<IP>:8110`、`:8120`、`:8130` |

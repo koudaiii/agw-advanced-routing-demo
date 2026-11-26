@@ -44,7 +44,8 @@ The diagrams are from Microsoft Learn: [Advanced load balancing on Azure Applica
 | `backend/pools-canary.conf` | Processes for VM 2 (`pool-canary` 8080, and for server selection `pool-fast` 8086 and `pool-rr-b` 8087) |
 | `deploy/deploy.sh` | Creates the resource group and deploys `deploy/main.bicep`. Generates an SSH key if there is none |
 | `deploy/main.bicep` | VNet, backend VM 1 (seven processes: ports 8080–8083, 8085, 8086, 8087), VM 2 (three processes: `pool-canary` 8080, `pool-fast` 8086, `pool-rr-b` 8087), NAT gateway, WAF policy, Application Gateway, and seven listeners. Four have an advanced rule and its own routing map: `rule1` / `advancedRoutingMap1` (port 80), `rule-canary` / `canaryMap` (port 8080), `rule-priority` / `priorityMap` (port 8090), `rule-flag` / `flagMap` (port 8100). Three have a Basic rule for server selection: `rule-rr` (port 8110), `rule-rr-slow` (port 8120), `rule-lc` (port 8130) |
-| `deploy/make-cloud-init.sh` / `cloud-init.yaml` | Bootstrap data for backend VM 1 (embeds `backend/server.js`) |
+| `deploy/make-cloud-init.sh` / `cloud-init.yaml` | Bootstrap data for backend VM 1 (embeds `backend/server.js`). Installs Node.js 26 (current LTS) from NodeSource |
+| `deploy/nodesource-repo.gpg.key` | Signing key of the NodeSource apt repository, embedded in both bootstrap files. Fingerprint `6F71 F525 2828 41EE DAF8 51B4 2F59 B5F9 9B1B E0B4` |
 | `deploy/cloud-init-canary.yaml` | Bootstrap data for canary VM 2 (generated from `backend/pools-canary.conf`) |
 | `deploy/canary-check.sh` | Sends 100 consecutive requests to one URI and prints the count and share per pool from `x-backend-pool`. For the canary use `FRONTEND=<IP>:8080` |
 | `deploy/lb-check.sh` | Sends N requests to one URI, 6 at a time by default, and prints the count, share, and average time per server, then the total time. For server selection use `FRONTEND=<IP>:8110`, `:8120`, or `:8130` |

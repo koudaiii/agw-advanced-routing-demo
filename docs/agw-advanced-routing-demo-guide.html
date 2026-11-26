@@ -310,7 +310,7 @@ curl -i -H "X-Tenant-Id: customer-1024" http://localhost:8082/app/dashboard</cod
 
 <h3>3.5 Putting it on the VMs (cloud-init + systemd)</h3>
 <p><code>deploy/make-cloud-init.sh</code> generates one bootstrap file per VM (<code>deploy.sh</code> runs it). Its arguments are the input (pool definitions) and the output file.</p><ul><li><code>cloud-init.yaml</code>: for VM 1. The seven processes of <code>backend/pools.conf</code> (ports 8080–8083, 8085, 8086, 8087)</li><li><code>cloud-init-canary.yaml</code>: for VM 2 (canary). <code>pool-canary</code> (port 8080), <code>pool-fast</code> (8086), and <code>pool-rr-b</code> (8087) from <code>backend/pools-canary.conf</code></li></ul><p>Both do these three things.</p><ol>
-<li>Install Node.js and put <code>server.js</code> in <code>/opt/agw-demo/</code> (embedded as base64)</li>
+<li>Install Node.js 26 (the current LTS) from the NodeSource apt repository, and put <code>server.js</code> in <code>/opt/agw-demo/</code> (embedded as base64). The repository's signing key is embedded in the file (<code>deploy/nodesource-repo.gpg.key</code>), not downloaded at boot. Ubuntu's own <code>nodejs</code> package (Node.js 18, end of life) is pinned out, so if NodeSource cannot be reached, the install fails instead of falling back to it</li>
 <li>Create the template unit <code>agw-pool@.service</code> (<code>DynamicUser=yes</code> runs it without a dedicated user)</li>
 <li>Create <code>/etc/agw-demo/&lt;pool&gt;.env</code> per pool and run <code>systemctl enable --now agw-pool@&lt;pool&gt;</code></li></ol>
 <pre><code>[Service]
