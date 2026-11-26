@@ -713,13 +713,13 @@ function renderDiagram() {
     const y0 = cursor, rowStart = y0 + frameHead;
     g.rows.forEach((t, i) => { t.y = rowStart + i * rowH + rowH / 2; });
     const y1 = rowStart + g.rows.length * rowH + 4;
-    frames.push({ label: g.label, x: 692, y: y0, w: 226, h: y1 - y0 });
+    frames.push({ label: g.label, x: 760, y: y0, w: 266, h: y1 - y0 });
     cursor = y1 + groupGap;
   }
   const redirect = { id: "__redirect", t: L("リダイレクト", "Redirect"), sub: L("302 応答", "302 response"), y: cursor + rowH / 2 };
   const targets = vmGroups.flatMap((g) => g.rows).concat([redirect]);
   const H = cursor + rowH + 10, mid = H / 2;
-  svg.setAttribute("viewBox", `0 0 920 ${H}`);
+  svg.setAttribute("viewBox", `0 0 1034 ${H}`);
   const summary = ev ? describe(d, cfg) : L("テスト要求を送信すると経路が表示されます", "Send a test request to see the route");
   svg.append(s("title", { id: "dgT" }, L("要求のルーティング経路図", "Route of the request")), s("desc", { id: "dgD" }, summary));
   const on = !!ev, blocked = d && d.kind === "waf";
@@ -734,14 +734,14 @@ function renderDiagram() {
   const routeColor = routeColorOf(d);
   const stages = [
     { x: 8, l: L("クライアント", "Client"), sub: isLive() ? L("このブラウザー", "this browser") : "", on },
-    { x: 148, l: L("Basic リスナー", "Basic listener"), sub: serverSel ? `:${d.port} (${serverSel.algo === "lc" ? "LC" : "RR"})` : d && d.kind === "priority" ? L(":8090 (優先度)", ":8090 (priority)") : weighted ? L(":8080 (カナリア)", ":8080 (canary)") : ":80", on },
-    { x: 288, l: "WAF", sub: blocked ? L("403 で遮断", "blocked with 403") : cfg.waf.enabled ? L("ポリシー有効", "policy on") : L("無効", "off"), on: on && !blocked, bad: blocked },
+    { x: 158, l: L("Basic リスナー", "Basic listener"), sub: serverSel ? `:${d.port} (${serverSel.algo === "lc" ? "LC" : "RR"})` : d && d.kind === "priority" ? L(":8090 (優先度)", ":8090 (priority)") : weighted ? L(":8080 (カナリア)", ":8080 (canary)") : ":80", on },
+    { x: 308, l: "WAF", sub: blocked ? L("403 で遮断", "blocked with 403") : cfg.waf.enabled ? L("ポリシー有効", "policy on") : L("無効", "off"), on: on && !blocked, bad: blocked },
   ];
-  stages.slice(0, -1).forEach((g, i) => svg.append(s("line", { x1: g.x + 120, y1: mid, x2: stages[i + 1].x, y2: mid, stroke: (i < 2 ? on : stages[i + 1].on) ? routeColor : "var(--line)", "stroke-width": on ? 3 : 1.5 })));
+  stages.slice(0, -1).forEach((g, i) => svg.append(s("line", { x1: g.x + 130, y1: mid, x2: stages[i + 1].x, y2: mid, stroke: (i < 2 ? on : stages[i + 1].on) ? routeColor : "var(--line)", "stroke-width": on ? 3 : 1.5 })));
   stages.forEach((g) => {
-    svg.append(s("rect", { x: g.x, y: mid - 22, width: 120, height: 44, rx: 8, fill: "var(--card)", stroke: g.bad ? "#a4493a" : g.on ? routeColor : "var(--line)", "stroke-width": g.on || g.bad ? 2.5 : 1.5 }));
-    svg.append(s("text", { x: g.x + 60, y: mid - 2, "text-anchor": "middle", "font-size": g.l.length > 14 ? 9.5 : 12.5, "font-weight": 700, fill: "var(--fg)" }, g.l));
-    svg.append(s("text", { x: g.x + 60, y: mid + 13, "text-anchor": "middle", "font-size": 10.5, fill: "var(--fg)" }, g.sub));
+    svg.append(s("rect", { x: g.x, y: mid - 24, width: 130, height: 48, rx: 8, fill: "var(--card)", stroke: g.bad ? "#a4493a" : g.on ? routeColor : "var(--line)", "stroke-width": g.on || g.bad ? 2.5 : 1.5 }));
+    svg.append(s("text", { x: g.x + 65, y: mid - 3, "text-anchor": "middle", "font-size": g.l.length > 14 ? 11 : 13.5, "font-weight": 700, fill: "var(--fg)" }, g.l));
+    svg.append(s("text", { x: g.x + 65, y: mid + 14, "text-anchor": "middle", "font-size": 11.5, fill: "var(--fg)" }, g.sub));
   });
   // One box per listener port: four advanced routing maps, then the three Basic rules of server selection (#84).
   // The box of the called port is highlighted and the route starts from it
@@ -752,18 +752,18 @@ function renderDiagram() {
     { port: 8090, l: "priorityMap :8090", sub: "Primary 1 / Standby 2" },
     { port: 8100, l: "flagMap :8100", sub: L("オン → pool-flag-on", "on → pool-flag-on") },
     ...Object.entries(SERVER_SELECT_PORTS).map(([port, sp]) => ({ port: Number(port), l: `Basic rule :${port}`, sub: `${sp.pool} · ${algoName(sp.algo)}` })),
-  ].map((m, k, all) => ({ ...m, y: mid + (k - (all.length - 1) / 2) * 60 }));
+  ].map((m, k, all) => ({ ...m, y: mid + (k - (all.length - 1) / 2) * 62 }));
   const activeY = (mapDefs.find((m) => m.port === activePort) || mapDefs[0]).y;
   mapDefs.forEach((m) => {
     const isActive = on && !blocked && m.port === activePort;
-    svg.append(s("line", { x1: 408, y1: mid, x2: 428, y2: m.y, stroke: isActive ? routeColor : "var(--line)", "stroke-width": isActive ? 3 : 1.5 }));
-    svg.append(s("rect", { x: 428, y: m.y - 20, width: 120, height: 40, rx: 8, fill: "var(--card)", stroke: isActive ? routeColor : "var(--line)", "stroke-width": isActive ? 2.5 : 1.5 }));
-    svg.append(s("text", { x: 488, y: m.y - 2, "text-anchor": "middle", "font-size": 9.5, "font-weight": 700, fill: "var(--fg)" }, m.l));
-    svg.append(s("text", { x: 488, y: m.y + 12, "text-anchor": "middle", "font-size": 9.5, fill: "var(--fg)" }, m.sub));
+    svg.append(s("line", { x1: 438, y1: mid, x2: 458, y2: m.y, stroke: isActive ? routeColor : "var(--line)", "stroke-width": isActive ? 3 : 1.5 }));
+    svg.append(s("rect", { x: 458, y: m.y - 22, width: 160, height: 44, rx: 8, fill: "var(--card)", stroke: isActive ? routeColor : "var(--line)", "stroke-width": isActive ? 2.5 : 1.5 }));
+    svg.append(s("text", { x: 538, y: m.y - 3, "text-anchor": "middle", "font-size": 11.5, "font-weight": 700, fill: "var(--fg)" }, m.l));
+    svg.append(s("text", { x: 538, y: m.y + 13, "text-anchor": "middle", "font-size": 11, fill: "var(--fg)" }, m.sub));
   });
   frames.forEach((f) => {
     svg.append(s("rect", { x: f.x, y: f.y, width: f.w, height: f.h, rx: 10, fill: "none", stroke: "var(--line)", "stroke-width": 1.5, "stroke-dasharray": "5 4" }));
-    svg.append(s("text", { x: f.x + 10, y: f.y + 15, "font-size": 12, "font-weight": 700, fill: "var(--fg)" }, f.label));
+    svg.append(s("text", { x: f.x + 10, y: f.y + 15, "font-size": 13, "font-weight": 700, fill: "var(--fg)" }, f.label));
   });
   // Which destinations each map can reach is always drawn (thin grey lines).
   // Only the route the request took is drawn on top, as a thick colored line from the called map to the pool that was hit.
@@ -783,22 +783,22 @@ function renderDiagram() {
     mapTargets(m.port).forEach((id) => {
       const row = targets.find((t) => t.id === id);
       if (!row) return;
-      svg.append(s("path", { d: `M548 ${m.y} C 630 ${m.y}, 630 ${row.y}, 710 ${row.y}`, fill: "none", stroke: "var(--muted)", "stroke-width": 1.2, "stroke-dasharray": id === "__redirect" ? "5 4" : "none" }));
+      svg.append(s("path", { d: `M618 ${m.y} C 698 ${m.y}, 698 ${row.y}, 778 ${row.y}`, fill: "none", stroke: "var(--muted)", "stroke-width": 1.2, "stroke-dasharray": id === "__redirect" ? "5 4" : "none" }));
     });
   });
   targets.forEach((t) => {
     const hit = (t.id === "__redirect" && d && d.kind === "redirect") || hitSet.has(t.id);
     if (!hit) return;
     const p = t.color ? { color: t.color } : POOLS.find((x) => x.id === t.id);
-    svg.append(s("path", { d: `M548 ${activeY} C 630 ${activeY}, 630 ${t.y}, 710 ${t.y}`, fill: "none", stroke: p ? p.color : "var(--primary)", "stroke-width": 3, "stroke-dasharray": t.id === "__redirect" ? "5 4" : "none" }));
+    svg.append(s("path", { d: `M618 ${activeY} C 698 ${activeY}, 698 ${t.y}, 778 ${t.y}`, fill: "none", stroke: p ? p.color : "var(--primary)", "stroke-width": 3, "stroke-dasharray": t.id === "__redirect" ? "5 4" : "none" }));
   });
   targets.forEach((t) => {
     const y = t.y;
     const hit = (t.id === "__redirect" && d && d.kind === "redirect") || hitSet.has(t.id);
     const p = t.color ? { color: t.color } : POOLS.find((x) => x.id === t.id);
-    svg.append(s("rect", { x: 710, y: y - 12, width: 202, height: 24, rx: 6, fill: hit ? (p ? p.color : "var(--primary)") : "var(--card)", stroke: hit ? (p ? p.color : "var(--primary)") : "var(--line)", "stroke-width": hit ? 2 : 1 }));
-    svg.append(s("text", { x: 720, y: y - 1.5, "font-size": 11, "font-weight": 700, fill: hit ? "#ffffff" : "var(--fg)" }, t.t));
-    svg.append(s("text", { x: 720, y: y + 9.5, "font-size": 9.5, fill: hit ? "#ffffff" : "var(--fg)" }, t.sub));
+    svg.append(s("rect", { x: 778, y: y - 13, width: 240, height: 26, rx: 6, fill: hit ? (p ? p.color : "var(--primary)") : "var(--card)", stroke: hit ? (p ? p.color : "var(--primary)") : "var(--line)", "stroke-width": hit ? 2 : 1 }));
+    svg.append(s("text", { x: 788, y: y - 2, "font-size": 12, "font-weight": 700, fill: hit ? "#ffffff" : "var(--fg)" }, t.t));
+    svg.append(s("text", { x: 788, y: y + 10, "font-size": 11, fill: hit ? "#ffffff" : "var(--fg)" }, t.sub));
   });
   $("summary").textContent = summary;
 }
