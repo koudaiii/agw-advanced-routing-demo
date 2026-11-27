@@ -292,6 +292,28 @@ test("a live response on 8090 shows the pool and the server", { skip }, async (t
   } finally { g8090.close(); }
 });
 
+test("a live JSON body with server marks the answered pool candidate", { skip }, async (t) => {
+  const g8090 = http.createServer((req, res) => {
+    res.setHeader("access-control-allow-origin", "*");
+    res.setHeader("access-control-allow-headers", "*");
+    res.setHeader("access-control-expose-headers", "x-backend-srv");
+    if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
+    res.setHeader("x-backend-srv", "srv-primary");
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ server: "srv-primary", serverLabel: "Primary (priority 1)" }));
+  });
+  const listening = await new Promise((r) => { g8090.once("error", () => r(false)); g8090.listen(8090, "127.0.0.1", () => r(true)); });
+  if (!listening) { t.skip("port 8090 is in use"); return; }
+  try {
+    await open("en");
+    const r = await page(`t.set("backendUrl", "http://127.0.0.1:8090"); await t.wait(300); t.preset("port 8090"); await t.send();
+      for (let i = 0; i < 30 && !t.$("liveOut").querySelector("[data-pool]"); i++) await t.wait(100);
+      return { text: t.$("liveOut").textContent, row: t.$("liveOut").querySelector('[data-pool="pool-primary"]')?.getAttribute("data-answered") };`);
+    assert.ok(r.text.includes("pool-primary › srv-primary"));
+    assert.equal(r.row, "true");
+  } finally { g8090.close(); }
+});
+
 test("live 8100 srv-flag-on matches the prediction, and 8090 test requests count pool-primary › srv-primary", { skip }, async (t) => {
   const g8100 = await standIn(8100, "srv-flag-on"), g8090 = await standIn(8090, "srv-primary");
   if (!g8100 || !g8090) { g8100?.close(); g8090?.close(); t.skip("port 8100 or 8090 is in use"); return; }
@@ -467,3 +489,11 @@ for (const file of ["agw-advanced-routing-demo-guide.html", "agw-advanced-routin
 test("no JavaScript errors", { skip }, () => {
   assert.deepEqual(pageErrors, []);
 });
+
+for (const [lang, re] of [["en", /pool-web › srv-web 90% \/ pool-canary › srv-canary 10%/], ["ja", /pool-web › srv-web 90% \/ pool-canary › srv-canary 10%/]]) {
+  test(`the weighted prediction names pool › server (${lang})`, { skip }, async () => {
+    await open(lang);
+    const r = await page(`t.preset("port 8080|ポート 8080"); await t.send(); return t.summary();`);
+    assert.match(r, re);
+  });
+}

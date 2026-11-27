@@ -514,7 +514,7 @@ const POOL_SELECT_PORTS = {
 // Priority-based (8090): Primary = srv-primary (VM 2 :8088), Standby = srv-standby (VM 1 :8088).
 function describe(d, cfg) {
   if (d.kind === "waf") return L(`WAF がブロック (${d.cidr}) — ルーティング評価なし`, `Blocked by WAF (${d.cidr}) — no routing evaluation`);
-  if (d.kind === "weighted") return L(`ポート ${d.port} は重み付け (既定 pool-web 90% / pool-canary 10%)。1 件の経路は確率で決まります`, `Port ${d.port} is weighted (pool-web 90% / pool-canary 10%). A single request lands on one of them by chance`);
+  if (d.kind === "weighted") return L(`ポート ${d.port} は重み付け (既定 ${poolRoute("pool-web")} 90% / ${poolRoute("pool-canary")} 10%)。1 件の経路は確率で決まります`, `Port ${d.port} is weighted (${poolRoute("pool-web")} 90% / ${poolRoute("pool-canary")} 10%). A single request lands on one of them by chance`);
   if (d.kind === "server") { const sp = SERVER_SELECT_PORTS[d.port]; return L(`ポート ${d.port} は ${sp.pool} の 2 台 (${sp.servers.join(" / ")}) に ${algoName(sp.algo)} で振り分けます`, `Port ${d.port} sends requests to the two servers of ${sp.pool} (${sp.servers.join(" / ")}) with ${algoName(sp.algo)}`); }
   if (d.kind === "priority") return L(`ポート ${d.port} は優先度ベース。Primary (VM 2) が最小正常割合 60% 以上なら Primary、そうでなければ Standby (VM 1) に送ります`, `Port ${d.port} is priority-based. Requests go to Primary (VM 2) while it meets the minimum healthy percentage of 60%, otherwise to Standby (VM 1)`);
   if (d.kind === "pool") return L(`「${cfg.rules[d.i].name}」に一致 → ${pool(d.pool).label} (${poolRoute(d.pool)})`, `Matched "${cfg.rules[d.i].name}" → ${pool(d.pool).label} (${poolRoute(d.pool)})`);
@@ -845,7 +845,7 @@ function renderDiagram() {
   $("summary").textContent = summary;
 }
 
-// Server selection ports (#84): one gateway pool with two servers. Lists both servers; `answered` (the process name
+// Server selection ports (#84): one gateway pool with two servers. Lists both servers; `answered` (the server name
 // from x-backend-srv) is marked. With no `answered` (the prediction), neither is marked: one request can reach either.
 // One candidate row: `attr` is "server" or "pool"; the answered row is filled with its color and marked.
 function candidateRow(attr, id, hit, color, text, shown) {
@@ -1460,10 +1460,10 @@ function renderTestRun(run, page) {
   const [prevBtn, nextBtn] = [pager.firstChild, pager.lastChild];
   prevBtn.addEventListener("click", () => renderTestRun(run, page - 1));
   nextBtn.addEventListener("click", () => renderTestRun(run, page + 1));
-  const legend = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([pool, c]) =>
+  const legend = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([route, c]) =>
     el("span", { class: "note", style: "display:inline-flex;align-items:center;gap:6px;margin-inline-end:14px" },
-      el("span", { style: `display:inline-block;inline-size:12px;block-size:12px;border-radius:3px;background:${colors.get(pool)}` }),
-      el("span", { text: L(`${pool}: ${c} 件 (${answered ? Math.round((c / answered) * 100) : 0}%)、平均 ${secs(msSum.get(pool) / c)} 秒`, `${pool}: ${c} (${answered ? Math.round((c / answered) * 100) : 0}%), avg ${secs(msSum.get(pool) / c)} s`) })));
+      el("span", { style: `display:inline-block;inline-size:12px;block-size:12px;border-radius:3px;background:${colors.get(route)}` }),
+      el("span", { text: L(`${route}: ${c} 件 (${answered ? Math.round((c / answered) * 100) : 0}%)、平均 ${secs(msSum.get(route) / c)} 秒`, `${route}: ${c} (${answered ? Math.round((c / answered) * 100) : 0}%), avg ${secs(msSum.get(route) / c)} s`) })));
   if (failed) legend.push(el("span", { class: "note", style: "display:inline-flex;align-items:center;gap:6px;margin-inline-end:14px" },
     el("span", { style: "display:inline-block;inline-size:12px;block-size:12px;border-radius:3px;background:#e2e8f0;border:1px solid #94a3b8" }),
     el("span", { text: L(`失敗: ${failed} 件${timeouts ? ` (うち ${TEST_TIMEOUT_MS / 1000} 秒以内に応答なし ${timeouts} 件)` : ""}`, `Failed: ${failed}${timeouts ? ` (${timeouts} with no response within ${TEST_TIMEOUT_MS / 1000} seconds)` : ""}`) })));
