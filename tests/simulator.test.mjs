@@ -560,6 +560,25 @@ for (const [lang, re] of [["en", /pool-web › srv-web 90% \/ pool-canary › sr
   });
 }
 
+test("on 8080 the route lights both weighted pools and their servers", { skip }, async () => {
+  await open("en");
+  await page(`t.preset("port 8080"); await t.send();`);
+  assert.deepEqual([...await hitIds()].sort(), ["pool-canary", "pool-web", "rule-canary", "srv-canary", "srv-web"]);
+});
+
+test("on 8090 the route lights Primary only", { skip }, async () => {
+  await open("en");
+  await page(`t.preset("port 8090"); await t.send();`);
+  assert.deepEqual([...await hitIds()].sort(), ["pool-primary", "rule-priority", "srv-primary"]);
+});
+
+test("a WAF block lights no rule, pool, server, or redirect", { skip }, async () => {
+  await open("en");
+  const prediction = await page(`t.preset("^WAF block$"); await t.send(); return t.prediction();`);
+  assert.match(prediction, /403/);
+  assert.deepEqual([...await hitIds()], []);
+});
+
 test("no JavaScript errors", { skip }, () => {
   assert.deepEqual(pageErrors, []);
 });
