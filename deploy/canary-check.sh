@@ -13,9 +13,9 @@ tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 
 for _ in $(seq 1 "$N"); do
-  pool="$(curl -s -o /dev/null -D - --max-time 10 -A "$UA" "http://$FRONTEND$URI" \
+  srv="$(curl -s -o /dev/null -D - --max-time 10 -A "$UA" "http://$FRONTEND$URI" \
     | tr -d '\r' | awk -F': ' 'tolower($1)=="x-backend-srv"{print $2}')"
-  echo "${pool:-(no srv header)}" >> "$tmp"
+  echo "${srv:-(no srv header)}" >> "$tmp"
 done
 
 echo "URI: $URI  requests: $N"

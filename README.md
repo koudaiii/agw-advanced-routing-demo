@@ -138,7 +138,7 @@ FRONTEND=<IP>:8130 ./lb-check.sh /app/home 100 6   # srv-slow 10 or fewer, total
 - `srv-slow` waits 3 s on every request except `/healthz`. That is shorter than the probe timeout (20 s), so the slow server stays healthy. A server that stops answering is taken out by the health probe with either algorithm; Least Connections helps when a server is slow but still passes its probe.
 - Least Connections is not applied while cookie-based affinity is on. The backend settings `hs-8086` and `hs-8087` keep it off.
 - The algorithm is set on the pool: `serverSelectionAlgorithm: 'LeastConnections'` on `pool-lc`. This preview property is not in the public API spec or the Bicep types. It was found by changing a pool in the portal and comparing the gateway before and after (`docs/superpowers/specs/2026-11-25-server-selection-demo-design.md`).
-- Servers are added at first boot (cloud-init). An environment deployed before this change needs `./cleanup.sh` and `./deploy.sh` again.
+- Servers are added at first boot (cloud-init). An environment deployed before this change needs `./cleanup.sh` and `./deploy.sh` again. The same applies to an environment deployed before the `srv-` rename, because the VM bootstrap (cloud-init) changed.
 
 Pools keep the names of the gateway's backend pools, as the portal shows them (`pool-web`). Servers, the Node.js processes, are named separately and start with `srv-` (`srv-web`); the `x-backend-srv` header shows the server name. `pool-primary` / `pool-standby` (port 8088) and `pool-flag-on` / `pool-flag-off` (port 8089) each have a server of their own (`srv-primary`, `srv-standby`, `srv-flag-on`, `srv-flag-off`). Stopping one of them does not affect the other ports.
 

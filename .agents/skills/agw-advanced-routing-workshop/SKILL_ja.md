@@ -272,7 +272,7 @@ cd deploy && ./cleanup.sh --yes       # 確認なしで削除 (端末がない�
 - `deploy/deploy.sh`: デプロイ
 - `deploy/make-cloud-init.sh`、`deploy/cloud-init.yaml`、`deploy/cloud-init-canary.yaml`: VM の初期化 (VM 1 / カナリア VM 2)
 - `deploy/test.sh`: シナリオの確認
-- `deploy/canary-check.sh`: 指定した URI に 100 回連続で送り、プール別の件数を表示
+- `deploy/canary-check.sh`: 指定した URI に 100 回連続で送り、サーバー別の件数 (`x-backend-srv`) を表示
 - `deploy/lb-check.sh`: 件数分を同時 6 件で送り、サーバーごとの件数と平均の時間、全体の所要時間を表示 (8110〜8130 のサーバー選択)
 - `deploy/cleanup.sh`: リソース グループを削除 (`--dry-run` は一覧表示だけ、`--yes` は確認を省く)
 - `backend/server.js`、`backend/pools.conf`、`backend/pools-canary.conf`: バックエンドとサーバー定義

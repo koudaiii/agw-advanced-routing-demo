@@ -18,11 +18,11 @@ tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 
 one() { # prints "<server> <seconds>" for one request
-  local out pool secs
+  local out srv secs
   out="$(curl -s -o /dev/null -D - -w 'time_total: %{time_total}\n' --max-time 10 -A "$UA" "http://$FRONTEND$URI")"
-  pool="$(printf '%s' "$out" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-backend-srv"{print $2}')"
+  srv="$(printf '%s' "$out" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-backend-srv"{print $2}')"
   secs="$(printf '%s' "$out" | awk -F': ' '$1=="time_total"{print $2}')"
-  echo "${pool:-(no-srv-header)} ${secs:-0}"
+  echo "${srv:-(no-srv-header)} ${secs:-0}"
 }
 export -f one
 export FRONTEND URI UA

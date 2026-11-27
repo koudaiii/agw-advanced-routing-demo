@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploys a demo of Azure Application Gateway Advanced Routing (preview) via deploy/main.bicep:
-#   - VM 1 (Ubuntu) running 7 backend processes (ports 8080-8083, 8085, 8086, 8087; backend/pools.conf)
-#     and VM 2 running srv-canary, srv-fast, srv-rr-b (ports 8080, 8086, 8087; backend/pools-canary.conf)
+#   - VM 1 (Ubuntu) running 9 backend processes (ports 8080-8083, 8085-8089; backend/pools.conf)
+#     and VM 2 running 5 (srv-canary 8080, srv-fast 8086, srv-rr-b 8087, srv-primary 8088, srv-flag-on 8089; backend/pools-canary.conf)
 #   - Application Gateway WAF_v2 + WAF policy (custom rule blocks WAF_BLOCK_CIDR)
 #   - Advanced routing condition sets / map / rules (same 5 advanced rules as the simulator app)
 # Usage:

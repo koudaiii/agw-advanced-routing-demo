@@ -10,11 +10,11 @@ run() { # label, curl args...
   local label="$1"; shift
   local out
   out="$(curl -s -o /dev/null -D - --max-time 10 "$@")"
-  local code pool loc
+  local code srv loc
   code="$(printf '%s' "$out" | head -1 | awk '{print $2}')"
-  pool="$(printf '%s' "$out" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-backend-srv"{print $2}')"
+  srv="$(printf '%s' "$out" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-backend-srv"{print $2}')"
   loc="$(printf '%s' "$out" | tr -d '\r' | awk -F': ' 'tolower($1)=="location"{print $2}')"
-  local target="$pool"
+  local target="$srv"
   if [ -z "$target" ] && [ -n "$loc" ]; then target="redirect -> $loc"; fi
   printf '%-22s HTTP %-4s %s\n' "$label" "${code:-ERR}" "$target"
 }

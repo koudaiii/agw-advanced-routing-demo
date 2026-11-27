@@ -579,6 +579,16 @@ test("a WAF block lights no rule, pool, server, or redirect", { skip }, async ()
   assert.deepEqual([...await hitIds()], []);
 });
 
+test("the answering-backend heading says pool › server in both languages", { skip }, async () => {
+  for (const [lang, want, gone] of [["en", "Pool › server that answered this request", "Backend pool that answered"], ["ja", "この応答を返したプール › サーバー", "バックエンド プール"]]) {
+    await open(lang);
+    await page(`t.preset("^(Tenant|テナント)$"); await t.send();`);
+    const out = await page(`return t.prediction();`);
+    assert.ok(out.includes(want), `${lang}: ${out}`);
+    assert.ok(!out.includes(gone), `${lang} still has ${gone}`);
+  }
+});
+
 test("no JavaScript errors", { skip }, () => {
   assert.deepEqual(pageErrors, []);
 });

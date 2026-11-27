@@ -138,7 +138,7 @@ FRONTEND=<IP>:8130 ./lb-check.sh /app/home 100 6   # srv-slow は 10 件以下�
 - `srv-slow` は `/healthz` 以外のすべての要求で 3 秒待ちます。プローブのタイムアウト (20 秒) より短いため、遅いサーバーも正常のままです。応答しなくなったサーバーは、どちらのアルゴリズムでもヘルス プローブで外れます。Least Connections が役に立つのは、プローブには合格するが遅いサーバーがあるときです。
 - Cookie によるアフィニティが有効だと、Least Connections は使われません。バックエンド設定 `hs-8086` と `hs-8087` では無効にしています。
 - アルゴリズムはプールに設定します: `pool-lc` の `serverSelectionAlgorithm: 'LeastConnections'`。このプレビューの項目は、公開 API 仕様にも Bicep の型定義にもありません。ポータルでプールを変更し、前後のゲートウェイを比べて見つけました (`docs/superpowers/specs/2026-11-25-server-selection-demo-design.md`)。
-- サーバーは最初の起動時 (cloud-init) に入ります。この変更より前にデプロイした環境は、`./cleanup.sh` の後に `./deploy.sh` で作り直してください。
+- サーバーは最初の起動時 (cloud-init) に入ります。この変更より前にデプロイした環境は、`./cleanup.sh` の後に `./deploy.sh` で作り直してください。`srv-` への名前変更より前にデプロイした環境も、VM の初期化 (cloud-init) が変わったため同様に作り直してください。
 
 プールの名前は、ポータルに表示されるゲートウェイのバックエンド プールの名前です (`pool-web`)。サーバー (Node.js のプロセス) には別の名前を付け、`srv-` で始めます (`srv-web`)。`x-backend-srv` ヘッダーにはサーバー名が出ます。`pool-primary` / `pool-standby` (8088 番) と `pool-flag-on` / `pool-flag-off` (8089 番) には、それぞれ専用のサーバー (`srv-primary`、`srv-standby`、`srv-flag-on`、`srv-flag-off`) があります。どれかを止めても、ほかのポートには影響しません。
 

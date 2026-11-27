@@ -277,7 +277,7 @@ cd deploy && ./cleanup.sh --yes       # deletes without the prompt (needed when 
 - `deploy/deploy.sh`: deployment
 - `deploy/make-cloud-init.sh`, `deploy/cloud-init.yaml`, `deploy/cloud-init-canary.yaml`: VM bootstrap (VM 1 / canary VM 2)
 - `deploy/test.sh`: scenario verification
-- `deploy/canary-check.sh`: sends 100 consecutive requests to one URI and prints the count per pool
+- `deploy/canary-check.sh`: sends 100 consecutive requests to one URI and prints the count per server (from `x-backend-srv`)
 - `deploy/lb-check.sh`: sends N requests 6 at a time and prints the count and average time per server, and the total time (server selection on 8110–8130)
 - `deploy/cleanup.sh`: deletes the resource group (`--dry-run` lists only, `--yes` skips the prompt)
 - `backend/server.js`, `backend/pools.conf`, `backend/pools-canary.conf`: backend and server definitions

@@ -160,7 +160,7 @@ ol.rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
       <button type="submit" class="primary" id="sendBtn" data-ja="要求を送信">Send request</button>
       <div class="stack" id="testBox" style="border-top:1px solid var(--line-soft);padding-top:12px">
         <h3 style="margin:0" data-ja="実機へのテスト要求 (件数分)">Test requests to the real gateway</h3>
-        <p class="note" data-ja="ゲートウェイ URL に、上の要求 (プリセットのポート) を件数分送り、どのプールに届いたかを数えます。同時に 6 件を保ち、1 件終わるごとに次を送ります。結果は「実機の応答」に、全体の所要時間とプールごとの平均の応答時間とともに表示します。">Sends the request above (the port of its preset) to the gateway URL the given number of times and counts which pool answered. It keeps 6 requests open at a time and sends the next one as each finishes. The results appear under &quot;Real response&quot;, with the total time and the average response time per pool.</p>
+        <p class="note" data-ja="ゲートウェイ URL に、上の要求 (プリセットのポート) を件数分送り、どのプール › サーバーに届いたかを数えます。同時に 6 件を保ち、1 件終わるごとに次を送ります。結果は「実機の応答」に、全体の所要時間とプール › サーバーごとの平均の応答時間とともに表示します。">Sends the request above (the port of its preset) to the gateway URL the given number of times and counts which pool and server (pool › server) answered. It keeps 6 requests open at a time and sends the next one as each finishes. The results appear under &quot;Real response&quot;, with the total time and the average response time per pool › server.</p>
         <div style="inline-size:110px"><label for="testN" data-ja="件数">Count</label><input id="testN" type="number" min="1" max="1000" value="100" class="mono"></div>
         <button type="button" id="testBtn" class="primary small" data-ja="テスト要求を送る">Send test requests</button>
         <span class="note" id="testState"></span>
@@ -910,7 +910,7 @@ function backendPage(p, method, path, query, headers, instance, heading) {
   const rows = headers.slice().sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) =>
     el("tr", { class: GW.has(k) ? "gw" : null }, el("th", { scope: "row", text: k }), el("td", {}, String(v), GW.has(k) ? el("span", { class: "sr-only", text: L(" (Application Gateway が付与)", " (added by Application Gateway)") }) : null)));
   return el("div", { class: "page", role: "group", "aria-label": L(`${p.name || p.id} が返すページ`, `Page returned by ${p.name || p.id}`) },
-    el("div", { class: "ph", style: `background:${p.color}` }, el("p", { text: heading || L("この応答を返したバックエンド プール", "Backend pool that answered this request") }), el("p", { class: "pn", text: p.name || p.id }), el("p", { text: p.label })),
+    el("div", { class: "ph", style: `background:${p.color}` }, el("p", { text: heading || L("この応答を返したプール › サーバー", "Pool › server that answered this request") }), el("p", { class: "pn", text: p.name || p.id }), el("p", { text: p.label })),
     dl, el("table", {}, el("caption", { text: L("受信したリクエスト ヘッダー", "Request headers received") }), el("tbody", {}, rows)),
     el("p", { class: "note", style: "padding-inline:18px", text: L("黄色の行は Application Gateway が付与・書き換えたヘッダーです。", "Highlighted rows are headers that Application Gateway added or rewrote.") }));
 }
@@ -923,7 +923,7 @@ function renderSim() {
   // Ports 8080, 8090, and 8110-8130 pick the pool without looking at the request, so say that changing the form does not change the result.
   if (d.kind === "weighted" || d.kind === "priority" || d.kind === "server") out.append(el("p", { class: "note", text: L(`ポート ${d.port} は、ヘッダー、メソッド、パス、クエリでは振り分けません (WAF の User-Agent による遮断を除く)。これらを変えても予測は変わりません。`, `Port ${d.port} does not route by header, method, path, or query (except the WAF block by User-Agent). Changing them does not change the prediction.`) }));
   if (d.kind === "waf") { out.append(statusBlock(403, "Forbidden", L("WAF がブロックしたため、バックエンドには届きません。", "WAF blocked the request, so it does not reach a backend."))); return; }
-  if (d.kind === "weighted") { out.append(poolSelectBlock(8080, null), statusBlock("—", "", L("ポート 8080 の重み付けのため、1 件では pool-web か pool-canary のどちらかに確率で決まります。100 件の割合は canary-check.sh で確認します。", "Port 8080 is weighted, so a single request lands on pool-web or pool-canary by chance. Check the ratio of 100 requests with canary-check.sh."))); return; }
+  if (d.kind === "weighted") { out.append(poolSelectBlock(8080, null), statusBlock("—", "", L("ポート 8080 の重み付けのため、1 件では " + poolRoute("pool-web") + " か " + poolRoute("pool-canary") + " のどちらかに確率で決まります。100 件の割合は canary-check.sh で確認します。", "Port 8080 is weighted, so a single request lands on " + poolRoute("pool-web") + " or " + poolRoute("pool-canary") + " by chance. Check the ratio of 100 requests with canary-check.sh."))); return; }
   if (d.kind === "priority") { out.append(poolSelectBlock(8090, null), statusBlock("—", "", L("ポート 8090 は優先度ベース。Primary (VM 2) が正常なら Primary、停止していれば Standby (VM 1) に届きます。テスト要求で件数を送って確認します。", "Port 8090 is priority-based. The request reaches Primary (VM 2) while it is healthy, and Standby (VM 1) when it is stopped. Use the test requests to count."))); return; }
   if (d.kind === "server") {
     const sp = SERVER_SELECT_PORTS[d.port];
