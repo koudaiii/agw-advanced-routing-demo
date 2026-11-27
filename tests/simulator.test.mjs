@@ -486,10 +486,6 @@ for (const file of ["agw-advanced-routing-demo-guide.html", "agw-advanced-routin
   });
 }
 
-test("no JavaScript errors", { skip }, () => {
-  assert.deepEqual(pageErrors, []);
-});
-
 for (const [lang, re] of [["en", /pool-web › srv-web 90% \/ pool-canary › srv-canary 10%/], ["ja", /pool-web › srv-web 90% \/ pool-canary › srv-canary 10%/]]) {
   test(`the weighted prediction names pool › server (${lang})`, { skip }, async () => {
     await open(lang);
@@ -497,3 +493,7 @@ for (const [lang, re] of [["en", /pool-web › srv-web 90% \/ pool-canary › sr
     assert.match(r, re);
   });
 }
+
+test("no JavaScript errors", { skip }, () => {
+  assert.deepEqual(pageErrors, []);
+});
