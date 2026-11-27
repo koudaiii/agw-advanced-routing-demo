@@ -42,17 +42,17 @@
 | `tests/simulator.test.mjs` | シミュレーターのブラウザー テスト (「テスト」を参照) |
 | `docs/agw-advanced-routing-demo-guide_ja.html` | 構築ガイド (日本語)。英語は `docs/agw-advanced-routing-demo-guide.html` |
 | `docs/agw-ignite-2026-announcements_ja.md` / `.html` | Microsoft Ignite 2026 の Application Gateway の発表まとめ (日本語)。デモ環境での検証結果を含みます。英語は `docs/agw-ignite-2026-announcements.md` / `.html` |
-| `backend/server.js` | 依存なしの Node.js バックエンド。どのプールが応答したかと、受信したリクエスト ヘッダー (Application Gateway が付けた `X-Forwarded-*` などを強調) を HTML か JSON で返します。プール名は応答ヘッダー `x-backend-pool` にも入ります。CORS 対応済み (`ALLOW_ORIGIN`、既定は `*`) |
-| `backend/pools.conf` | VM 1 のプロセス名・ポート・表示名・色・遅延。9 プロセス (ポート 8080–8083、8085。サーバー選択用に、3 秒遅れる `pool-slow` 8086 と `pool-rr-a` 8087。優先度用の `pool-standby` 8088 と機能フラグ用の `pool-flag-off` 8089) |
-| `backend/pools-canary.conf` | VM 2 のプロセス (`pool-canary` 8080。サーバー選択用に `pool-fast` 8086 と `pool-rr-b` 8087。優先度用の `pool-primary` 8088 と機能フラグ用の `pool-flag-on` 8089) |
+| `backend/server.js` | 依存なしの Node.js バックエンド。1 つのプロセスが 1 台のサーバーです。どのサーバーが応答したかと、受信したリクエスト ヘッダー (Application Gateway が付けた `X-Forwarded-*` などを強調) を HTML か JSON で返します。サーバー名は応答ヘッダー `x-backend-srv` にも入ります。CORS 対応済み (`ALLOW_ORIGIN`、既定は `*`) |
+| `backend/pools.conf` | VM 1 のサーバー名・ポート・表示名・色・遅延。9 台 (`srv-web`、`srv-partner`、`srv-tenant`、`srv-api-v2`、`srv-mobile` がポート 8080–8083、8085。サーバー選択用に、3 秒遅れる `srv-slow` 8086 と `srv-rr-a` 8087。優先度用の `srv-standby` 8088 と機能フラグ用の `srv-flag-off` 8089) |
+| `backend/pools-canary.conf` | VM 2 のサーバー (`srv-canary` 8080。サーバー選択用に `srv-fast` 8086 と `srv-rr-b` 8087。優先度用の `srv-primary` 8088 と機能フラグ用の `srv-flag-on` 8089) |
 | `deploy/deploy.sh` | リソース グループを作り、`deploy/main.bicep` をデプロイします。SSH 鍵がなければ生成します |
-| `deploy/main.bicep` | VNet、バックエンド VM 1 (9 プロセス: ポート 8080–8083、8085–8089)、VM 2 (5 プロセス: `pool-canary` 8080、`pool-fast` 8086、`pool-rr-b` 8087、`pool-primary` 8088、`pool-flag-on` 8089)、NAT Gateway、WAF ポリシー、Application Gateway、7 つのリスナー。4 つは高度なルールと専用のマップを持ちます: `rule1` / `advancedRoutingMap1` (ポート 80)、`rule-canary` / `canaryMap` (ポート 8080)、`rule-priority` / `priorityMap` (ポート 8090)、`rule-flag` / `flagMap` (ポート 8100)。3 つはサーバー選択用の Basic のルールです: `rule-rr` (ポート 8110)、`rule-rr-slow` (ポート 8120)、`rule-lc` (ポート 8130) |
+| `deploy/main.bicep` | VNet、バックエンド VM 1 (9 プロセス: ポート 8080–8083、8085–8089)、VM 2 (5 プロセス: `srv-canary` 8080、`srv-fast` 8086、`srv-rr-b` 8087、`srv-primary` 8088、`srv-flag-on` 8089)、NAT Gateway、WAF ポリシー、Application Gateway、7 つのリスナー。4 つは高度なルールと専用のマップを持ちます: `rule1` / `advancedRoutingMap1` (ポート 80)、`rule-canary` / `canaryMap` (ポート 8080)、`rule-priority` / `priorityMap` (ポート 8090)、`rule-flag` / `flagMap` (ポート 8100)。3 つはサーバー選択用の Basic のルールです: `rule-rr` (ポート 8110)、`rule-rr-slow` (ポート 8120)、`rule-lc` (ポート 8130) |
 | `deploy/make-cloud-init.sh` / `cloud-init.yaml` | バックエンド VM 1 の初期化データ (`backend/server.js` を埋め込み)。NodeSource から Node.js 26 (現行の LTS) を入れる |
 | `deploy/nodesource-repo.gpg.key` | NodeSource の apt リポジトリの署名鍵。両方の初期化データに埋め込む。指紋 `6F71 F525 2828 41EE DAF8 51B4 2F59 B5F9 9B1B E0B4` |
 | `deploy/cloud-init-canary.yaml` | カナリア VM 2 の初期化データ (`backend/pools-canary.conf` から生成) |
-| `deploy/canary-check.sh` | 指定した URI に 100 回連続で送り、`x-backend-pool` からプール別の件数と割合を表示します。カナリアは `FRONTEND=<IP>:8080` |
+| `deploy/canary-check.sh` | 指定した URI に 100 回連続で送り、`x-backend-srv` からサーバー別の件数と割合を表示します。カナリアは `FRONTEND=<IP>:8080` |
 | `deploy/lb-check.sh` | 指定した URI に件数分 (既定は同時 6 件) 送り、サーバーごとの件数、割合、平均の時間と、全体の所要時間を表示します。サーバー選択は `FRONTEND=<IP>:8110`、`:8120`、`:8130` |
-| `deploy/test.sh` | シミュレーターのシナリオを curl で実機に送り、応答したプールを一覧表示します |
+| `deploy/test.sh` | シミュレーターのシナリオを curl で実機に送り、応答したサーバーを一覧表示します |
 | `.github/workflows/pages.yml` / `.github/pages/build.sh` | 構築ガイドと Ignite 2026 の発表まとめだけを GitHub Pages で公開します。シミュレーターは任意の URL に多数の要求を送れるため公開せず、シミュレーターへのリンクはこのリポジトリ内のファイルを指します。トップ ページ (`index.html`) は英語ガイドのコピーで、日本語のブラウザーでは日本語ガイドを開きます。Settings → Pages → Source を「GitHub Actions」にする必要があります。「Deploy from a branch」にすると、シミュレーターを含むリポジトリ全体が公開されます |
 
 ## 手順
@@ -62,10 +62,10 @@ az login
 cd deploy
 ./deploy.sh
 FRONTEND=<deploy.sh が表示したフロントエンド IP> ./test.sh
-FRONTEND=<フロントエンド IP>:8080 ./canary-check.sh /app/home 100   # ポート 8080 に 100 回送り、プール別に数える
+FRONTEND=<フロントエンド IP>:8080 ./canary-check.sh /app/home 100   # ポート 8080 に 100 回送り、サーバー別に数える
 ```
 
-デプロイには 15〜20 分ほどかかります (Application Gateway の作成と更新に時間がかかるため)。ブラウザーで `http://<フロントエンド IP>/app/home` を開くと、応答したプールのページが表示されます。ヘッダーを付ける場合は、curl かブラウザー拡張 (ModHeader など) を使います。
+デプロイには 15〜20 分ほどかかります (Application Gateway の作成と更新に時間がかかるため)。ブラウザーで `http://<フロントエンド IP>/app/home` を開くと、応答したサーバーのページが表示されます。ヘッダーを付ける場合は、curl かブラウザー拡張 (ModHeader など) を使います。
 
 デプロイは Bicep (`main.bicep`、ARM API `Microsoft.Network/applicationGateways@2026-03-01`) で行います。Advanced routing の CLI コマンド (`az network application-gateway advanced-routing-set` / `advanced-routing-map`) は、Azure CLI 2.92.0 以降で使えます。デプロイしたルールの確認に使います (ガイドの 5.1 を参照)。
 
@@ -100,19 +100,19 @@ client --:8080--> listener-canary --> rule-canary (Advanced)
                      既存バージョン                新バージョン
 ```
 
-`pool-canary` は VM 2 (192.168.1.11) の 8080 番、`pool-web` は VM 1 の 8080 番で動きます。同じポートで別の応答を返すため、IP アドレスを分けています。VM 2 を別ポートにできるかは未検証です (高度なルールでは、プールごとにバックエンド設定を持てます)。
+`pool-canary` のサーバー (`srv-canary`) は VM 2 (192.168.1.11) の 8080 番、`pool-web` のサーバー (`srv-web`) は VM 1 の 8080 番で動きます。同じポートで別の応答を返すため、IP アドレスを分けています。VM 2 を別ポートにできるかは未検証です (高度なルールでは、プールごとにバックエンド設定を持てます)。
 
 ### 優先度ベース (ポート 8090)
 
-ルール `rule-priority` (Advanced、優先度 300) がマップ `priorityMap` を使います。マップの中では、全パスに一致するルール `priority-split` が `pool-primary` (VM 2 の 8088 番、優先度 1) に送ります。`pool-primary` の正常なサーバーが最小正常割合 60% を下回ると、`pool-standby` (VM 1 の 8088 番、優先度 2) に切り替えます。既定の振り分け先は `pool-standby` です。各プールは 1 台なので、切り替えはプール全体の単位です。
+ルール `rule-priority` (Advanced、優先度 300) がマップ `priorityMap` を使います。マップの中では、全パスに一致するルール `priority-split` が `pool-primary` (VM 2 の `srv-primary`、8088 番、優先度 1) に送ります。`pool-primary` の正常なサーバーが最小正常割合 60% を下回ると、`pool-standby` (VM 1 の `srv-standby`、8088 番、優先度 2) に切り替えます。既定の振り分け先は `pool-standby` です。各プールは 1 台なので、切り替えはプール全体の単位です。
 
 - 確認: `FRONTEND=<IP>:8090 ./canary-check.sh /app/home 100`
-- 停止と復旧 (手動): `az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-primary"` で VM 2 の `pool-primary` プロセスを止めます。切り替わるまで約 2〜3 分かかります。`systemctl start agw-pool@pool-primary` で戻すと、また `pool-primary` に送られます。このプロセスは 8090 番だけに使われているため、ほかのポートには影響しません。
-- シミュレーターの「テスト要求」は、入力欄の要求 (メソッド、パス、クエリ、ヘッダー。「要求を送信」と同じ) を件数分送り、どのプールに届いたかを Primary / Standby の名前で数えます。結果は「実機の応答」に表示します。10 秒以内に応答がない要求は、失敗として数えます。
+- 停止と復旧 (手動): `az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-srv@srv-primary"` で VM 2 のサーバー `srv-primary` を止めます。切り替わるまで約 2〜3 分かかります。`systemctl start agw-srv@srv-primary` で戻すと、また `pool-primary` に送られます。このサーバーは 8090 番だけに使われているため、ほかのポートには影響しません。
+- シミュレーターの「テスト要求」は、入力欄の要求 (メソッド、パス、クエリ、ヘッダー。「要求を送信」と同じ) を件数分送り、どのプールのどのサーバーに届いたかを数えます (例: `pool-primary › srv-primary`)。結果は「実機の応答」に表示します。10 秒以内に応答がない要求は、失敗として数えます。
 
 ### 機能フラグ (ポート 8100)
 
-クライアントがヘッダーでフラグをオンにします。`X-Feature: new` を付けた要求は `pool-flag-on` (VM 2 の 8089 番) に、それ以外は既定の `pool-flag-off` (VM 1 の 8089 番) に送ります。確認: `curl -H "X-Feature: new" http://<FRONTEND-IP>:8100/`。ヘッダーの値は大文字と小文字を区別します。`X-Feature: NEW` は `pool-flag-off` に送られます (2026-11-26 に実機で確認)。
+クライアントがヘッダーでフラグをオンにします。`X-Feature: new` を付けた要求は `pool-flag-on` (VM 2 の `srv-flag-on`、8089 番) に、それ以外は既定の `pool-flag-off` (VM 1 の `srv-flag-off`、8089 番) に送ります。確認: `curl -H "X-Feature: new" http://<FRONTEND-IP>:8100/`。ヘッダーの値は大文字と小文字を区別します。`X-Feature: NEW` は `pool-flag-off` に送られます (2026-11-26 に実機で確認)。
 
 クライアントが選ぶ方式で、ランダムには分けないため、A/B テストではありません。統計的な A/B テストは issue #27 で扱います。
 
@@ -120,27 +120,27 @@ client --:8080--> listener-canary --> rule-canary (Advanced)
 
 この 3 つのポートでは、1 つのプールの中でゲートウェイがサーバーをどう選ぶか、1 台が詰まったとき (hot spot) に何が起きるかを見せます。各ポートは Basic のルールで、2 台入りのプール 1 つに送ります。
 
-| ポート | ルール / プール | サーバー (`x-backend-pool`) | 見せること |
+| ポート | ルール / プール | サーバー (`x-backend-srv`) | 見せること |
 |---|---|---|---|
-| 8110 | `rule-rr` / `pool-rr` | `pool-rr-a` (VM 1 の 8087 番)、`pool-rr-b` (VM 2 の 8087 番)。どちらも速い | Round Robin: 交互に届く |
-| 8120 | `rule-rr-slow` / `pool-rr-slow` | `pool-slow` (VM 1 の 8086 番、3 秒待つ)、`pool-fast` (VM 2 の 8086 番) | 遅いサーバーがある Round Robin: 約半分の要求が 3 秒待つ |
+| 8110 | `rule-rr` / `pool-rr` | `srv-rr-a` (VM 1 の 8087 番)、`srv-rr-b` (VM 2 の 8087 番)。どちらも速い | Round Robin: 交互に届く |
+| 8120 | `rule-rr-slow` / `pool-rr-slow` | `srv-slow` (VM 1 の 8086 番、3 秒待つ)、`srv-fast` (VM 2 の 8086 番) | 遅いサーバーがある Round Robin: 約半分の要求が 3 秒待つ |
 | 8130 | `rule-lc` / `pool-lc` | 8120 と同じ 2 台 | Least Connections: 新しい要求は遅いサーバーを避ける |
 
 ```bash
 FRONTEND=<IP>:8110 ./lb-check.sh /app/home 100 6   # 約半分ずつ。所要時間は短い
-FRONTEND=<IP>:8120 ./lb-check.sh /app/home 100 6   # pool-slow が約半分。所要時間は約 25 秒以上
-FRONTEND=<IP>:8130 ./lb-check.sh /app/home 100 6   # pool-slow は 10 件以下。所要時間は 8120 より明らかに短い
+FRONTEND=<IP>:8120 ./lb-check.sh /app/home 100 6   # srv-slow が約半分。所要時間は約 25 秒以上
+FRONTEND=<IP>:8130 ./lb-check.sh /app/home 100 6   # srv-slow は 10 件以下。所要時間は 8120 より明らかに短い
 ```
 
 - `lb-check.sh` は同時に 6 件を保って送り、サーバーごとの件数、割合、平均の時間と、全体の所要時間を表示します。Least Connections と Round Robin の差は、遅いサーバーに前の要求が残っている間にだけ出るため、要求を重ねて送る必要があります。1 件ずつ送る `canary-check.sh` では差が出ません。
 - シミュレーターの「テスト要求」も同じ送り方 (同時 6 件) で、全体の所要時間とサーバーごとの平均を表示します。プリセットは「Round Robin (ポート 8110)」「Round Robin 遅いサーバーあり (ポート 8120)」「Least Connections (ポート 8130)」です。
 - ポートは 1 つずつ試してください。8120 と 8130 は同じ 2 台を使うため、一方の要求が、もう一方から見える接続数を変えます。
-- `pool-slow` は `/healthz` 以外のすべての要求で 3 秒待ちます。プローブのタイムアウト (20 秒) より短いため、遅いサーバーも正常のままです。応答しなくなったサーバーは、どちらのアルゴリズムでもヘルス プローブで外れます。Least Connections が役に立つのは、プローブには合格するが遅いサーバーがあるときです。
+- `srv-slow` は `/healthz` 以外のすべての要求で 3 秒待ちます。プローブのタイムアウト (20 秒) より短いため、遅いサーバーも正常のままです。応答しなくなったサーバーは、どちらのアルゴリズムでもヘルス プローブで外れます。Least Connections が役に立つのは、プローブには合格するが遅いサーバーがあるときです。
 - Cookie によるアフィニティが有効だと、Least Connections は使われません。バックエンド設定 `hs-8086` と `hs-8087` では無効にしています。
 - アルゴリズムはプールに設定します: `pool-lc` の `serverSelectionAlgorithm: 'LeastConnections'`。このプレビューの項目は、公開 API 仕様にも Bicep の型定義にもありません。ポータルでプールを変更し、前後のゲートウェイを比べて見つけました (`docs/superpowers/specs/2026-11-25-server-selection-demo-design.md`)。
-- プロセスは最初の起動時 (cloud-init) に入ります。この変更より前にデプロイした環境は、`./cleanup.sh` の後に `./deploy.sh` で作り直してください。
+- サーバーは最初の起動時 (cloud-init) に入ります。この変更より前にデプロイした環境は、`./cleanup.sh` の後に `./deploy.sh` で作り直してください。`srv-` への名前変更より前にデプロイした環境も、VM の初期化 (cloud-init) が変わったため同様に作り直してください。
 
-`pool-primary` / `pool-standby` (8088 番) と `pool-flag-on` / `pool-flag-off` (8089 番) には、同じ名前の専用プロセスがあります。そのため `x-backend-pool` ヘッダーにはゲートウェイのプール名が出ます。どれかを止めても、ほかのポートには影響しません。
+プールの名前は、ポータルに表示されるゲートウェイのバックエンド プールの名前です (`pool-web`)。サーバー (Node.js のプロセス) には別の名前を付け、`srv-` で始めます (`srv-web`)。`x-backend-srv` ヘッダーにはサーバー名が出ます。`pool-primary` / `pool-standby` (8088 番) と `pool-flag-on` / `pool-flag-off` (8089 番) には、それぞれ専用のサーバー (`srv-primary`、`srv-standby`、`srv-flag-on`、`srv-flag-off`) があります。どれかを止めても、ほかのポートには影響しません。
 
 ## テスト
 

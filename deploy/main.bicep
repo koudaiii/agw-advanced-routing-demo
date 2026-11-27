@@ -29,8 +29,8 @@ var mapName = 'advancedRoutingMap1'
 var canaryMapName = 'canaryMap'
 var priorityMapName = 'priorityMap'
 var flagMapName = 'flagMap'
-// VM 2 runs the new version (pool-canary, port 8080 like pool-web) and the dedicated processes for
-// priority-based selection (pool-primary, 8088) and the feature flag (pool-flag-on, 8089).
+// VM 2 runs the new version (srv-canary, port 8080 like srv-web) and the dedicated processes for
+// priority-based selection (srv-primary, 8088) and the feature flag (srv-flag-on, 8089).
 var vm2Ip = '192.168.1.11'
 var canaryVmName = '${vmName}-canary'
 var poolAddressPools = [for p in pools: {
@@ -59,7 +59,7 @@ var poolHttpSettings = [
     }
   }
 ]
-// #82 server selection demo: 8086 = pool-slow (VM 1) / pool-fast (VM 2), 8087 = pool-rr-a (VM 1) / pool-rr-b (VM 2).
+// #82 server selection demo: 8086 = srv-slow (VM 1) / srv-fast (VM 2), 8087 = srv-rr-a (VM 1) / srv-rr-b (VM 2).
 // Affinity stays off: Least Connections is not applied while cookie-based affinity is on.
 var serverSelectHttpSettings = [
   for port in [8086, 8087]: {
@@ -80,7 +80,8 @@ var appgwSubnetId = resourceId('Microsoft.Network/virtualNetworks/subnets', vnet
 var backendSubnetId = resourceId('Microsoft.Network/virtualNetworks/subnets', vnetName, 'backend')
 var gwId = resourceId('Microsoft.Network/applicationGateways', gwName)
 
-// name|port|vm  (same as backend/pools.conf and backend/pools-canary.conf; one Node.js process per entry).
+// name|port|vm  (name = the backend pool's name in Azure; the server in it is the srv-... process with the same port in
+// backend/pools.conf and backend/pools-canary.conf, one Node.js process per entry).
 // Each entry becomes a backend pool with the VM's address and backend settings hs-<name> on its port.
 var pools = [
   { name: 'pool-web', port: 8080, vm: 1 }
@@ -193,7 +194,7 @@ resource nic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
   ]
 }
 
-// ---------- Backend VM 1 (9 Node.js processes, see backend/pools.conf and cloud-init.yaml) ----------
+// ---------- Backend VM 1 (9 Node.js servers, see backend/pools.conf and cloud-init.yaml) ----------
 
 resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
   name: vmName
@@ -242,7 +243,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
   }
 }
 
-// ---------- VM 2 (5 Node.js processes: pool-canary 8080, pool-fast 8086, pool-rr-b 8087, pool-primary 8088, pool-flag-on 8089; see cloud-init-canary.yaml) ----------
+// ---------- VM 2 (5 Node.js servers: srv-canary 8080, srv-fast 8086, srv-rr-b 8087, srv-primary 8088, srv-flag-on 8089; see cloud-init-canary.yaml) ----------
 
 resource canaryNic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
   name: '${canaryVmName}-nic'
@@ -439,14 +440,14 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
-        // Port 8090: priority-based selection (pool-primary on VM 2 first, pool-standby on VM 1 when pool-primary is unhealthy).
+        // Port 8090: priority-based selection (pool-primary on VM 2 (srv-primary) first, pool-standby on VM 1 (srv-standby) when pool-primary is unhealthy).
         name: 'port-8090'
         properties: {
           port: 8090
         }
       }
       {
-        // Port 8100: feature flag (#74). X-Feature: new -> pool-flag-on; otherwise -> pool-flag-off.
+        // Port 8100: feature flag (#74). X-Feature: new -> pool-flag-on (srv-flag-on); otherwise -> pool-flag-off (srv-flag-off).
         name: 'port-8100'
         properties: {
           port: 8100
@@ -460,7 +461,7 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
-        // Port 8120: Round Robin with one slow server (pool-slow waits 3 s) (#82).
+        // Port 8120: Round Robin with one slow server (srv-slow waits 3 s) (#82).
         name: 'port-8120'
         properties: {
           port: 8120
@@ -497,7 +498,7 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
     backendAddressPools: concat(poolAddressPools, [
       {
         // #82 server selection demo. Every pool here has two servers; the port comes from hs-8086 / hs-8087.
-        // 8110: pool-rr-a (VM 1, 8087) and pool-rr-b (VM 2, 8087), both fast. Round Robin (the default).
+        // 8110: srv-rr-a (VM 1, 8087) and srv-rr-b (VM 2, 8087), both fast. Round Robin (the default).
         name: 'pool-rr'
         properties: {
           backendAddresses: [
@@ -511,7 +512,7 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
-        // 8120: pool-slow (VM 1, 8086, 3 s) and pool-fast (VM 2, 8086). Round Robin (the default).
+        // 8120: srv-slow (VM 1, 8086, 3 s) and srv-fast (VM 2, 8086). Round Robin (the default).
         name: 'pool-rr-slow'
         properties: {
           backendAddresses: [
@@ -525,7 +526,7 @@ resource agw 'Microsoft.Network/applicationGateways@2026-03-01' = {
         }
       }
       {
-        // 8130: the same two servers as pool-rr-slow, with Least Connections.
+        // 8130: the same two servers as pool-rr-slow (srv-slow and srv-fast), with Least Connections.
         name: 'pool-lc'
         properties: {
           backendAddresses: [

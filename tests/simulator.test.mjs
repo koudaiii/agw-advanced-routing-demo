@@ -78,15 +78,15 @@ const page = (body) => evaluate(`(async () => { const t = window.__t; ${body} })
 
 before(async () => {
   if (skip) return;
-  // Stand-in gateway: answers pool-partner when X-Partner-Id is present, else pool-web, and records each request.
+  // Stand-in gateway: answers srv-partner when X-Partner-Id is present, else srv-web, and records each request.
   gateway = http.createServer((req, res) => {
     res.setHeader("access-control-allow-origin", "*");
     res.setHeader("access-control-allow-methods", "GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS");
     res.setHeader("access-control-allow-headers", "*");
-    res.setHeader("access-control-expose-headers", "x-backend-pool");
+    res.setHeader("access-control-expose-headers", "x-backend-srv");
     if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
     received.push({ method: req.method, url: req.url, partner: req.headers["x-partner-id"] || null });
-    res.setHeader("x-backend-pool", req.headers["x-partner-id"] ? "pool-partner" : "pool-web");
+    res.setHeader("x-backend-srv", req.headers["x-partner-id"] ? "srv-partner" : "srv-web");
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({ headers: { "x-forwarded-for": "192.0.2.41:50000" } }));
   });
@@ -236,71 +236,152 @@ test("a saved port-8100 rule named A/B test is kept", { skip }, async () => {
   assert.deepEqual(await savedRules(), ["A/B test (variant B)"]);
 });
 
+// The route diagram in three columns: rule → pool → server. Each box is a <g data-box data-id data-hit>.
+const diagramBoxes = () => page(`return [...document.querySelectorAll("#diagram [data-box]")].map((g) => { const b = g.getBBox();
+  return { box: g.dataset.box, id: g.dataset.id, hit: g.dataset.hit, x: b.x, w: b.width, text: g.textContent }; });`);
+const hitIds = async () => new Set((await diagramBoxes()).filter((b) => b.hit === "true").map((b) => b.id));
+
 // Priority (8090) and the feature flag (8100) have their own processes on 8088 / 8089 (#131).
-for (const [lang, rows] of [
-  ["en", [":8088 Priority 1", ":8088 Priority 2", ":8089 Feature flag on", ":8089 Feature flag off"]],
-  ["ja", [":8088 優先度 1", ":8088 優先度 2", ":8089 機能フラグ オン", ":8089 機能フラグ オフ"]],
-]) {
-  test(`the diagram shows the dedicated ports 8088 and 8089 (${lang})`, { skip }, async () => {
+for (const lang of ["en", "ja"]) {
+  test(`the diagram's server boxes show the dedicated ports 8088 and 8089 (${lang})`, { skip }, async () => {
     await open(lang);
-    const texts = await page(`return [...document.querySelectorAll("#diagram text")].map((x) => x.textContent);`);
-    for (const row of rows) assert.ok(texts.includes(row), row);
-    assert.ok(!texts.some((x) => /^:8080 (Priority|優先度)/.test(x)));
+    const boxes = await diagramBoxes();
+    for (const [id, port] of [["srv-primary", ":8088"], ["srv-standby", ":8088"], ["srv-flag-on", ":8089"], ["srv-flag-off", ":8089"]]) {
+      const b = boxes.find((x) => x.box === "server" && x.id === id);
+      assert.ok(b, id);
+      assert.ok(b.text.includes(port), `${id} ${b.text}`);
+    }
+  });
+
+  test(`the diagram has 7 rules, 13 pools, 14 servers in three columns (${lang})`, { skip }, async () => {
+    await open(lang);
+    const boxes = await diagramBoxes();
+    const of = (k) => boxes.filter((b) => b.box === k);
+    assert.equal(of("rule").length, 7);
+    assert.equal(of("pool").length, 13);
+    assert.equal(of("server").length, 14);
+    assert.equal(of("redirect").length, 1);
+    const right = (k) => Math.max(...of(k).map((b) => b.x + b.w)), left = (k) => Math.min(...of(k).map((b) => b.x));
+    assert.ok(right("rule") < left("pool"), "rules left of pools");
+    assert.ok(right("pool") < left("server"), "pools left of servers");
+    const rule = (id) => of("rule").find((b) => b.id === id).text;
+    assert.ok(rule("rule1").includes("advancedRoutingMap1"));
+    assert.ok(rule("rule-rr-slow").includes("Basic"));
+  });
+
+  // Every text of the diagram stays inside its box, and texts on one line of a box do not overlap.
+  test(`the diagram's texts fit inside their boxes (${lang})`, { skip }, async () => {
+    await open(lang);
+    for (const preset of ["port 8120|ポート 8120", "port 8090|ポート 8090", "^(Tenant|テナント)$", "^(Campaign|キャンペーン)$"]) {
+      const bad = await page(`t.preset(${JSON.stringify(preset)}); await t.send();
+        const out = [];
+        for (const g of document.querySelectorAll("#diagram [data-box]")) {
+          const r = g.querySelector("rect").getBBox();
+          const texts = [...g.querySelectorAll("text")].filter((x) => x.textContent).map((x) => ({ s: x.textContent, b: x.getBBox() }));
+          for (const x of texts) if (x.b.x < r.x + 3 || x.b.x + x.b.width > r.x + r.width - 3) out.push(g.dataset.id + ": " + x.s);
+          const meet = (a, b) => a.x < b.x + b.width + 4 && b.x < a.x + a.width + 4 && a.y + 2 < b.y + b.height && b.y + 2 < a.y + a.height;
+          texts.forEach((a, i) => texts.slice(i + 1).forEach((b) => { if (meet(a.b, b.b)) out.push(g.dataset.id + ": " + a.s + " / " + b.s); }));
+        }
+        return out;`);
+      assert.deepEqual(bad, [], preset);
+    }
   });
 }
 
-// Stopping the primary for the 8090 check only stops pool-primary, so nothing else fails (#131, replaces #119's note).
+test("on 8120 the route lights rule-rr-slow, pool-rr-slow, srv-slow and srv-fast, not pool-lc", { skip }, async () => {
+  await open("en");
+  await page(`t.preset("port 8120"); await t.send();`);
+  assert.deepEqual([...await hitIds()].sort(), ["pool-rr-slow", "rule-rr-slow", "srv-fast", "srv-slow"]);
+});
+
+test("a redirect lights rule1 and the redirect box, and no pool", { skip }, async () => {
+  await open("en");
+  await page(`t.preset("^Default$"); t.set("query", "campaign=spring"); await t.send();`);
+  assert.deepEqual([...await hitIds()].sort(), ["redirect", "rule1"]);
+});
+
+test("a :80 match on pool-tenant lights pool-tenant and srv-tenant", { skip }, async () => {
+  await open("en");
+  await page(`t.preset("^Tenant$"); await t.send();`);
+  assert.deepEqual([...await hitIds()].sort(), ["pool-tenant", "rule1", "srv-tenant"]);
+});
+
+test("pool-rr-slow and pool-lc both draw lines to srv-slow and srv-fast", { skip }, async () => {
+  await open("en");
+  const lines = await page(`return [...document.querySelectorAll("#diagram path[data-from][data-to]")].map((p) => p.dataset.from + ">" + p.dataset.to);`);
+  for (const l of ["pool-rr-slow>srv-slow", "pool-rr-slow>srv-fast", "pool-lc>srv-slow", "pool-lc>srv-fast"]) {
+    assert.equal(lines.filter((x) => x === l).length, 1, l);
+  }
+  assert.equal(lines.filter((x) => x.startsWith("pool-lc>")).length, 2);
+});
+
+// Stopping the primary for the 8090 check only stops srv-primary, so nothing else fails (#131, replaces #119's note).
 for (const [lang, gone] of [["en", "about 10% of requests on port 8080"], ["ja", "ポート 8080 の約 10%"]]) {
-  test(`the note on stopping the primary names pool-primary and nothing else fails (${lang})`, { skip }, async () => {
+  test(`the note on stopping the primary names srv-primary and nothing else fails (${lang})`, { skip }, async () => {
     await open(lang);
     const text = await page(`return document.body.textContent;`);
-    assert.ok(text.includes('systemctl stop agw-pool@pool-primary'));
-    assert.ok(text.includes('systemctl start agw-pool@pool-primary'));
-    assert.ok(!text.includes("agw-pool@pool-canary"));
+    assert.ok(text.includes('systemctl stop agw-srv@srv-primary'));
+    assert.ok(text.includes('systemctl start agw-srv@srv-primary'));
+    assert.ok(!text.includes("agw-pool@"));
+    assert.ok(!text.includes("agw-srv@srv-canary"));
     assert.ok(!text.includes(gone));
   });
 }
 
-// x-backend-pool names the process that answered; the simulator shows it as it is, with no renaming (#131).
-test("a live response on 8090 shows x-backend-pool as it is", { skip }, async (t) => {
-  const g8090 = http.createServer((req, res) => {
-    res.setHeader("access-control-allow-origin", "*");
-    res.setHeader("access-control-allow-headers", "*");
-    res.setHeader("access-control-expose-headers", "x-backend-pool");
-    if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
-    res.setHeader("x-backend-pool", "pool-web");
-    res.setHeader("content-type", "application/json");
-    res.end("{}");
-  });
-  const listening = await new Promise((r) => { g8090.once("error", () => r(false)); g8090.listen(8090, "127.0.0.1", () => r(true)); });
-  if (!listening) { t.skip("port 8090 is in use"); return; }
-  try {
-    await open("en");
-    const live = await page(`t.set("backendUrl", "http://127.0.0.1:8090"); await t.wait(300); t.preset("port 8090"); await t.send();
-      for (let i = 0; i < 30 && !/x-backend-pool/.test(t.$("liveOut").textContent); i++) await t.wait(100);
-      return t.$("liveOut").textContent;`);
-    assert.match(live, /x-backend-pool: pool-web/);
-    assert.doesNotMatch(live, /process on the VM/);
-  } finally { g8090.close(); }
-});
-
-// A stand-in gateway on a fixed local port that always answers with x-backend-pool: `answer`. Resolves to null when the port is in use.
-async function standIn(port, answer) {
+// A stand-in gateway on a fixed local port that always answers with x-backend-srv: `answer`. Resolves to null when the port is in use.
+// `headerName` lets a test play an old gateway that only sends x-backend-pool.
+async function standIn(port, answer, headerName = "x-backend-srv") {
   const srv = http.createServer((req, res) => {
     res.setHeader("access-control-allow-origin", "*");
     res.setHeader("access-control-allow-headers", "*");
-    res.setHeader("access-control-expose-headers", "x-backend-pool");
+    res.setHeader("access-control-expose-headers", headerName);
     if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
-    res.setHeader("x-backend-pool", answer);
+    res.setHeader(headerName, answer);
     res.setHeader("content-type", "application/json");
     res.end("{}");
   });
   return new Promise((r) => { srv.once("error", () => r(null)); srv.listen(port, "127.0.0.1", () => r(srv)); });
 }
 
-// The gateway pool names come back as they are: 8100 flag on matches the prediction, 8090 test requests count pool-primary (#131).
-test("live 8100 pool-flag-on matches the prediction, and 8090 test requests count pool-primary", { skip }, async (t) => {
-  const g8100 = await standIn(8100, "pool-flag-on"), g8090 = await standIn(8090, "pool-primary");
+// x-backend-srv names the server that answered; the simulator derives the gateway pool and shows "pool › server" (#131).
+test("a live response on 8090 shows the pool and the server", { skip }, async (t) => {
+  const g8090 = await standIn(8090, "srv-standby");
+  if (!g8090) { t.skip("port 8090 is in use"); return; }
+  try {
+    await open("en");
+    const live = await page(`t.set("backendUrl", "http://127.0.0.1:8090"); await t.wait(300); t.preset("port 8090"); await t.send();
+      for (let i = 0; i < 30 && !/x-backend-srv/.test(t.$("liveOut").textContent); i++) await t.wait(100);
+      return t.$("liveOut").textContent;`);
+    assert.ok(live.includes("pool-standby › srv-standby"));
+    assert.match(live, /x-backend-srv: srv-standby/);
+    assert.doesNotMatch(live, /process on the VM/);
+  } finally { g8090.close(); }
+});
+
+test("a live JSON body with server marks the answered pool candidate", { skip }, async (t) => {
+  const g8090 = http.createServer((req, res) => {
+    res.setHeader("access-control-allow-origin", "*");
+    res.setHeader("access-control-allow-headers", "*");
+    res.setHeader("access-control-expose-headers", "x-backend-srv");
+    if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
+    res.setHeader("x-backend-srv", "srv-primary");
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ server: "srv-primary", serverLabel: "Primary (priority 1)" }));
+  });
+  const listening = await new Promise((r) => { g8090.once("error", () => r(false)); g8090.listen(8090, "127.0.0.1", () => r(true)); });
+  if (!listening) { t.skip("port 8090 is in use"); return; }
+  try {
+    await open("en");
+    const r = await page(`t.set("backendUrl", "http://127.0.0.1:8090"); await t.wait(300); t.preset("port 8090"); await t.send();
+      for (let i = 0; i < 30 && !t.$("liveOut").querySelector("[data-pool]"); i++) await t.wait(100);
+      return { text: t.$("liveOut").textContent, row: t.$("liveOut").querySelector('[data-pool="pool-primary"]')?.getAttribute("data-answered") };`);
+    assert.ok(r.text.includes("pool-primary › srv-primary"));
+    assert.equal(r.row, "true");
+  } finally { g8090.close(); }
+});
+
+test("live 8100 srv-flag-on matches the prediction, and 8090 test requests count pool-primary › srv-primary", { skip }, async (t) => {
+  const g8100 = await standIn(8100, "srv-flag-on"), g8090 = await standIn(8090, "srv-primary");
   if (!g8100 || !g8090) { g8100?.close(); g8090?.close(); t.skip("port 8100 or 8090 is in use"); return; }
   try {
     await open("en");
@@ -309,8 +390,60 @@ test("live 8100 pool-flag-on matches the prediction, and 8090 test requests coun
       return t.$("matchBadge").textContent;`);
     assert.equal(badge, "Matches the prediction");
     const result = await page(`t.preset("port 8090"); await t.testRequests(6); return t.$("testResult").textContent;`);
-    assert.match(result, /pool-primary: 6 \(100%\)/);
+    assert.match(result, /pool-primary › srv-primary: 6 \(100%\)/);
   } finally { g8100.close(); g8090.close(); }
+});
+
+test("srv-slow is pool-rr-slow on 8120 and pool-lc on 8130", { skip }, async (t) => {
+  const g8120 = await standIn(8120, "srv-slow"), g8130 = await standIn(8130, "srv-slow");
+  if (!g8120 || !g8130) { g8120?.close(); g8130?.close(); t.skip("port 8120 or 8130 is in use"); return; }
+  try {
+    await open("en");
+    const r = await page(`t.set("backendUrl", "http://127.0.0.1:8120"); await t.wait(300); t.preset("port 8120"); await t.testRequests(3); const a = t.$("testResult").textContent;
+      t.set("backendUrl", "http://127.0.0.1:8130"); await t.wait(300); t.preset("port 8130"); await t.testRequests(3); return { a, b: t.$("testResult").textContent };`);
+    assert.match(r.a, /pool-rr-slow › srv-slow: 3/);
+    assert.match(r.b, /pool-lc › srv-slow: 3/);
+  } finally { g8120.close(); g8130.close(); }
+});
+
+test("an old gateway that only sends x-backend-pool shows that x-backend-srv is missing", { skip }, async (t) => {
+  const g8080 = await standIn(8080, "pool-web", "x-backend-pool");
+  if (!g8080) { t.skip("port 8080 is in use"); return; }
+  const errorsBefore = pageErrors.length;
+  try {
+    await open("en");
+    const live = await page(`t.set("backendUrl", "http://127.0.0.1:8080"); await t.wait(300); t.preset("^Default$"); await t.send();
+      for (let i = 0; i < 30 && !/No x-backend-srv/.test(t.$("liveOut").textContent); i++) await t.wait(100);
+      return t.$("liveOut").textContent;`);
+    assert.match(live, /No x-backend-srv header/);
+    assert.equal(pageErrors.length, errorsBefore);
+  } finally { g8080.close(); }
+});
+
+test("an unknown server name is shown as it is, without a pool", { skip }, async (t) => {
+  const g8080 = await standIn(8080, "foo");
+  if (!g8080) { t.skip("port 8080 is in use"); return; }
+  try {
+    await open("en");
+    const live = await page(`t.set("backendUrl", "http://127.0.0.1:8080"); await t.wait(300); t.preset("port 8080"); await t.send();
+      for (let i = 0; i < 30 && !/foo/.test(t.$("liveOut").textContent); i++) await t.wait(100);
+      return t.$("liveOut").textContent;`);
+    assert.ok(live.includes("foo"));
+    assert.ok(!live.includes("›"));
+  } finally { g8080.close(); }
+});
+
+test("with the default pool set to pool-mobile, a live srv-mobile matches the prediction", { skip }, async (t) => {
+  const g8080 = await standIn(8080, "srv-mobile");
+  if (!g8080) { t.skip("port 8080 is in use"); return; }
+  try {
+    await open("en");
+    await saveRules(`(c) => { c.defaultPool = "pool-mobile"; }`);
+    const badge = await page(`t.set("backendUrl", "http://127.0.0.1:8080"); await t.wait(300); t.preset("^Default$"); await t.send();
+      for (let i = 0; i < 30 && !t.$("matchBadge").textContent; i++) await t.wait(100);
+      return t.$("matchBadge").textContent;`);
+    assert.equal(badge, "Matches the prediction");
+  } finally { g8080.close(); }
 });
 
 // Review checks for the rule editor, the diagram, and the prediction text (#123).
@@ -350,7 +483,7 @@ test("the rule count shows each map against its own 100-rule limit", { skip }, a
   assert.match(count, /:8100 1\/100/); // ... and the feature flag rule on :8100
 });
 
-for (const [lang, flag, canary] of [["en", ":8100 (feature flag)", ":8080 (canary)"], ["ja", ":8100 (機能フラグ)", ":8080 (カナリア)"]]) {
+for (const [lang, flag, canary] of [["en", "listener-flag :8100", "listener-canary :8080"], ["ja", "listener-flag :8100", "listener-canary :8080"]]) {
   test(`the diagram's listener follows the request's port (${lang})`, { skip }, async () => {
     await open(lang);
     await page(`t.preset("^(Feature flag \\\\(on\\\\)|機能フラグ \\\\(オン\\\\))$"); await t.send();`);
@@ -418,6 +551,43 @@ for (const file of ["agw-advanced-routing-demo-guide.html", "agw-advanced-routin
     }
   });
 }
+
+for (const [lang, re] of [["en", /pool-web › srv-web 90% \/ pool-canary › srv-canary 10%/], ["ja", /pool-web › srv-web 90% \/ pool-canary › srv-canary 10%/]]) {
+  test(`the weighted prediction names pool › server (${lang})`, { skip }, async () => {
+    await open(lang);
+    const r = await page(`t.preset("port 8080|ポート 8080"); await t.send(); return t.summary();`);
+    assert.match(r, re);
+  });
+}
+
+test("on 8080 the route lights both weighted pools and their servers", { skip }, async () => {
+  await open("en");
+  await page(`t.preset("port 8080"); await t.send();`);
+  assert.deepEqual([...await hitIds()].sort(), ["pool-canary", "pool-web", "rule-canary", "srv-canary", "srv-web"]);
+});
+
+test("on 8090 the route lights Primary only", { skip }, async () => {
+  await open("en");
+  await page(`t.preset("port 8090"); await t.send();`);
+  assert.deepEqual([...await hitIds()].sort(), ["pool-primary", "rule-priority", "srv-primary"]);
+});
+
+test("a WAF block lights no rule, pool, server, or redirect", { skip }, async () => {
+  await open("en");
+  const prediction = await page(`t.preset("^WAF block$"); await t.send(); return t.prediction();`);
+  assert.match(prediction, /403/);
+  assert.deepEqual([...await hitIds()], []);
+});
+
+test("the answering-backend heading says pool › server in both languages", { skip }, async () => {
+  for (const [lang, want, gone] of [["en", "Pool › server that answered this request", "Backend pool that answered"], ["ja", "この応答を返したプール › サーバー", "バックエンド プール"]]) {
+    await open(lang);
+    await page(`t.preset("^(Tenant|テナント)$"); await t.send();`);
+    const out = await page(`return t.prediction();`);
+    assert.ok(out.includes(want), `${lang}: ${out}`);
+    assert.ok(!out.includes(gone), `${lang} still has ${gone}`);
+  }
+});
 
 test("no JavaScript errors", { skip }, () => {
   assert.deepEqual(pageErrors, []);
