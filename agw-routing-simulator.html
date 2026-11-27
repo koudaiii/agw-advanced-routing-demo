@@ -67,7 +67,7 @@ ol.rules{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;g
 .target{margin-inline-start:auto;font-family:var(--mono);font-size:12px}
 figure{margin:0}
 figcaption{font:400 15px/1.4 var(--serif);margin-block-end:8px}
-svg.diagram{display:block;inline-size:100%;block-size:auto;max-block-size:50vh;min-inline-size:640px;background:var(--card);border:1px solid var(--line-soft);border-radius:16px}
+svg.diagram{display:block;inline-size:100%;block-size:auto;max-block-size:50vh;min-inline-size:800px;background:var(--card);border:1px solid var(--line-soft);border-radius:16px}
 .scroll-x{overflow-x:auto}
 pre{font-family:var(--mono);font-size:12px;background:var(--soft);border-radius:12px;padding:10px 12px;margin:0;white-space:pre-wrap;word-break:break-all}
 .page{border:1px solid var(--line-soft);border-radius:16px;overflow:hidden;background:var(--card)}
@@ -548,13 +548,15 @@ const state = {
   sent: null, ev: null, live: null, history: [], observedIp: null,
 };
 
-// Color of the destination: WAF is red, redirect and unknown use the default color, weighted uses the first pool
+// Color of the destination pool: WAF is red, redirect and unknown use the default color, weighted uses its first pool (pool-web),
+// priority uses Primary (the lit pool), server selection uses its pool
 function routeColorOf(d) {
   if (!d) return "var(--primary)";
   if (d.kind === "waf") return "#a4493a";
-  if (d.kind === "weighted" || d.kind === "priority") return POOLS[0].color;
-  if (d.kind === "server") return pool(d.port === 8110 ? "pool-rr" : d.port === 8120 ? "pool-rr-slow" : "pool-lc").color;
-  if (d.kind === "pool" || d.kind === "default") { const p = POOLS.find((x) => x.id === d.pool); return p ? p.color : "var(--primary)"; }
+  if (d.kind === "weighted") return pool(POOL_SELECT_PORTS[8080].pools[0].id).color;
+  if (d.kind === "priority") return pool(POOL_SELECT_PORTS[8090].pools[0].id).color;
+  if (d.kind === "server") return pool(SERVER_SELECT_PORTS[d.port].pool).color;
+  if (d.kind === "pool" || d.kind === "default") return pool(d.pool).color;
   return "var(--primary)";
 }
 
@@ -721,127 +723,147 @@ function verdict() {
 }
 
 // ---------- rendering ----------
+// The Azure Portal names behind each listener port: listener, routing rule, and routing map (null: a Basic rule).
+const PORT_NAMES = {
+  80: { listener: "listener-http", rule: "rule1", map: "advancedRoutingMap1" },
+  8080: { listener: "listener-canary", rule: "rule-canary", map: "canaryMap" },
+  8090: { listener: "listener-priority", rule: "rule-priority", map: "priorityMap" },
+  8100: { listener: "listener-flag", rule: "rule-flag", map: "flagMap" },
+  8110: { listener: "listener-rr", rule: "rule-rr", map: null },
+  8120: { listener: "listener-rr-slow", rule: "rule-rr-slow", map: null },
+  8130: { listener: "listener-lc", rule: "rule-lc", map: null },
+};
 // The listener the request came in on, from its port (also right when WAF blocks the request).
 function listenerLabel(port) {
-  const sp = SERVER_SELECT_PORTS[port];
-  if (sp) return `:${port} (${sp.algo === "lc" ? "LC" : "RR"})`;
-  return { 8080: L(":8080 (カナリア)", ":8080 (canary)"), 8090: L(":8090 (優先度)", ":8090 (priority)"), 8100: L(":8100 (機能フラグ)", ":8100 (feature flag)") }[port] || ":80";
+  const p = PORT_NAMES[port] ? port : 80;
+  return `${PORT_NAMES[p].listener} :${p}`;
 }
+// The servers of a gateway pool: the two of a server selection pool (8110-8130), else srv-X of pool-X.
+function serversOfPool(poolId) {
+  const sp = Object.values(SERVER_SELECT_PORTS).find((x) => x.pool === poolId);
+  return sp ? sp.servers : ["srv-" + poolId.slice(5)];
+}
+// A curve from the right edge of one box to the left edge of the next column.
+const curve = (x1, y1, x2, y2) => { const m = (x1 + x2) / 2; return `M${x1} ${y1} C ${m} ${y1}, ${m} ${y2}, ${x2} ${y2}`; };
 function renderDiagram() {
   const svg = $("diagram"); svg.replaceChildren();
   const ev = state.ev, d = ev && ev.d, cfg = state.config;
-  // Primary (VM 2) and Standby (VM 1) of priority-based selection (8090) are always drawn as separate pools, first in their VM
-  const priorityPools = [
-    { id: "pool-primary", t: "pool-primary (Primary)", sub: L(":8088 優先度 1", ":8088 Priority 1"), color: "#b45309" },
-    { id: "pool-standby", t: "pool-standby (Standby)", sub: L(":8088 優先度 2", ":8088 Priority 2"), color: "#475569" },
-  ];
-  const rowOf = (id) => {
-    const pp = priorityPools.find((x) => x.id === id);
-    if (pp) return pp;
-    const si = SERVERS[id];
-    if (si) return { id, t: id, sub: `:${si.port} ${si.label}`, color: si.color };
-    const p = POOLS.find((x) => x.id === id);
-    return { id: p.id, t: p.id + (p.id === cfg.defaultPool ? L(" (既定)", " (default)") : ""), sub: `:${p.port} ${p.label}` };
-  };
-  // One frame per VM (the frame label names the VM, so the rows start with the port): VM 2 = pool-primary, pool-canary, pool-flag-on; VM 1 = pool-standby and the other pools
+  // Columns: ④ rule (and its map) → ⑤ gateway pool → ⑥ server, inside one frame per VM. The redirect box sits under the frames.
+  const RX = 466, RW = 160, PX = 700, PW = 170, FX = 940, FW = 350, SX = 952, SW = 326;
+  // Servers by VM, ordered so that the lines from the pools cross little (the shared srv-fast and srv-slow meet at the VM border).
   const vmGroups = [
-    { label: "VM 2 (192.168.1.11)", rows: ["pool-primary", "pool-canary", "pool-flag-on", "srv-fast", "srv-rr-b"].map(rowOf) },
-    { label: "VM 1 (192.168.1.10)", rows: ["pool-standby", "pool-web", "pool-flag-off", "pool-partner", "pool-tenant", "pool-api-v2", "pool-mobile", "srv-slow", "srv-rr-a"].map(rowOf) },
+    { label: "VM 2 (192.168.1.11)", ids: ["srv-primary", "srv-canary", "srv-flag-on", "srv-rr-b", "srv-fast"] },
+    { label: "VM 1 (192.168.1.10)", ids: ["srv-slow", "srv-rr-a", "srv-flag-off", "srv-standby", "srv-web", "srv-partner", "srv-tenant", "srv-api-v2", "srv-mobile"] },
   ];
-  const rowH = 34, groupGap = 10, frameHead = 22;
-  const frames = [];
+  const rowH = 28, frameHead = 22, groupGap = 10;
+  const serverY = {}, frames = [];
   let cursor = 10;
   for (const g of vmGroups) {
-    const y0 = cursor, rowStart = y0 + frameHead;
-    g.rows.forEach((t, i) => { t.y = rowStart + i * rowH + rowH / 2; });
-    const y1 = rowStart + g.rows.length * rowH + 4;
-    frames.push({ label: g.label, x: 760, y: y0, w: 266, h: y1 - y0 });
-    cursor = y1 + groupGap;
+    const top = cursor + frameHead;
+    g.ids.forEach((id, i) => { serverY[id] = top + i * rowH + rowH / 2; });
+    const bottom = top + g.ids.length * rowH + 4;
+    frames.push({ label: g.label, y: cursor, h: bottom - cursor });
+    cursor = bottom + groupGap;
   }
-  const redirect = { id: "__redirect", t: L("リダイレクト", "Redirect"), sub: L("302 応答", "302 response"), y: cursor + rowH / 2 };
-  const targets = vmGroups.flatMap((g) => g.rows).concat([redirect]);
-  const H = cursor + rowH + 10, mid = H / 2;
-  svg.setAttribute("viewBox", `0 0 1034 ${H}`);
+  const redirectY = cursor + 16;
+  const H = redirectY + 24, mid = H / 2;
+  const firstY = serverY[vmGroups[0].ids[0]], lastY = serverY[vmGroups[1].ids[vmGroups[1].ids.length - 1]];
+  const spread = (list) => Object.fromEntries(list.map((id, i) => [id, firstY + (i * (lastY - firstY)) / (list.length - 1)]));
+  // The 13 gateway pools, in the order of their servers (VM 2, then VM 1).
+  const poolY = spread(["pool-primary", "pool-canary", "pool-flag-on", "pool-rr", "pool-rr-slow", "pool-lc", "pool-flag-off", "pool-standby", "pool-web", "pool-partner", "pool-tenant", "pool-api-v2", "pool-mobile"]);
+  // One rule per listener port, in the order of their pools; rule1 last, next to its pools and the redirect.
+  const ruleY = spread([8090, 8080, 8100, 8110, 8120, 8130, 80]);
+  svg.setAttribute("viewBox", `0 0 1300 ${H}`);
   const summary = ev ? describe(d, cfg) : L("テスト要求を送信すると経路が表示されます", "Send a test request to see the route");
   svg.append(s("title", { id: "dgT" }, L("要求のルーティング経路図", "Route of the request")), s("desc", { id: "dgD" }, summary));
-  const on = !!ev, blocked = d && d.kind === "waf";
-  const active = d && (d.kind === "pool" || d.kind === "default") ? d.pool : null;
-  const weighted = !!(d && (d.kind === "weighted" || d.kind === "priority"));
-  const priority = !!(d && d.kind === "priority");
-  // Priority-based: Primary (pool-primary on VM 2) is the hit while healthy; when it is stopped the real answer is Standby (pool-standby on VM 1)
-  const serverSel = d && d.kind === "server" ? SERVER_SELECT_PORTS[d.port] : null;
-  const hitSet = serverSel ? new Set(serverSel.servers) : priority ? new Set(["pool-primary"]) : weighted ? new Set(["pool-web", "pool-canary"]) : new Set(active ? [active] : []);
-  const st = (x) => (x ? "var(--primary)" : "var(--line)");
-  // The left part of the route (client → listener → WAF → map) uses the color of the first destination pool
-  const routeColor = routeColorOf(d);
-  const stages = [
-    { x: 8, l: L("クライアント", "Client"), sub: isLive() ? L("このブラウザー", "this browser") : "", on },
-    { x: 158, l: L("Basic リスナー", "Basic listener"), sub: listenerLabel(ev ? Number(state.sent && state.sent.port) || 80 : 80), on },
-    { x: 308, l: "WAF", sub: blocked ? L("403 で遮断", "blocked with 403") : cfg.waf.enabled ? L("ポリシー有効", "policy on") : L("無効", "off"), on: on && !blocked, bad: blocked },
-  ];
-  stages.slice(0, -1).forEach((g, i) => svg.append(s("line", { x1: g.x + 130, y1: mid, x2: stages[i + 1].x, y2: mid, stroke: (i < 2 ? on : stages[i + 1].on) ? routeColor : "var(--line)", "stroke-width": on ? 3 : 1.5 })));
-  stages.forEach((g) => {
-    svg.append(s("rect", { x: g.x, y: mid - 24, width: 130, height: 48, rx: 8, fill: "var(--card)", stroke: g.bad ? "#a4493a" : g.on ? routeColor : "var(--line)", "stroke-width": g.on || g.bad ? 2.5 : 1.5 }));
-    svg.append(s("text", { x: g.x + 65, y: mid - 3, "text-anchor": "middle", "font-size": g.l.length > 14 ? 11 : 13.5, "font-weight": 700, fill: "var(--fg)" }, g.l));
-    svg.append(s("text", { x: g.x + 65, y: mid + 14, "text-anchor": "middle", "font-size": 11.5, fill: "var(--fg)" }, g.sub));
-  });
-  // One box per listener port: four advanced routing maps, then the three Basic rules of server selection (#84).
-  // The box of the called port is highlighted and the route starts from it
+  const on = !!ev, blocked = d && d.kind === "waf", routed = on && !blocked;
   const activePort = d && d.port ? d.port : 80;
-  const mapDefs = [
-    { port: 80, l: "Routing map :80", sub: "advancedRoutingMap1" },
-    { port: 8080, l: "canaryMap :8080", sub: "canary-split 90 : 10" },
-    { port: 8090, l: "priorityMap :8090", sub: "Primary 1 / Standby 2" },
-    { port: 8100, l: "flagMap :8100", sub: L("オン → pool-flag-on", "on → pool-flag-on") },
-    ...Object.entries(SERVER_SELECT_PORTS).map(([port, sp]) => ({ port: Number(port), l: `Basic rule :${port}`, sub: `${sp.pool} · ${algoName(sp.algo)}` })),
-  ].map((m, k, all) => ({ ...m, y: mid + (k - (all.length - 1) / 2) * 62 }));
-  const activeY = (mapDefs.find((m) => m.port === activePort) || mapDefs[0]).y;
-  mapDefs.forEach((m) => {
-    const isActive = on && !blocked && m.port === activePort;
-    svg.append(s("line", { x1: 438, y1: mid, x2: 458, y2: m.y, stroke: isActive ? routeColor : "var(--line)", "stroke-width": isActive ? 3 : 1.5 }));
-    svg.append(s("rect", { x: 458, y: m.y - 22, width: 160, height: 44, rx: 8, fill: "var(--card)", stroke: isActive ? routeColor : "var(--line)", "stroke-width": isActive ? 2.5 : 1.5 }));
-    svg.append(s("text", { x: 538, y: m.y - 3, "text-anchor": "middle", "font-size": 11.5, "font-weight": 700, fill: "var(--fg)" }, m.l));
-    svg.append(s("text", { x: 538, y: m.y + 13, "text-anchor": "middle", "font-size": 11, fill: "var(--fg)" }, m.sub));
-  });
-  frames.forEach((f) => {
-    svg.append(s("rect", { x: f.x, y: f.y, width: f.w, height: f.h, rx: 10, fill: "none", stroke: "var(--line)", "stroke-width": 1.5, "stroke-dasharray": "5 4" }));
-    svg.append(s("text", { x: f.x + 10, y: f.y + 15, "font-size": 13, "font-weight": 700, fill: "var(--fg)" }, f.label));
-  });
-  // Which destinations each map can reach is always drawn (thin grey lines).
-  // Only the route the request took is drawn on top, as a thick colored line from the called map to the pool that was hit.
-  const mapTargets = (port) => {
-    if (port === 80) {
-      const own = cfg.rules.filter((r) => ruleMap(r) === 80);
-      const ids = [cfg.defaultPool, ...own.map((r) => (r.target && r.target.pool ? r.target.pool : null))].filter(Boolean);
-      if (own.some((r) => r.target && r.target.redirect)) ids.push("__redirect");
-      return ids;
-    }
-    if (port === 8100) return ["pool-flag-on", "pool-flag-off"];
-    if (SERVER_SELECT_PORTS[port]) return SERVER_SELECT_PORTS[port].servers;
-    if (port === 8080) return ["pool-web", "pool-canary"];
-    return ["pool-primary", "pool-standby"];
+  // The predicted pools. A request on 8080 can land on either pool, so both are lit; on 8090 Primary is the hit while healthy
+  // (when it is stopped the real answer is Standby). The servers of a lit pool are lit: one for a 1:1 pool, both for server selection.
+  const sp = d && d.kind === "server" ? SERVER_SELECT_PORTS[d.port] : null;
+  const hitPools = new Set(!routed ? [] : d.kind === "pool" || d.kind === "default" ? [d.pool] : d.kind === "weighted" ? POOL_SELECT_PORTS[8080].pools.map((p) => p.id) : d.kind === "priority" ? ["pool-primary"] : sp ? [sp.pool] : []);
+  const hitServers = new Set([...hitPools].flatMap(serversOfPool));
+  const redirectHit = !!(routed && d.kind === "redirect");
+  // The left part of the route (client → listener → WAF → rule) uses the color of the first destination pool
+  const routeColor = routeColorOf(d);
+  const port = ev ? Number(state.sent && state.sent.port) || 80 : 80;
+  const stages = [
+    { id: "client", x: 8, w: 112, l: L("クライアント", "Client"), sub: isLive() ? L("このブラウザー", "this browser") : "", on },
+    { id: "listener", x: 138, w: 168, l: L("Basic リスナー", "Basic listener"), sub: listenerLabel(port), on },
+    { id: "waf", x: 324, w: 108, l: "WAF", sub: blocked ? L("403 で遮断", "blocked with 403") : cfg.waf.enabled ? L("ポリシー有効", "policy on") : L("無効", "off"), on: on && !blocked, bad: blocked },
+  ];
+  stages.slice(0, -1).forEach((g, i) => svg.append(s("line", { x1: g.x + g.w, y1: mid, x2: stages[i + 1].x, y2: mid, stroke: on ? routeColor : "var(--line)", "stroke-width": on ? 3 : 1.5 })));
+  // A box: <g data-box data-id data-hit> holding its rect and texts (tests read these attributes).
+  const box = (attrs, rect, texts) => {
+    const g = s("g", attrs);
+    g.append(s("rect", { rx: 6, fill: "var(--card)", ...rect }));
+    texts.forEach(([a, t]) => g.append(s("text", { fill: "var(--fg)", ...a }, t)));
+    svg.append(g);
   };
-  mapDefs.forEach((m) => {
-    mapTargets(m.port).forEach((id) => {
-      const row = targets.find((t) => t.id === id);
-      if (!row) return;
-      svg.append(s("path", { d: `M618 ${m.y} C 698 ${m.y}, 698 ${row.y}, 778 ${row.y}`, fill: "none", stroke: "var(--muted)", "stroke-width": 1.2, "stroke-dasharray": id === "__redirect" ? "5 4" : "none" }));
-    });
+  stages.forEach((g) => box({ "data-box": "stage", "data-id": g.id },
+    { x: g.x, y: mid - 24, width: g.w, height: 48, rx: 8, stroke: g.bad ? "#a4493a" : g.on ? routeColor : "var(--line)", "stroke-width": g.on || g.bad ? 2.5 : 1.5 },
+    [[{ x: g.x + g.w / 2, y: mid - 3, "text-anchor": "middle", "font-size": g.l.length > 14 ? 11 : 13.5, "font-weight": 700 }, g.l],
+      [{ x: g.x + g.w / 2, y: mid + 14, "text-anchor": "middle", "font-size": 11.5 }, g.sub]]));
+  // Where each rule sends requests: the :80 rules and the default pool, the 8100 rules and pool-flag-off, the two pools of 8080 / 8090,
+  // and the one pool of a Basic rule.
+  const ruleTargets = (p) => {
+    if (p === 80 || p === 8100) return [...new Set([p === 80 ? cfg.defaultPool : FLAG_DEFAULT_POOL, ...cfg.rules.filter((r) => ruleMap(r) === p).map((r) => r.target && r.target.pool).filter(Boolean)])];
+    if (POOL_SELECT_PORTS[p]) return POOL_SELECT_PORTS[p].pools.map((x) => x.id);
+    return [SERVER_SELECT_PORTS[p].pool];
+  };
+  const ruleHit = (p) => routed && p === activePort;
+  // WAF → rules: the rule of the called port carries the route.
+  Object.entries(ruleY).forEach(([p, y]) => svg.append(s("line", { x1: 432, y1: mid, x2: RX, y2: y, stroke: ruleHit(+p) ? routeColor : "var(--line)", "stroke-width": ruleHit(+p) ? 3 : 1.5 })));
+  frames.forEach((f) => {
+    svg.append(s("rect", { x: FX, y: f.y, width: FW, height: f.h, rx: 10, fill: "none", stroke: "var(--line)", "stroke-width": 1.5, "stroke-dasharray": "5 4" }));
+    svg.append(s("text", { x: FX + 10, y: f.y + 15, "font-size": 13, "font-weight": 700, fill: "var(--fg)" }, f.label));
   });
-  targets.forEach((t) => {
-    const hit = (t.id === "__redirect" && d && d.kind === "redirect") || hitSet.has(t.id);
-    if (!hit) return;
-    const p = t.color ? { color: t.color } : POOLS.find((x) => x.id === t.id);
-    svg.append(s("path", { d: `M618 ${activeY} C 698 ${activeY}, 698 ${t.y}, 778 ${t.y}`, fill: "none", stroke: p ? p.color : "var(--primary)", "stroke-width": 3, "stroke-dasharray": t.id === "__redirect" ? "5 4" : "none" }));
+  // Lines: rule → pool, pool → server, and rule1 → redirect (dashed, past the pool column). Every possible line is drawn thin;
+  // the route the request took is drawn thick in the color of its pool or server, on top of the others.
+  const lines = [];
+  Object.entries(ruleY).forEach(([p, y]) => ruleTargets(+p).forEach((id) => {
+    if (poolY[id] === undefined) return;
+    lines.push({ from: PORT_NAMES[p].rule, to: id, d: curve(RX + RW, y, PX, poolY[id]), hit: ruleHit(+p) && hitPools.has(id), color: pool(id).color });
+  }));
+  Object.entries(poolY).forEach(([id, y]) => serversOfPool(id).forEach((sid) => {
+    lines.push({ from: id, to: sid, d: curve(PX + PW, y, SX, serverY[sid]), hit: hitPools.has(id) && hitServers.has(sid), color: SERVERS[sid].color });
+  }));
+  if (redirectHit || cfg.rules.some((r) => ruleMap(r) === 80 && r.target && r.target.redirect)) {
+    const x = RX + RW, y = ruleY[80];
+    lines.push({ from: "rule1", to: "redirect", d: `M${x} ${y} C ${x + 30} ${y}, ${x + 30} ${redirectY}, ${x + 60} ${redirectY} L ${SX} ${redirectY}`, hit: redirectHit, color: "var(--primary)", dash: true });
+  }
+  [...lines.filter((l) => !l.hit), ...lines.filter((l) => l.hit)].forEach((l) => svg.append(s("path", {
+    d: l.d, "data-from": l.from, "data-to": l.to, "data-hit": l.hit ? "true" : "false", fill: "none",
+    stroke: l.hit ? l.color : "var(--muted)", "stroke-width": l.hit ? 3 : 1.2, "stroke-dasharray": l.dash ? "5 4" : "none",
+  })));
+  // ④ rules: the Portal rule name, then its routing map or Basic.
+  Object.entries(ruleY).forEach(([p, y]) => {
+    const n = PORT_NAMES[p], hit = ruleHit(+p);
+    box({ "data-box": "rule", "data-id": n.rule, "data-hit": hit ? "true" : "false" },
+      { x: RX, y: y - 20, width: RW, height: 40, rx: 8, stroke: hit ? routeColor : "var(--line)", "stroke-width": hit ? 2.5 : 1.5 },
+      [[{ x: RX + RW / 2, y: y - 3, "text-anchor": "middle", "font-size": 12, "font-weight": 700 }, n.rule],
+        [{ x: RX + RW / 2, y: y + 12, "text-anchor": "middle", "font-size": 11 }, n.map || "Basic"]]);
   });
-  targets.forEach((t) => {
-    const y = t.y;
-    const hit = (t.id === "__redirect" && d && d.kind === "redirect") || hitSet.has(t.id);
-    const p = t.color ? { color: t.color } : POOLS.find((x) => x.id === t.id);
-    svg.append(s("rect", { x: 778, y: y - 13, width: 240, height: 26, rx: 6, fill: hit ? (p ? p.color : "var(--primary)") : "var(--card)", stroke: hit ? (p ? p.color : "var(--primary)") : "var(--line)", "stroke-width": hit ? 2 : 1 }));
-    svg.append(s("text", { x: 788, y: y - 2, "font-size": 12, "font-weight": 700, fill: hit ? "#ffffff" : "var(--fg)" }, t.t));
-    svg.append(s("text", { x: 788, y: y + 10, "font-size": 11, fill: hit ? "#ffffff" : "var(--fg)" }, t.sub));
+  // A pool or server box: filled with its color when lit.
+  const filled = (hit, color) => ({ fill: hit ? color : "var(--card)", stroke: hit ? color : "var(--line)", "stroke-width": hit ? 2 : 1 });
+  const ink = (hit) => (hit ? "#ffffff" : "var(--fg)");
+  // ⑤ pools; the default pool of :80 says so.
+  Object.entries(poolY).forEach(([id, y]) => {
+    const hit = hitPools.has(id);
+    box({ "data-box": "pool", "data-id": id, "data-hit": hit ? "true" : "false" }, { x: PX, y: y - 12, width: PW, height: 24, ...filled(hit, pool(id).color) },
+      [[{ x: PX + 10, y: y + 4, "font-size": 12, "font-weight": 700, fill: ink(hit) }, id + (id === cfg.defaultPool ? L(" (既定)", " (default)") : "")]]);
   });
+  // ⑥ servers: name on the left, port and label on the right.
+  Object.entries(serverY).forEach(([id, y]) => {
+    const hit = hitServers.has(id), si = SERVERS[id];
+    box({ "data-box": "server", "data-id": id, "data-hit": hit ? "true" : "false" }, { x: SX, y: y - 12, width: SW, height: 24, ...filled(hit, si.color) },
+      [[{ x: SX + 10, y: y + 4, "font-size": 12, "font-weight": 700, fill: ink(hit) }, id],
+        [{ x: SX + SW - 10, y: y + 4, "text-anchor": "end", "font-size": 11, fill: ink(hit) }, `:${si.port} ${si.label}`]]);
+  });
+  // The redirect: the gateway answers 302 itself, so no pool or server is reached.
+  box({ "data-box": "redirect", "data-id": "redirect", "data-hit": redirectHit ? "true" : "false" },
+    { x: SX, y: redirectY - 12, width: SW, height: 24, ...filled(redirectHit, "var(--primary)"), "stroke-dasharray": "5 4" },
+    [[{ x: SX + 10, y: redirectY + 4, "font-size": 12, "font-weight": 700, fill: ink(redirectHit) }, L("リダイレクト (302 応答)", "Redirect (302 response)")]]);
   $("summary").textContent = summary;
 }
 
