@@ -1,19 +1,19 @@
 // Demo backend for Azure Application Gateway Advanced Routing.
-// Zero dependencies (Node.js 18+). One process = one backend pool.
-//   POOL_NAME=pool-tenant POOL_LABEL="Tenant" POOL_COLOR="#0f766e" PORT=8082 node server.js
+// Zero dependencies (Node.js 18+). One process = one backend server.
+//   SERVER_NAME=srv-tenant SERVER_LABEL="Tenant" SERVER_COLOR="#0f766e" PORT=8082 node server.js
 //   DELAY_MS=3000 makes every normal request wait that long before answering (a slow server, #81).
 //   /healthz and CORS preflights are never delayed.
 // GET /healthz          -> 200 "ok" (App Gateway health probe)
 // GET /...?format=json  -> JSON echo (or Accept: application/json)
-// GET /...              -> HTML page showing which pool answered and what it received
+// GET /...              -> HTML page showing which server answered and what it received
 // OPTIONS (CORS preflight) -> 204 with CORS headers (ALLOW_ORIGIN, default "*")
 "use strict";
 const http = require("http");
 const os = require("os");
 
-const POOL_NAME = process.env.POOL_NAME || "pool-web";
-const POOL_LABEL = process.env.POOL_LABEL || POOL_NAME;
-const POOL_COLOR = /^#[0-9a-fA-F]{6}$/.test(process.env.POOL_COLOR || "") ? process.env.POOL_COLOR : "#334155";
+const SERVER_NAME = process.env.SERVER_NAME || "srv-web";
+const SERVER_LABEL = process.env.SERVER_LABEL || SERVER_NAME;
+const SERVER_COLOR = /^#[0-9a-fA-F]{6}$/.test(process.env.SERVER_COLOR || "") ? process.env.SERVER_COLOR : "#334155";
 const PORT = Number(process.env.PORT || 8080);
 // Delay in ms for normal requests. Anything that is not a whole number of 0 or more counts as 0.
 const DELAY_MS = /^\d+$/.test(process.env.DELAY_MS || "") ? Number(process.env.DELAY_MS) : 0;
@@ -27,7 +27,7 @@ function cors(res) {
   res.setHeader("access-control-allow-origin", ALLOW_ORIGIN);
   res.setHeader("access-control-allow-methods", "GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS");
   res.setHeader("access-control-allow-headers", "*");
-  res.setHeader("access-control-expose-headers", "x-backend-pool");
+  res.setHeader("access-control-expose-headers", "x-backend-srv");
   res.setHeader("access-control-max-age", "0"); // preflight is routed too; do not cache it
 }
 
@@ -47,8 +47,8 @@ const esc = (s) =>
 function snapshot(req) {
   const url = new URL(req.url, "http://backend.local");
   return {
-    pool: POOL_NAME,
-    poolLabel: POOL_LABEL,
+    server: SERVER_NAME,
+    serverLabel: SERVER_LABEL,
     instance: `${HOST}:${PORT}`,
     receivedAt: new Date().toISOString(),
     method: req.method,
@@ -73,11 +73,11 @@ function page(s) {
   const query = Object.keys(s.query).length ? esc(new URLSearchParams(s.query).toString()) : "(none)";
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(s.pool)}  answered</title>
+<title>${esc(s.server)}  answered</title>
 <style>
-  :root{--pool:${POOL_COLOR}}
+  :root{--srv:${SERVER_COLOR}}
   body{margin:0;font-family:system-ui,"Segoe UI","Yu Gothic UI",sans-serif;color:#0f172a;background:#f8fafc}
-  header{background:var(--pool);color:#fff;padding:28px 32px}
+  header{background:var(--srv);color:#fff;padding:28px 32px}
   header p{margin:0;font-size:14px}
   header h1{margin:6px 0 0;font-size:40px;font-family:ui-monospace,Consolas,monospace}
   header h2{margin:4px 0 0;font-size:18px;font-weight:500}
@@ -92,7 +92,7 @@ function page(s) {
   .note{font-size:13px;margin-top:8px}
 </style></head>
 <body>
-<header><p>Backend pool that answered this request</p><h1>${esc(s.pool)}</h1><h2>${esc(s.poolLabel)}</h2></header>
+<header><p>Backend server that answered this request</p><h1>${esc(s.server)}</h1><h2>${esc(s.serverLabel)}</h2></header>
 <main>
 <dl>
   <dt>Instance</dt><dd>${esc(s.instance)}</dd>
@@ -111,7 +111,7 @@ http
   .createServer((req, res) => {
     cors(res);
     if (req.method === "OPTIONS" && req.headers["access-control-request-method"]) {
-      res.setHeader("x-backend-pool", POOL_NAME);
+      res.setHeader("x-backend-srv", SERVER_NAME);
       res.writeHead(204);
       return res.end();
     }
@@ -122,7 +122,7 @@ http
     const s = snapshot(req);
     const wantsJson = s.query.format === "json" || /application\/json/.test(req.headers.accept || "");
     setTimeout(() => {
-      res.setHeader("x-backend-pool", POOL_NAME);
+      res.setHeader("x-backend-srv", SERVER_NAME);
       res.setHeader("cache-control", "no-store");
       if (wantsJson) {
         res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
@@ -132,4 +132,4 @@ http
       res.end(page(s));
     }, DELAY_MS);
   })
-  .listen(PORT, () => console.log(`${POOL_NAME} listening on :${PORT}`));
+  .listen(PORT, () => console.log(`${SERVER_NAME} listening on :${PORT}`));
