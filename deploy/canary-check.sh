@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Sends N consecutive requests to one URI and counts which pool answered (x-backend-pool header).
-# The canary split is port-wide on port 8080 (pool-web 90 : pool-canary 10), so pass FRONTEND with the port.
+# Sends N consecutive requests to one URI and counts which server answered (x-backend-srv header).
+# The canary split is port-wide on port 8080 (srv-web 90 : srv-canary 10), so pass FRONTEND with the port.
 # Usage:
-#   FRONTEND=<gateway IP>:8080 ./canary-check.sh /app/home 100   # expect about 90 pool-web / 10 pool-canary
+#   FRONTEND=<gateway IP>:8080 ./canary-check.sh /app/home 100   # expect about 90 srv-web / 10 srv-canary
 #   FRONTEND=<gateway IP>      ./canary-check.sh /app/home 100   # port 80: advanced rules, no canary split
 set -uo pipefail
 : "${FRONTEND:?Set FRONTEND to the gateway public IP or host name}"
@@ -14,8 +14,8 @@ trap 'rm -f "$tmp"' EXIT
 
 for _ in $(seq 1 "$N"); do
   pool="$(curl -s -o /dev/null -D - --max-time 10 -A "$UA" "http://$FRONTEND$URI" \
-    | tr -d '\r' | awk -F': ' 'tolower($1)=="x-backend-pool"{print $2}')"
-  echo "${pool:-(no pool header)}" >> "$tmp"
+    | tr -d '\r' | awk -F': ' 'tolower($1)=="x-backend-srv"{print $2}')"
+  echo "${pool:-(no srv header)}" >> "$tmp"
 done
 
 echo "URI: $URI  requests: $N"

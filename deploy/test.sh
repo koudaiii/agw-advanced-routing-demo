@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sends the simulator's demo scenarios to the real gateway and prints which pool answered.
+# Sends the simulator's demo scenarios to the real gateway and prints which server answered.
 set -uo pipefail
 : "${FRONTEND:?Set FRONTEND to the gateway public IP or host name}"
 B="http://$FRONTEND"
@@ -12,7 +12,7 @@ run() { # label, curl args...
   out="$(curl -s -o /dev/null -D - --max-time 10 "$@")"
   local code pool loc
   code="$(printf '%s' "$out" | head -1 | awk '{print $2}')"
-  pool="$(printf '%s' "$out" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-backend-pool"{print $2}')"
+  pool="$(printf '%s' "$out" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-backend-srv"{print $2}')"
   loc="$(printf '%s' "$out" | tr -d '\r' | awk -F': ' 'tolower($1)=="location"{print $2}')"
   local target="$pool"
   if [ -z "$target" ] && [ -n "$loc" ]; then target="redirect -> $loc"; fi
@@ -34,8 +34,8 @@ run "Round Robin (:8110)" -A "$DESKTOP_UA" "http://$FRONTEND:8110/app/home"
 run "RR slow (:8120)"      -A "$DESKTOP_UA" "http://$FRONTEND:8120/app/home"
 run "Least conn (:8130)"   -A "$DESKTOP_UA" "http://$FRONTEND:8130/app/home"
 echo
-echo "Note: the canary splits all of port 8080 into pool-web 90% / pool-canary 10%. Check the ratio with FRONTEND=$FRONTEND:8080 ./canary-check.sh /app/home 100"
+echo "Note: the canary splits all of port 8080 into srv-web 90% / srv-canary 10%. Check the ratio with FRONTEND=$FRONTEND:8080 ./canary-check.sh /app/home 100"
 echo "      WAF block (UA) is the 403 from the User-Agent WAF rule (BlockDemoUA). Reproduce it with curl -A agw-block-demo"
-echo "      The feature flag uses port 8100 (flagMap): flag off is pool-flag-off, flag on is pool-flag-on (dedicated processes on port 8089)."
-echo "      Ports 8110 / 8120 / 8130 show server selection; each shows the server that answered (pool-rr-a or pool-rr-b, pool-slow or pool-fast)."
-echo "      pool-slow waits 3 s on purpose. Count servers and time with FRONTEND=$FRONTEND:8130 ./lb-check.sh /app/home 100 6, one port at a time (8120 and 8130 share the same servers)."
+echo "      The feature flag uses port 8100 (flagMap): flag off is srv-flag-off, flag on is srv-flag-on (dedicated processes on port 8089)."
+echo "      Ports 8110 / 8120 / 8130 show server selection; each shows the server that answered (srv-rr-a or srv-rr-b, srv-slow or srv-fast)."
+echo "      srv-slow waits 3 s on purpose. Count servers and time with FRONTEND=$FRONTEND:8130 ./lb-check.sh /app/home 100 6, one port at a time (8120 and 8130 share the same servers)."
