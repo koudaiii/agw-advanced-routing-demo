@@ -78,15 +78,15 @@ const page = (body) => evaluate(`(async () => { const t = window.__t; ${body} })
 
 before(async () => {
   if (skip) return;
-  // Stand-in gateway: answers pool-partner when X-Partner-Id is present, else pool-web, and records each request.
+  // Stand-in gateway: answers srv-partner when X-Partner-Id is present, else srv-web, and records each request.
   gateway = http.createServer((req, res) => {
     res.setHeader("access-control-allow-origin", "*");
     res.setHeader("access-control-allow-methods", "GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS");
     res.setHeader("access-control-allow-headers", "*");
-    res.setHeader("access-control-expose-headers", "x-backend-pool");
+    res.setHeader("access-control-expose-headers", "x-backend-srv");
     if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
     received.push({ method: req.method, url: req.url, partner: req.headers["x-partner-id"] || null });
-    res.setHeader("x-backend-pool", req.headers["x-partner-id"] ? "pool-partner" : "pool-web");
+    res.setHeader("x-backend-srv", req.headers["x-partner-id"] ? "srv-partner" : "srv-web");
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({ headers: { "x-forwarded-for": "192.0.2.41:50000" } }));
   });
@@ -249,58 +249,51 @@ for (const [lang, rows] of [
   });
 }
 
-// Stopping the primary for the 8090 check only stops pool-primary, so nothing else fails (#131, replaces #119's note).
+// Stopping the primary for the 8090 check only stops srv-primary, so nothing else fails (#131, replaces #119's note).
 for (const [lang, gone] of [["en", "about 10% of requests on port 8080"], ["ja", "ポート 8080 の約 10%"]]) {
-  test(`the note on stopping the primary names pool-primary and nothing else fails (${lang})`, { skip }, async () => {
+  test(`the note on stopping the primary names srv-primary and nothing else fails (${lang})`, { skip }, async () => {
     await open(lang);
     const text = await page(`return document.body.textContent;`);
-    assert.ok(text.includes('systemctl stop agw-pool@pool-primary'));
-    assert.ok(text.includes('systemctl start agw-pool@pool-primary'));
-    assert.ok(!text.includes("agw-pool@pool-canary"));
+    assert.ok(text.includes('systemctl stop agw-srv@srv-primary'));
+    assert.ok(text.includes('systemctl start agw-srv@srv-primary'));
+    assert.ok(!text.includes("agw-pool@"));
+    assert.ok(!text.includes("agw-srv@srv-canary"));
     assert.ok(!text.includes(gone));
   });
 }
 
-// x-backend-pool names the process that answered; the simulator shows it as it is, with no renaming (#131).
-test("a live response on 8090 shows x-backend-pool as it is", { skip }, async (t) => {
-  const g8090 = http.createServer((req, res) => {
-    res.setHeader("access-control-allow-origin", "*");
-    res.setHeader("access-control-allow-headers", "*");
-    res.setHeader("access-control-expose-headers", "x-backend-pool");
-    if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
-    res.setHeader("x-backend-pool", "pool-web");
-    res.setHeader("content-type", "application/json");
-    res.end("{}");
-  });
-  const listening = await new Promise((r) => { g8090.once("error", () => r(false)); g8090.listen(8090, "127.0.0.1", () => r(true)); });
-  if (!listening) { t.skip("port 8090 is in use"); return; }
-  try {
-    await open("en");
-    const live = await page(`t.set("backendUrl", "http://127.0.0.1:8090"); await t.wait(300); t.preset("port 8090"); await t.send();
-      for (let i = 0; i < 30 && !/x-backend-pool/.test(t.$("liveOut").textContent); i++) await t.wait(100);
-      return t.$("liveOut").textContent;`);
-    assert.match(live, /x-backend-pool: pool-web/);
-    assert.doesNotMatch(live, /process on the VM/);
-  } finally { g8090.close(); }
-});
-
-// A stand-in gateway on a fixed local port that always answers with x-backend-pool: `answer`. Resolves to null when the port is in use.
-async function standIn(port, answer) {
+// A stand-in gateway on a fixed local port that always answers with x-backend-srv: `answer`. Resolves to null when the port is in use.
+// `headerName` lets a test play an old gateway that only sends x-backend-pool.
+async function standIn(port, answer, headerName = "x-backend-srv") {
   const srv = http.createServer((req, res) => {
     res.setHeader("access-control-allow-origin", "*");
     res.setHeader("access-control-allow-headers", "*");
-    res.setHeader("access-control-expose-headers", "x-backend-pool");
+    res.setHeader("access-control-expose-headers", headerName);
     if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
-    res.setHeader("x-backend-pool", answer);
+    res.setHeader(headerName, answer);
     res.setHeader("content-type", "application/json");
     res.end("{}");
   });
   return new Promise((r) => { srv.once("error", () => r(null)); srv.listen(port, "127.0.0.1", () => r(srv)); });
 }
 
-// The gateway pool names come back as they are: 8100 flag on matches the prediction, 8090 test requests count pool-primary (#131).
-test("live 8100 pool-flag-on matches the prediction, and 8090 test requests count pool-primary", { skip }, async (t) => {
-  const g8100 = await standIn(8100, "pool-flag-on"), g8090 = await standIn(8090, "pool-primary");
+// x-backend-srv names the server that answered; the simulator derives the gateway pool and shows "pool › server" (#131).
+test("a live response on 8090 shows the pool and the server", { skip }, async (t) => {
+  const g8090 = await standIn(8090, "srv-standby");
+  if (!g8090) { t.skip("port 8090 is in use"); return; }
+  try {
+    await open("en");
+    const live = await page(`t.set("backendUrl", "http://127.0.0.1:8090"); await t.wait(300); t.preset("port 8090"); await t.send();
+      for (let i = 0; i < 30 && !/x-backend-srv/.test(t.$("liveOut").textContent); i++) await t.wait(100);
+      return t.$("liveOut").textContent;`);
+    assert.ok(live.includes("pool-standby › srv-standby"));
+    assert.match(live, /x-backend-srv: srv-standby/);
+    assert.doesNotMatch(live, /process on the VM/);
+  } finally { g8090.close(); }
+});
+
+test("live 8100 srv-flag-on matches the prediction, and 8090 test requests count pool-primary › srv-primary", { skip }, async (t) => {
+  const g8100 = await standIn(8100, "srv-flag-on"), g8090 = await standIn(8090, "srv-primary");
   if (!g8100 || !g8090) { g8100?.close(); g8090?.close(); t.skip("port 8100 or 8090 is in use"); return; }
   try {
     await open("en");
@@ -309,8 +302,60 @@ test("live 8100 pool-flag-on matches the prediction, and 8090 test requests coun
       return t.$("matchBadge").textContent;`);
     assert.equal(badge, "Matches the prediction");
     const result = await page(`t.preset("port 8090"); await t.testRequests(6); return t.$("testResult").textContent;`);
-    assert.match(result, /pool-primary: 6 \(100%\)/);
+    assert.match(result, /pool-primary › srv-primary: 6 \(100%\)/);
   } finally { g8100.close(); g8090.close(); }
+});
+
+test("srv-slow is pool-rr-slow on 8120 and pool-lc on 8130", { skip }, async (t) => {
+  const g8120 = await standIn(8120, "srv-slow"), g8130 = await standIn(8130, "srv-slow");
+  if (!g8120 || !g8130) { g8120?.close(); g8130?.close(); t.skip("port 8120 or 8130 is in use"); return; }
+  try {
+    await open("en");
+    const r = await page(`t.set("backendUrl", "http://127.0.0.1:8120"); await t.wait(300); t.preset("port 8120"); await t.testRequests(3); const a = t.$("testResult").textContent;
+      t.set("backendUrl", "http://127.0.0.1:8130"); await t.wait(300); t.preset("port 8130"); await t.testRequests(3); return { a, b: t.$("testResult").textContent };`);
+    assert.match(r.a, /pool-rr-slow › srv-slow: 3/);
+    assert.match(r.b, /pool-lc › srv-slow: 3/);
+  } finally { g8120.close(); g8130.close(); }
+});
+
+test("an old gateway that only sends x-backend-pool shows that x-backend-srv is missing", { skip }, async (t) => {
+  const g8080 = await standIn(8080, "pool-web", "x-backend-pool");
+  if (!g8080) { t.skip("port 8080 is in use"); return; }
+  const errorsBefore = pageErrors.length;
+  try {
+    await open("en");
+    const live = await page(`t.set("backendUrl", "http://127.0.0.1:8080"); await t.wait(300); t.preset("^Default$"); await t.send();
+      for (let i = 0; i < 30 && !/No x-backend-srv/.test(t.$("liveOut").textContent); i++) await t.wait(100);
+      return t.$("liveOut").textContent;`);
+    assert.match(live, /No x-backend-srv header/);
+    assert.equal(pageErrors.length, errorsBefore);
+  } finally { g8080.close(); }
+});
+
+test("an unknown server name is shown as it is, without a pool", { skip }, async (t) => {
+  const g8080 = await standIn(8080, "foo");
+  if (!g8080) { t.skip("port 8080 is in use"); return; }
+  try {
+    await open("en");
+    const live = await page(`t.set("backendUrl", "http://127.0.0.1:8080"); await t.wait(300); t.preset("port 8080"); await t.send();
+      for (let i = 0; i < 30 && !/foo/.test(t.$("liveOut").textContent); i++) await t.wait(100);
+      return t.$("liveOut").textContent;`);
+    assert.ok(live.includes("foo"));
+    assert.ok(!live.includes("›"));
+  } finally { g8080.close(); }
+});
+
+test("with the default pool set to pool-mobile, a live srv-mobile matches the prediction", { skip }, async (t) => {
+  const g8080 = await standIn(8080, "srv-mobile");
+  if (!g8080) { t.skip("port 8080 is in use"); return; }
+  try {
+    await open("en");
+    await saveRules(`(c) => { c.defaultPool = "pool-mobile"; }`);
+    const badge = await page(`t.set("backendUrl", "http://127.0.0.1:8080"); await t.wait(300); t.preset("^Default$"); await t.send();
+      for (let i = 0; i < 30 && !t.$("matchBadge").textContent; i++) await t.wait(100);
+      return t.$("matchBadge").textContent;`);
+    assert.equal(badge, "Matches the prediction");
+  } finally { g8080.close(); }
 });
 
 // Review checks for the rule editor, the diagram, and the prediction text (#123).

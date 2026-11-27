@@ -165,11 +165,11 @@ ol.rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
         <button type="button" id="testBtn" class="primary small" data-ja="テスト要求を送る">Send test requests</button>
         <span class="note" id="testState"></span>
         <div class="err" style="border-left:3px solid var(--line-soft);padding-left:10px">
-          <p style="margin:0"><strong data-ja="優先度ベースを実機で試す前に、VM 2 の pool-primary (8088 番) を手動で止めてください。">Before you test priority-based selection on the real gateway, stop pool-primary (port 8088) on VM 2 by hand.</strong><span data-ja=" 止めないと Primary に送られ続け、Standby への切り替えは見えません。止まるのは 8090 の Primary だけで、ほかのポートには影響しません。"> Otherwise every request keeps going to Primary and you cannot see the switch to Standby. Only the 8090 primary stops; other ports are not affected.</span></p>
+          <p style="margin:0"><strong data-ja="優先度ベースを実機で試す前に、VM 2 の srv-primary (8088 番) を手動で止めてください。">Before you test priority-based selection on the real gateway, stop srv-primary (port 8088) on VM 2 by hand.</strong><span data-ja=" 止めないと Primary に送られ続け、Standby への切り替えは見えません。止まるのは 8090 の Primary だけで、ほかのポートには影響しません。"> Otherwise every request keeps going to Primary and you cannot see the switch to Standby. Only the 8090 primary stops; other ports are not affected.</span></p>
           <p style="margin:6px 0 0" data-ja="停止 (Azure CLI):">Stop (Azure CLI):</p>
-          <pre class="mono" style="white-space:pre-wrap">az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-pool@pool-primary"</pre>
+          <pre class="mono" style="white-space:pre-wrap">az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl stop agw-srv@srv-primary"</pre>
           <p style="margin:6px 0 0" data-ja="復帰 (テスト後に戻す。復旧させると、また Primary (VM 2) に要求が送られます):">Restore (run it after the test; requests then go to Primary (VM 2) again):</p>
-          <pre class="mono" style="white-space:pre-wrap">az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-pool@pool-primary"</pre>
+          <pre class="mono" style="white-space:pre-wrap">az vm run-command invoke -g rg-agw-advrouting-demo -n agwdemo-backend-canary --command-id RunShellScript --scripts "systemctl start agw-srv@srv-primary"</pre>
         </div>
       </div>
     </form>
@@ -291,7 +291,7 @@ const POOLS = [
   { id: "pool-mobile", label: L("モバイル", "Mobile"), port: 8085, color: "#7e22ce" },
   { id: "pool-flag-off", label: L("機能フラグ オフ", "Feature flag off"), port: 8089, color: "#0369a1" },
   { id: "pool-flag-on", label: L("機能フラグ オン", "Feature flag on"), port: 8089, color: "#be185d" },
-  // Server selection (#84): gateway pools with two servers each. The servers are the processes in SERVER_INFO.
+  // Server selection (#84): gateway pools with two servers each. The servers are the processes in SERVERS.
   { id: "pool-rr", label: L("Round Robin (速い 2 台)", "Round Robin (two fast servers)"), port: 8087, color: "#0e7490" },
   { id: "pool-rr-slow", label: L("Round Robin (遅い 1 台を含む)", "Round Robin (one slow server)"), port: 8086, color: "#9a3412" },
   { id: "pool-lc", label: L("Least Connections (遅い 1 台を含む)", "Least Connections (one slow server)"), port: 8086, color: "#4d7c0f" },
@@ -471,37 +471,55 @@ function evaluate(cfg, r) {
   });
   return { path, results, d: d || { kind: "default", pool: mapPort === 8100 ? FLAG_DEFAULT_POOL : cfg.defaultPool, port: mapPort } };
 }
-const pool = (id) => POOLS.find((p) => p.id === id) || (SERVER_INFO[id] ? { id, label: SERVER_INFO[id].label, port: SERVER_INFO[id].port, color: SERVER_INFO[id].color } : { id, label: id, port: 0, color: PRIORITY_COLOR[id] || "#334155" });
-// Server selection (#84): ports 8110 / 8120 / 8130 use Basic rules, one pool each, two servers per pool.
-// x-backend-pool shows the process (server) that answered, so the names are kept as they are.
-const SERVER_INFO = {
-  "pool-slow": { label: L("遅いサーバー (3 秒)", "Slow server (3 s)"), color: "#b91c1c", vm: 1, port: 8086 },
-  "pool-fast": { label: L("速いサーバー", "Fast server"), color: "#15803d", vm: 2, port: 8086 },
-  "pool-rr-a": { label: "Round Robin A", color: "#0e7490", vm: 1, port: 8087 },
-  "pool-rr-b": { label: "Round Robin B", color: "#6d28d9", vm: 2, port: 8087 },
+const pool = (id) => POOLS.find((p) => p.id === id) || (SERVERS["srv-" + String(id).slice(5)] ? { id, ...SERVERS["srv-" + String(id).slice(5)] } : { id, label: id, port: 0, color: "#334155" });
+// The 14 backend processes. x-backend-srv carries the server name; the gateway pool is derived from it by poolOfServer.
+const SERVERS = {
+  "srv-web": { label: L("Web (既定)", "Web (default)"), color: "#334155", vm: 1, port: 8080 },
+  "srv-partner": { label: L("パートナー専用", "Partner"), color: "#7c2d12", vm: 1, port: 8081 },
+  "srv-tenant": { label: L("テナント専用", "Tenant"), color: "#0f766e", vm: 1, port: 8082 },
+  "srv-api-v2": { label: "Orders API v2", color: "#1d4ed8", vm: 1, port: 8083 },
+  "srv-mobile": { label: L("モバイル", "Mobile"), color: "#7e22ce", vm: 1, port: 8085 },
+  "srv-slow": { label: L("遅いサーバー (3 秒)", "Slow server (3 s)"), color: "#b91c1c", vm: 1, port: 8086 },
+  "srv-rr-a": { label: "Round Robin A", color: "#0e7490", vm: 1, port: 8087 },
+  "srv-standby": { label: L("スタンバイ", "Standby"), color: "#475569", vm: 1, port: 8088 },
+  "srv-flag-off": { label: L("機能フラグ オフ", "Feature flag off"), color: "#0369a1", vm: 1, port: 8089 },
+  "srv-canary": { label: L("カナリア (新バージョン)", "Canary (new version)"), color: "#a16207", vm: 2, port: 8080 },
+  "srv-fast": { label: L("速いサーバー", "Fast server"), color: "#15803d", vm: 2, port: 8086 },
+  "srv-rr-b": { label: "Round Robin B", color: "#6d28d9", vm: 2, port: 8087 },
+  "srv-primary": { label: L("プライマリ", "Primary"), color: "#b45309", vm: 2, port: 8088 },
+  "srv-flag-on": { label: L("機能フラグ オン", "Feature flag on"), color: "#be185d", vm: 2, port: 8089 },
 };
 const SERVER_SELECT_PORTS = {
-  8110: { pool: "pool-rr", algo: "rr", servers: ["pool-rr-a", "pool-rr-b"] },
-  8120: { pool: "pool-rr-slow", algo: "rr", servers: ["pool-slow", "pool-fast"] },
-  8130: { pool: "pool-lc", algo: "lc", servers: ["pool-slow", "pool-fast"] },
+  8110: { pool: "pool-rr", algo: "rr", servers: ["srv-rr-a", "srv-rr-b"] },
+  8120: { pool: "pool-rr-slow", algo: "rr", servers: ["srv-slow", "srv-fast"] },
+  8130: { pool: "pool-lc", algo: "lc", servers: ["srv-slow", "srv-fast"] },
 };
+// The gateway pool a server answered for. Ports 8110-8130 share servers between pools, so the port decides there;
+// elsewhere srv-X belongs to pool-X. Unknown names have no pool.
+function poolOfServer(serverId, port) {
+  const sp = SERVER_SELECT_PORTS[port];
+  if (sp && sp.servers.includes(serverId)) return sp.pool;
+  const id = typeof serverId === "string" && serverId.startsWith("srv-") ? "pool-" + serverId.slice(4) : null;
+  return id && (POOLS.some((p) => p.id === id) || POOL_SELECT_PORTS[8090].pools.some((p) => p.id === id)) ? id : null;
+}
+const routeName = (poolId, serverId) => (poolId ? `${poolId} › ${serverId}` : serverId);
+// A pool with one server of its own (pool-web › srv-web); other pools show their id only.
+const poolRoute = (poolId) => { const sid = "srv-" + poolId.slice(5); return SERVERS[sid] && poolOfServer(sid) === poolId ? routeName(poolId, sid) : poolId; };
 const algoName = (a) => (a === "lc" ? "Least Connections" : "Round Robin");
 // Pool selection ports (#93): the candidate pools of canaryMap (8080) and priorityMap (8090), as in deploy/main.bicep.
 const POOL_SELECT_PORTS = {
   8080: { map: "canaryMap", kind: "weighted", pools: [{ id: "pool-web", weight: 90, vm: 1 }, { id: "pool-canary", weight: 10, vm: 2 }] },
   8090: { map: "priorityMap", kind: "priority", pools: [{ id: "pool-primary", priority: 1, vm: 2 }, { id: "pool-standby", priority: 2, vm: 1 }] },
 };
-// Priority-based (8090): Primary = pool-primary (VM 2 :8088), Standby = pool-standby (VM 1 :8088). Each gateway pool has
-// its own process with the same name, so x-backend-pool is the gateway pool name as it is (#131).
-const PRIORITY_COLOR = { "pool-primary": "#b45309", "pool-standby": "#475569" };
+// Priority-based (8090): Primary = srv-primary (VM 2 :8088), Standby = srv-standby (VM 1 :8088).
 function describe(d, cfg) {
   if (d.kind === "waf") return L(`WAF がブロック (${d.cidr}) — ルーティング評価なし`, `Blocked by WAF (${d.cidr}) — no routing evaluation`);
   if (d.kind === "weighted") return L(`ポート ${d.port} は重み付け (既定 pool-web 90% / pool-canary 10%)。1 件の経路は確率で決まります`, `Port ${d.port} is weighted (pool-web 90% / pool-canary 10%). A single request lands on one of them by chance`);
   if (d.kind === "server") { const sp = SERVER_SELECT_PORTS[d.port]; return L(`ポート ${d.port} は ${sp.pool} の 2 台 (${sp.servers.join(" / ")}) に ${algoName(sp.algo)} で振り分けます`, `Port ${d.port} sends requests to the two servers of ${sp.pool} (${sp.servers.join(" / ")}) with ${algoName(sp.algo)}`); }
   if (d.kind === "priority") return L(`ポート ${d.port} は優先度ベース。Primary (VM 2) が最小正常割合 60% 以上なら Primary、そうでなければ Standby (VM 1) に送ります`, `Port ${d.port} is priority-based. Requests go to Primary (VM 2) while it meets the minimum healthy percentage of 60%, otherwise to Standby (VM 1)`);
-  if (d.kind === "pool") return L(`「${cfg.rules[d.i].name}」に一致 → ${pool(d.pool).label} (${d.pool})`, `Matched "${cfg.rules[d.i].name}" → ${pool(d.pool).label} (${d.pool})`);
+  if (d.kind === "pool") return L(`「${cfg.rules[d.i].name}」に一致 → ${pool(d.pool).label} (${poolRoute(d.pool)})`, `Matched "${cfg.rules[d.i].name}" → ${pool(d.pool).label} (${poolRoute(d.pool)})`);
   if (d.kind === "redirect") return L(`「${cfg.rules[d.i].name}」に一致 → ${d.url} へリダイレクト`, `Matched "${cfg.rules[d.i].name}" → redirect to ${d.url}`);
-  return L(`一致ルールなし → 既定プール ${pool(d.pool).label} (${d.pool})`, `No rule matched → default pool ${pool(d.pool).label} (${d.pool})`);
+  return L(`一致ルールなし → 既定プール ${pool(d.pool).label} (${poolRoute(d.pool)})`, `No rule matched → default pool ${pool(d.pool).label} (${poolRoute(d.pool)})`);
 }
 
 // ---------- DOM helpers ----------
@@ -629,8 +647,8 @@ async function callGateway(r) {
     if (res.type === "opaqueredirect") return { kind: "redirect", ms, skipped, url };
     let body = null;
     if (r.method !== "HEAD" && (res.headers.get("content-type") || "").includes("json")) { try { body = await res.json(); } catch (e) { body = null; } }
-    const processPool = res.headers.get("x-backend-pool");
-    return { kind: "response", status: res.status, statusText: res.statusText, pool: processPool, port: r.port, path: r.path, body, ms, skipped, url };
+    const server = res.headers.get("x-backend-srv");
+    return { kind: "response", status: res.status, statusText: res.statusText, server, pool: server ? poolOfServer(server, r.port) : null, port: r.port, path: r.path, body, ms, skipped, url };
   } catch (e) {
     return { kind: "error", message: ctl.signal.aborted ? L("10 秒以内に応答がありませんでした", "No response within 10 seconds") : L("応答を読めませんでした (WAF のブロック、CORS 未設定、URL 誤り、混在コンテンツのいずれか)", "Could not read the response (blocked by WAF, CORS not configured, wrong URL, or mixed content)"), skipped, url };
   } finally { clearTimeout(timer); }
@@ -690,7 +708,7 @@ function liveSummary(l) {
   if (l.kind === "redirect") return L("リダイレクト応答", "Redirect response");
   if (l.kind === "opaque") return l.redirectHint ? L("リダイレクトと思われます (CORS により読めません)", "Probably a redirect (not readable because of CORS)") : L("応答あり (CORS のため詳細は読めません)", "Got a response (details not readable because of CORS)");
   if (l.kind === "error") return l.message;
-  return `HTTP ${l.status}${l.pool ? ` / ${l.pool}` : ""}`;
+  return `HTTP ${l.status}${l.server ? ` / ${routeName(l.pool, l.server)}` : ""}`;
 }
 function verdict() {
   const l = state.live, d = state.ev && state.ev.d;
@@ -698,7 +716,7 @@ function verdict() {
   let same;
   if (d.kind === "waf") same = l.kind === "error" || (l.kind === "response" && l.status === 403);
   else if (d.kind === "redirect") same = l.kind === "redirect" || (l.kind === "response" && l.status >= 300 && l.status < 400);
-  else same = l.kind === "response" && l.pool === d.pool;
+  else same = l.kind === "response" && !!l.pool && l.pool === d.pool;
   return same ? { cls: "b-ok", text: L("予測と一致", "Matches the prediction") } : { cls: "b-err", text: L("予測と不一致", "Differs from the prediction") };
 }
 
@@ -720,15 +738,15 @@ function renderDiagram() {
   const rowOf = (id) => {
     const pp = priorityPools.find((x) => x.id === id);
     if (pp) return pp;
-    const si = SERVER_INFO[id];
+    const si = SERVERS[id];
     if (si) return { id, t: id, sub: `:${si.port} ${si.label}`, color: si.color };
     const p = POOLS.find((x) => x.id === id);
     return { id: p.id, t: p.id + (p.id === cfg.defaultPool ? L(" (既定)", " (default)") : ""), sub: `:${p.port} ${p.label}` };
   };
   // One frame per VM (the frame label names the VM, so the rows start with the port): VM 2 = pool-primary, pool-canary, pool-flag-on; VM 1 = pool-standby and the other pools
   const vmGroups = [
-    { label: "VM 2 (192.168.1.11)", rows: ["pool-primary", "pool-canary", "pool-flag-on", "pool-fast", "pool-rr-b"].map(rowOf) },
-    { label: "VM 1 (192.168.1.10)", rows: ["pool-standby", "pool-web", "pool-flag-off", "pool-partner", "pool-tenant", "pool-api-v2", "pool-mobile", "pool-slow", "pool-rr-a"].map(rowOf) },
+    { label: "VM 2 (192.168.1.11)", rows: ["pool-primary", "pool-canary", "pool-flag-on", "srv-fast", "srv-rr-b"].map(rowOf) },
+    { label: "VM 1 (192.168.1.10)", rows: ["pool-standby", "pool-web", "pool-flag-off", "pool-partner", "pool-tenant", "pool-api-v2", "pool-mobile", "srv-slow", "srv-rr-a"].map(rowOf) },
   ];
   const rowH = 34, groupGap = 10, frameHead = 22;
   const frames = [];
@@ -828,12 +846,12 @@ function renderDiagram() {
 }
 
 // Server selection ports (#84): one gateway pool with two servers. Lists both servers; `answered` (the process name
-// from x-backend-pool) is marked. With no `answered` (the prediction), neither is marked: one request can reach either.
+// from x-backend-srv) is marked. With no `answered` (the prediction), neither is marked: one request can reach either.
 // One candidate row: `attr` is "server" or "pool"; the answered row is filled with its color and marked.
-function candidateRow(attr, id, hit, color, text) {
+function candidateRow(attr, id, hit, color, text, shown) {
   return el("li", { [`data-${attr}`]: id, "data-answered": hit ? "true" : "false", style: `display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;${hit ? `background:${color};color:#fff;font-weight:700` : "border:1px solid var(--line)"}` },
     el("span", { "aria-hidden": "true", text: hit ? "●" : "○" }),
-    el("span", { class: "mono", text: id }),
+    el("span", { class: "mono", text: shown || id }),
     el("span", { text }),
     hit ? el("span", { text: L("← この応答", "← this response") }) : null);
 }
@@ -845,19 +863,19 @@ function candidateBlock(label, name, note, rows) {
 function serverSelectBlock(port, answered) {
   const sp = SERVER_SELECT_PORTS[port];
   return candidateBlock(L("バックエンド プール: ", "Backend pool: "), sp.pool, algoName(sp.algo), sp.servers.map((id) => {
-    const si = SERVER_INFO[id];
-    return candidateRow("server", id, id === answered, si.color, `VM ${si.vm} :${si.port} ${si.label}`);
+    const si = SERVERS[id];
+    return candidateRow("server", id, id === answered, si.color, `VM ${si.vm} :${si.port} ${si.label}`, routeName(sp.pool, id));
   }));
 }
 // Pool selection ports (#93): lists the candidate pools with their weight or priority. `answered` is the gateway pool
-// name (x-backend-pool); with no `answered` (the prediction), no pool is marked.
+// name derived from x-backend-srv; with no `answered` (the prediction), no pool is marked.
 function poolSelectBlock(port, answered) {
   const ps = POOL_SELECT_PORTS[port];
   const note = ps.kind === "weighted" ? L("重み付け", "weighted") : L("優先度、最小正常割合 60%", "priority, minimum healthy 60%");
   return candidateBlock(L("ルーティング マップ: ", "Routing map: "), ps.map, note, ps.pools.map((c) => {
     const p = pool(c.id);
     const val = ps.kind === "weighted" ? L(`重み ${c.weight}`, `weight ${c.weight}`) : L(`優先度 ${c.priority}`, `priority ${c.priority}`);
-    return candidateRow("pool", c.id, c.id === answered, p.color, `${val} · VM ${c.vm}`);
+    return candidateRow("pool", c.id, c.id === answered, p.color, `${val} · VM ${c.vm}`, poolRoute(c.id));
   }));
 }
 function backendPage(p, method, path, query, headers, instance, heading) {
@@ -869,8 +887,8 @@ function backendPage(p, method, path, query, headers, instance, heading) {
   const GW = new Set(["x-forwarded-for", "x-forwarded-proto", "x-forwarded-port", "x-original-host", "x-original-url", "x-appgw-trace-id"]);
   const rows = headers.slice().sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) =>
     el("tr", { class: GW.has(k) ? "gw" : null }, el("th", { scope: "row", text: k }), el("td", {}, String(v), GW.has(k) ? el("span", { class: "sr-only", text: L(" (Application Gateway が付与)", " (added by Application Gateway)") }) : null)));
-  return el("div", { class: "page", role: "group", "aria-label": L(`${p.id} が返すページ`, `Page returned by ${p.id}`) },
-    el("div", { class: "ph", style: `background:${p.color}` }, el("p", { text: heading || L("この応答を返したバックエンド プール", "Backend pool that answered this request") }), el("p", { class: "pn", text: p.id }), el("p", { text: p.label })),
+  return el("div", { class: "page", role: "group", "aria-label": L(`${p.name || p.id} が返すページ`, `Page returned by ${p.name || p.id}`) },
+    el("div", { class: "ph", style: `background:${p.color}` }, el("p", { text: heading || L("この応答を返したバックエンド プール", "Backend pool that answered this request") }), el("p", { class: "pn", text: p.name || p.id }), el("p", { text: p.label })),
     dl, el("table", {}, el("caption", { text: L("受信したリクエスト ヘッダー", "Request headers received") }), el("tbody", {}, rows)),
     el("p", { class: "note", style: "padding-inline:18px", text: L("黄色の行は Application Gateway が付与・書き換えたヘッダーです。", "Highlighted rows are headers that Application Gateway added or rewrote.") }));
 }
@@ -887,8 +905,8 @@ function renderSim() {
   if (d.kind === "priority") { out.append(poolSelectBlock(8090, null), statusBlock("—", "", L("ポート 8090 は優先度ベース。Primary (VM 2) が正常なら Primary、停止していれば Standby (VM 1) に届きます。テスト要求で件数を送って確認します。", "Port 8090 is priority-based. The request reaches Primary (VM 2) while it is healthy, and Standby (VM 1) when it is stopped. Use the test requests to count."))); return; }
   if (d.kind === "server") {
     const sp = SERVER_SELECT_PORTS[d.port];
-    const slow = sp.servers.includes("pool-slow")
-      ? L(" pool-slow は毎回 3 秒待ってから応答します。", " pool-slow waits 3 s before every answer.") : "";
+    const slow = sp.servers.includes("srv-slow")
+      ? L(" srv-slow は毎回 3 秒待ってから応答します。", " srv-slow waits 3 s before every answer.") : "";
     const how = sp.algo === "lc"
       ? L("Least Connections は、開いている接続が少ないサーバーを選ぶので、新しい要求は遅いサーバーを避けます。", "Least Connections picks the server with fewer open connections, so new requests avoid the slow server.")
       : L("Round Robin は、正常なサーバーに順番に配ります。応答時間や接続数は見ません。", "Round Robin sends requests to each healthy server in turn. It does not look at response time or open connections.");
@@ -901,7 +919,7 @@ function renderSim() {
   const hs = r.headers.filter((h) => h.name.trim()).map((h) => [h.name.trim().toLowerCase(), h.value]);
   const gw = [["x-forwarded-for", `${r.clientIp}:50432`], ["x-forwarded-proto", "http"], ["x-forwarded-port", "80"], ["x-original-host", "<FRONTEND>"]];
   const merged = hs.filter(([k]) => !gw.some(([g]) => g === k)).concat(gw, [["host", `192.168.1.10:${p.port}`]]);
-  out.append(backendPage(p, r.method, state.ev.path, r.query.replace(/^\?/, ""), merged, `backend-vm:${p.port}`));
+  out.append(backendPage({ ...p, name: poolRoute(d.pool) }, r.method, state.ev.path, r.query.replace(/^\?/, ""), merged, `backend-vm:${p.port}`));
 }
 function renderLive() {
   const out = $("liveOut"); out.replaceChildren();
@@ -931,15 +949,17 @@ function renderLive() {
     return;
   }
   const b = l.body;
-  if (b && b.pool) {
+  if (b && b.server) {
     const hs = Object.entries(b.headers || {}).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : v]);
+    const bodyPool = poolOfServer(b.server, Number(l.port));
     const serverPort = SERVER_SELECT_PORTS[Number(l.port)] ? Number(l.port) : null;
-    if (serverPort) out.append(serverSelectBlock(serverPort, b.pool));
-    if (POOL_SELECT_PORTS[Number(l.port)]) out.append(poolSelectBlock(Number(l.port), b.pool));
-    out.append(backendPage(pool(b.pool), b.method || "", b.path || "", new URLSearchParams(b.query || {}).toString(), hs, b.instance || "",
+    if (serverPort) out.append(serverSelectBlock(serverPort, b.server));
+    if (POOL_SELECT_PORTS[Number(l.port)]) out.append(poolSelectBlock(Number(l.port), bodyPool));
+    const info = SERVERS[b.server] || (bodyPool ? pool(bodyPool) : { label: b.server, color: "#334155" });
+    out.append(backendPage({ id: b.server, name: routeName(bodyPool, b.server), label: info.label, color: info.color }, b.method || "", b.path || "", new URLSearchParams(b.query || {}).toString(), hs, b.instance || "",
       serverPort ? L("この応答を返したサーバー", "Server that answered this request") : null));
   } else {
-    out.append(statusBlock(l.status, l.statusText || "", l.pool ? `x-backend-pool: ${l.pool}` : L("x-backend-pool ヘッダーなし (デモ用バックエンドではないか、CORS の Expose-Headers 未設定)", "No x-backend-pool header (not the demo backend, or CORS Expose-Headers is missing)")));
+    out.append(statusBlock(l.status, l.statusText || "", l.server ? `${routeName(l.pool, l.server)} (x-backend-srv: ${l.server})` : L("x-backend-srv ヘッダーなし (デモ用バックエンドではないか、旧環境か、CORS の Expose-Headers 未設定)", "No x-backend-srv header (not the demo backend, an old deployment, or CORS Expose-Headers is missing)")));
   }
   out.append(meta, skipped);
 }
@@ -1098,10 +1118,10 @@ const DIST_PRESETS = [
     { id: "pool-web", weight: 100, priority: 1, algo: "wrr", servers: [sv("srv-6", 6), sv("srv-3", 3), sv("srv-1", 1)] },
   ] })],
   [L("8120: Round Robin、片方が 3 秒", "8120: Round Robin, one server takes 3 s"), () => ({ mode: "weighted", minHealthy: 60, concurrency: 6, pools: [
-    { id: "pool-rr-slow", weight: 100, priority: 1, algo: "rr", servers: [sv("pool-slow", 1, true, 3000), sv("pool-fast")] },
+    { id: "pool-rr-slow", weight: 100, priority: 1, algo: "rr", servers: [sv("srv-slow", 1, true, 3000), sv("srv-fast")] },
   ] })],
   [L("8130: Least Connections、片方が 3 秒", "8130: Least Connections, one server takes 3 s"), () => ({ mode: "weighted", minHealthy: 60, concurrency: 6, pools: [
-    { id: "pool-lc", weight: 100, priority: 1, algo: "lc", servers: [sv("pool-slow", 1, true, 3000), sv("pool-fast")] },
+    { id: "pool-lc", weight: 100, priority: 1, algo: "lc", servers: [sv("srv-slow", 1, true, 3000), sv("srv-fast")] },
   ] })],
   [L("WRR 6:3:1 (重み 6 が異常)", "WRR 6:3:1 (weight 6 unhealthy)"), () => ({ mode: "weighted", minHealthy: 60, concurrency: 4, pools: [
     { id: "pool-web", weight: 100, priority: 1, algo: "wrr", servers: [sv("srv-6", 6, false), sv("srv-3", 3), sv("srv-1", 1)] },
@@ -1391,7 +1411,8 @@ async function runTestRequests() {
       const started = performance.now();
       try {
         const res = await fetch(url, { method: r.method, headers, cache: "no-store", mode: "cors", redirect: "manual", signal: ctl.signal });
-        run.seq[i] = { pool: res.headers.get("x-backend-pool") || L("(ヘッダーなし)", "(no header)"), status: res.status, ms: performance.now() - started };
+        const server = res.headers.get("x-backend-srv");
+        run.seq[i] = { server: server || L("(ヘッダーなし)", "(no header)"), pool: server ? poolOfServer(server, port) : null, status: res.status, ms: performance.now() - started };
       } catch (e) {
         const secs = TEST_TIMEOUT_MS / 1000;
         if (run.cancelled) run.seq[i] = { cancelled: true };
@@ -1411,15 +1432,15 @@ function renderTestRun(run, page) {
   const out = $("testResult");
   run.page = page;
   const pages = Math.max(1, Math.ceil(run.n / TEST_PAGE));
-  const answered = run.seq.filter((r) => r && r.pool).length;
+  const answered = run.seq.filter((r) => r && r.server).length;
   const failed = run.seq.filter((r) => r && r.error).length;
   const timeouts = run.seq.filter((r) => r && r.timeout).length;
   const sent = run.seq.filter(Boolean).length;
-  const counts = new Map();
+  const colorOf = (server) => (SERVERS[server] || {}).color || "#64748b";
+  const counts = new Map(), colors = new Map();
   const msSum = new Map(); // only answered requests count toward the average; timeouts and failures do not
-  for (const r of run.seq) if (r && r.pool) { counts.set(r.pool, (counts.get(r.pool) || 0) + 1); msSum.set(r.pool, (msSum.get(r.pool) || 0) + r.ms); }
+  for (const r of run.seq) if (r && r.server) { const k = routeName(r.pool, r.server); counts.set(k, (counts.get(k) || 0) + 1); msSum.set(k, (msSum.get(k) || 0) + r.ms); colors.set(k, colorOf(r.server)); }
   const secs = (ms) => (ms / 1000).toFixed(1);
-  const colorOf = (pool) => (POOLS.find((p) => p.id === pool) || {}).color || PRIORITY_COLOR[pool] || (SERVER_INFO[pool] || {}).color || "#64748b";
   const start = (page - 1) * TEST_PAGE, end = Math.min(run.n, start + TEST_PAGE);
   const cells = [];
   for (let i = start; i < end; i++) {
@@ -1428,7 +1449,7 @@ function renderTestRun(run, page) {
     if (!r) { style = "background:transparent;border:1px dashed #94a3b8;color:#64748b"; label = L("未送信", "not sent"); title = L(`${i + 1} 件目: 未送信`, `#${i + 1}: not sent`); }
     else if (r.cancelled) { style = "background:transparent;border:1px dashed #94a3b8;color:#64748b"; label = L("中止", "aborted"); title = L(`${i + 1} 件目: 中止`, `#${i + 1}: aborted`); }
     else if (r.error) { style = "background:#e2e8f0;color:#334155"; label = r.timeout ? L("応答なし", "timeout") : L("失敗", "failed"); title = L(`${i + 1} 件目: 失敗 (${r.error})`, `#${i + 1}: failed (${r.error})`); }
-    else { style = `background:${colorOf(r.pool)};color:#fff`; label = r.pool; title = L(`${i + 1} 件目: ${r.pool} (HTTP ${r.status})`, `#${i + 1}: ${r.pool} (HTTP ${r.status})`); }
+    else { const rn = routeName(r.pool, r.server); style = `background:${colorOf(r.server)};color:#fff`; label = r.server; title = L(`${i + 1} 件目: ${rn} (HTTP ${r.status})`, `#${i + 1}: ${rn} (HTTP ${r.status})`); }
     cells.push(el("span", { title, style: `display:inline-flex;flex-direction:column;justify-content:center;align-items:center;inline-size:70px;block-size:36px;margin:2px;border-radius:6px;font-size:10px;line-height:1.2;padding:1px;overflow:hidden;${style}` },
       el("b", { text: `#${i + 1}` }), el("span", { text: label })));
   }
@@ -1441,7 +1462,7 @@ function renderTestRun(run, page) {
   nextBtn.addEventListener("click", () => renderTestRun(run, page + 1));
   const legend = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([pool, c]) =>
     el("span", { class: "note", style: "display:inline-flex;align-items:center;gap:6px;margin-inline-end:14px" },
-      el("span", { style: `display:inline-block;inline-size:12px;block-size:12px;border-radius:3px;background:${colorOf(pool)}` }),
+      el("span", { style: `display:inline-block;inline-size:12px;block-size:12px;border-radius:3px;background:${colors.get(pool)}` }),
       el("span", { text: L(`${pool}: ${c} 件 (${answered ? Math.round((c / answered) * 100) : 0}%)、平均 ${secs(msSum.get(pool) / c)} 秒`, `${pool}: ${c} (${answered ? Math.round((c / answered) * 100) : 0}%), avg ${secs(msSum.get(pool) / c)} s`) })));
   if (failed) legend.push(el("span", { class: "note", style: "display:inline-flex;align-items:center;gap:6px;margin-inline-end:14px" },
     el("span", { style: "display:inline-block;inline-size:12px;block-size:12px;border-radius:3px;background:#e2e8f0;border:1px solid #94a3b8" }),
